@@ -1,0 +1,5 @@
+{
+  "id": "xeip.message",
+  "description": "Receive messages",
+  "spec": "https://example.org/xeip/message"
+}

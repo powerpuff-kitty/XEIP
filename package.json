@@ -7,14 +7,19 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test services/relay/*.test.mjs",
+    "test": "node --test services/relay/*.test.mjs tools/*.test.mjs",
     "test:ts": "node --test sdks/typescript/*.test.mjs",
+    "test:interop": "npm run build:ts && node --test conformance/*.test.mjs",
     "validate:fixtures": "node tools/validate-fixtures.mjs",
     "typecheck": "tsc -p sdks/typescript/tsconfig.json --noEmit",
     "build:ts": "tsc -p sdks/typescript/tsconfig.json",
-    "demo": "node examples/local-relay/demo.mjs"
+    "demo": "node examples/local-relay/demo.mjs",
+    "demo:admission": "node examples/local-relay/admission-demo.mjs",
+    "demo:replay": "node examples/local-relay/admission-demo.mjs --replay"
   },
   "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "typescript": "5.9.3"
   },
   "license": "Apache-2.0"

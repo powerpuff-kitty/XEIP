@@ -5,10 +5,12 @@ XEIP is an experimental specification. Contributions to schemas, test vectors, R
 ## Setup
 
 - Node.js 22+ for the dependency-free relay demo and Node tests.
-- Rust stable for `cargo test --workspace`.
-- TypeScript compiler (`npm install --no-save typescript@5.9.3`) for `npm run typecheck`.
+- Rust 1.81+ for `cargo test --workspace --all-targets --locked` and the interoperability harness.
+- Run `npm ci --ignore-scripts` to install the locked TypeScript compiler and JSON Schema development tools.
 
-Run `npm test`, `npm run validate:fixtures`, `npm run typecheck`, and `cargo test --workspace` before submitting a PR.
+Run `npm run typecheck`, `npm run build:ts`, `npm test`, `npm run test:ts`, `npm run validate:fixtures`, `npm run demo:admission`, `npm run demo:replay`, `cargo test --workspace --all-targets --locked`, and `npm run test:interop` before submitting a PR. CI checks both Rust 1.81 and the pinned newer toolchain, including cross-language HTTP/SSE exchange in shared-token, local-admission and local-replay modes. Update lockfiles intentionally when changing dependencies.
+
+`conformance/vectors.json` applies top-level patches/removals to each schema's golden fixture and specifies the expected acceptance result. Add valid and invalid cases here when changing validation. The same cases run against JSON Schema, both SDKs, and the relay's message endpoint. Ajv independently checks structure, dates and lengths; its URI format uses the JavaScript reference syntax checker, while Rust implements URI checks independently. The fixture CLI also accepts `--fixtures-dir PATH` to validate another fixture directory.
 
 ## Protocol changes
 

@@ -1,3 +1,6 @@
+import { SseParser } from "/sse.js";
+import { validateEnvelope } from "/validation.js";
+
 const $ = id => document.getElementById(id);
 const names = {
   "urn:xeip:entity:human-01": "Human 01",
@@ -38,12 +41,9 @@ function logEnvelope(message, outbound = false) {
   $("messages").scrollTop = $("messages").scrollHeight;
 }
 function consumeSse(frame) {
-  const lines = frame.split("\n");
-  const kind = lines.find(s => s.startsWith("event:"))?.slice(6).trim();
-  if (kind !== "xeip.message") return;
-  const data = lines.filter(s => s.startsWith("data:")).map(s => s.slice(5).trimStart()).join("\n");
-  if (!data) return;
-  const msg = JSON.parse(data);
+  if (frame.event !== "xeip.message") return;
+  const msg = JSON.parse(frame.data);
+  validateEnvelope(msg);
   logEnvelope(msg);
   streamCount += 1;
   $("received").textContent = String(streamCount);
@@ -66,18 +66,12 @@ async function connect() {
     streamWorker = (async () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      const parser = new SseParser();
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-          if (buffer.length > 131072) throw Error("SSE buffer limit exceeded");
-          let at;
-          while ((at = buffer.indexOf("\n\n")) !== -1) {
-            consumeSse(buffer.slice(0, at));
-            buffer = buffer.slice(at + 2);
-          }
+          for (const frame of parser.push(decoder.decode(value, { stream: true }))) consumeSse(frame);
         }
       } catch (err) {
         if (!candidate.signal.aborted) status("Stream interrupted: " + err.message);

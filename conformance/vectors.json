@@ -1,0 +1,785 @@
+[
+  {
+    "name": "message golden fixture",
+    "schema": "message",
+    "valid": true
+  },
+  {
+    "name": "message unsupported version",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "xeip": "9.9"
+    }
+  },
+  {
+    "name": "message unknown field",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "unexpected": true
+    }
+  },
+  {
+    "name": "entity golden fixture",
+    "schema": "entity",
+    "valid": true
+  },
+  {
+    "name": "entity unsupported version",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "xeip": "9.9"
+    }
+  },
+  {
+    "name": "entity unknown field",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "unexpected": true
+    }
+  },
+  {
+    "name": "session golden fixture",
+    "schema": "session",
+    "valid": true
+  },
+  {
+    "name": "session unsupported version",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "xeip": "9.9"
+    }
+  },
+  {
+    "name": "session unknown field",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "unexpected": true
+    }
+  },
+  {
+    "name": "capability golden fixture",
+    "schema": "capability",
+    "valid": true
+  },
+  {
+    "name": "capability unknown field",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "unexpected": true
+    }
+  },
+  {
+    "name": "message impossible day",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-02-30T12:00:00Z"
+    }
+  },
+  {
+    "name": "session impossible day",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-02-30T12:00:00Z"
+    }
+  },
+  {
+    "name": "message invalid leap day",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2100-02-29T12:00:00Z"
+    }
+  },
+  {
+    "name": "session invalid leap day",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2100-02-29T12:00:00Z"
+    }
+  },
+  {
+    "name": "message malformed",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "TZ"
+    }
+  },
+  {
+    "name": "session malformed",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "TZ"
+    }
+  },
+  {
+    "name": "message bad month",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-13-01T12:00:00Z"
+    }
+  },
+  {
+    "name": "session bad month",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-13-01T12:00:00Z"
+    }
+  },
+  {
+    "name": "message bad hour",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01T24:00:00Z"
+    }
+  },
+  {
+    "name": "session bad hour",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-01-01T24:00:00Z"
+    }
+  },
+  {
+    "name": "message bad second",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01T12:00:60Z"
+    }
+  },
+  {
+    "name": "session bad second",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-01-01T12:00:60Z"
+    }
+  },
+  {
+    "name": "message offset",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01T12:00:00+00:00"
+    }
+  },
+  {
+    "name": "session offset",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-01-01T12:00:00+00:00"
+    }
+  },
+  {
+    "name": "message lowercase z",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01T12:00:00z"
+    }
+  },
+  {
+    "name": "session lowercase z",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "createdAt": "2026-01-01T12:00:00z"
+    }
+  },
+  {
+    "name": "message valid timestamp 2024-02-29T12:00:00Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2024-02-29T12:00:00Z"
+    }
+  },
+  {
+    "name": "message valid timestamp 2000-02-29T12:00:00.123456789123Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2000-02-29T12:00:00.123456789123Z"
+    }
+  },
+  {
+    "name": "message valid timestamp 2026-01-01t12:00:00Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2026-01-01t12:00:00Z"
+    }
+  },
+  {
+    "name": "message valid timestamp 2016-12-31T23:59:60Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2016-12-31T23:59:60Z"
+    }
+  },
+  {
+    "name": "message invalid sender not-a-uri",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "not-a-uri"
+    }
+  },
+  {
+    "name": "message invalid sender urn:xeip:bad id",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "urn:xeip:bad id"
+    }
+  },
+  {
+    "name": "message invalid sender  urn:xeip:test",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": " urn:xeip:test"
+    }
+  },
+  {
+    "name": "message invalid sender urn:xeip:bad%xy",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "urn:xeip:bad%xy"
+    }
+  },
+  {
+    "name": "message invalid sender urn:xeip:bad[thing]",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "urn:xeip:bad[thing]"
+    }
+  },
+  {
+    "name": "message invalid sender http://[bad]/",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "http://[bad]/"
+    }
+  },
+  {
+    "name": "message invalid sender urn:xeip:bad\\path",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "urn:xeip:bad\\path"
+    }
+  },
+  {
+    "name": "message valid sender urn:xeip:entity:test",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "urn:xeip:entity:test"
+    }
+  },
+  {
+    "name": "message valid sender https://example.org/path?q=yes#fragment",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "https://example.org/path?q=yes#fragment"
+    }
+  },
+  {
+    "name": "message valid sender http://[::1]:8787/events",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "http://[::1]:8787/events"
+    }
+  },
+  {
+    "name": "message valid sender urn:xeip:escaped%20id",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "urn:xeip:escaped%20id"
+    }
+  },
+  {
+    "name": "message valid sender mailto:someone@example.org",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "mailto:someone@example.org"
+    }
+  },
+  {
+    "name": "message kind array",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "kind": [
+        "message"
+      ]
+    }
+  },
+  {
+    "name": "message missing data",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "body": {
+        "contentType": "text/plain"
+      }
+    }
+  },
+  {
+    "name": "message content type too long",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "body": {
+        "contentType": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "data": null
+      }
+    }
+  },
+  {
+    "name": "message null data",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "body": {
+        "contentType": "application/json",
+        "data": null
+      }
+    }
+  },
+  {
+    "name": "message whitespace content type",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "body": {
+        "contentType": " ",
+        "data": null
+      }
+    }
+  },
+  {
+    "name": "message null recipient",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "recipient": null
+    }
+  },
+  {
+    "name": "message null replyTo",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "replyTo": null
+    }
+  },
+  {
+    "name": "message null expiresAt",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "expiresAt": null
+    }
+  },
+  {
+    "name": "message missing timestamp",
+    "schema": "message",
+    "valid": false,
+    "remove": [
+      "timestamp"
+    ]
+  },
+  {
+    "name": "message invalid expiry",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "expiresAt": "2026-02-30T12:00:00Z"
+    }
+  },
+  {
+    "name": "entity duplicate kinds",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "kinds": [
+        "human",
+        "human"
+      ]
+    }
+  },
+  {
+    "name": "entity empty kinds",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "kinds": []
+    }
+  },
+  {
+    "name": "entity unknown transport",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "endpoints": [
+        {
+          "transport": "unknown",
+          "url": "urn:xeip:test"
+        }
+      ]
+    }
+  },
+  {
+    "name": "entity array transport",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "endpoints": [
+        {
+          "transport": [
+            "http"
+          ],
+          "url": "https://example.org"
+        }
+      ]
+    }
+  },
+  {
+    "name": "entity overlong name",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  {
+    "name": "entity Unicode name at limit",
+    "schema": "entity",
+    "valid": true,
+    "patch": {
+      "name": "🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱🐱"
+    }
+  },
+  {
+    "name": "entity null name",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "name": null
+    }
+  },
+  {
+    "name": "entity invalid capability",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "capabilities": [
+        {
+          "id": "BAD ID",
+          "spec": "not-uri"
+        }
+      ]
+    }
+  },
+  {
+    "name": "session duplicate members",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "members": [
+        "urn:xeip:entity:test",
+        "urn:xeip:entity:test"
+      ]
+    }
+  },
+  {
+    "name": "session empty members",
+    "schema": "session",
+    "valid": true,
+    "patch": {
+      "members": []
+    }
+  },
+  {
+    "name": "capability invalid id",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "id": "BAD ID"
+    }
+  },
+  {
+    "name": "capability overlong id",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  {
+    "name": "capability overlong description",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  {
+    "name": "capability empty description",
+    "schema": "capability",
+    "valid": true,
+    "patch": {
+      "description": ""
+    }
+  },
+  {
+    "name": "capability null description",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "description": null
+    }
+  },
+  {
+    "name": "capability null spec",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "spec": null
+    }
+  },
+  {
+    "name": "capability invalid spec",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "spec": "not-uri"
+    }
+  },
+  {
+    "name": "message object kind",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "kind": {
+        "message": null
+      }
+    }
+  },
+  {
+    "name": "message whitespace separator",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01 12:00:00Z"
+    }
+  },
+  {
+    "name": "message newline separator",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01\n12:00:00Z"
+    }
+  },
+  {
+    "name": "message trailing URI newline",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "urn:xeip:test?query\n"
+    }
+  },
+  {
+    "name": "message empty URI path",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo:"
+    }
+  },
+  {
+    "name": "message empty URI path with query",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo:?q"
+    }
+  },
+  {
+    "name": "message empty URI path with fragment",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo:#x"
+    }
+  },
+  {
+    "name": "message unrestricted RFC port digits",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo://example.org:65536/path"
+    }
+  },
+  {
+    "name": "message long numeric port",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo://example.org:99999999999999999999/path"
+    }
+  },
+  {
+    "name": "entity object kind",
+    "schema": "entity",
+    "valid": false,
+    "patch": {
+      "kinds": [
+        {
+          "human": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "session object mode",
+    "schema": "session",
+    "valid": false,
+    "patch": {
+      "mode": {
+        "group": null
+      }
+    }
+  },
+  {
+    "name": "message URI syntax foo://[v1.x]",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo://[v1.x]"
+    }
+  },
+  {
+    "name": "message URI syntax foo://[::ffff:192.168.001.1]",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "foo://[::ffff:192.168.001.1]"
+    }
+  },
+  {
+    "name": "message URI syntax foo://[::ffff:192.168.1.1]",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo://[::ffff:192.168.1.1]"
+    }
+  },
+  {
+    "name": "message URI syntax foo://[v1.%20]",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "foo://[v1.%20]"
+    }
+  },
+  {
+    "name": "message URI syntax foo://name:bad",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "foo://name:bad"
+    }
+  },
+  {
+    "name": "message URI syntax foo://user:pass@host:99999999999999999/path",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "sender": "foo://user:pass@host:99999999999999999/path"
+    }
+  },
+  {
+    "name": "message URI syntax foo://[1:2:3:4:5:6:7:8:9]/",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "foo://[1:2:3:4:5:6:7:8:9]/"
+    }
+  },
+  {
+    "name": "message URI syntax foo://[1:2:3:4:5:6:7:8::]/",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "sender": "foo://[1:2:3:4:5:6:7:8::]/"
+    }
+  },
+  {
+    "name": "message timestamp trailing newline",
+    "schema": "message",
+    "valid": false,
+    "patch": {
+      "timestamp": "2026-01-01T12:00:00Z\n"
+    }
+  },
+  {
+    "name": "capability ID trailing newline",
+    "schema": "capability",
+    "valid": false,
+    "patch": {
+      "id": "xeip.message\n"
+    }
+  },
+  {
+    "name": "message long fraction 2026-01-01T12:00:59.999999999999999999Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2026-01-01T12:00:59.999999999999999999Z"
+    }
+  },
+  {
+    "name": "message long fraction 2026-01-01T23:59:60.999999999999999999Z",
+    "schema": "message",
+    "valid": true,
+    "patch": {
+      "timestamp": "2026-01-01T23:59:60.999999999999999999Z"
+    }
+  },
+  { "name": "session direct with no declared members", "schema": "session", "valid": true, "patch": { "mode": "direct", "members": [] } },
+  { "name": "session direct with three declared members", "schema": "session", "valid": true, "patch": { "mode": "direct" } },
+  { "name": "message session-directed without recipient", "schema": "message", "valid": true, "remove": ["recipient"] },
+  { "name": "message correlation does not require a known original", "schema": "message", "valid": true, "patch": { "replyTo": "urn:xeip:message:unknown" } },
+  { "name": "message event kind", "schema": "message", "valid": true, "patch": { "kind": "event" } },
+  { "name": "message command kind", "schema": "message", "valid": true, "patch": { "kind": "command" } },
+  { "name": "message receipt kind", "schema": "message", "valid": true, "patch": { "kind": "receipt" } }
+]

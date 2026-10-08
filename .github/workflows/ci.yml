@@ -17,13 +17,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --ignore-scripts --no-audit
+      - run: npm ci --ignore-scripts --no-audit
       - run: node --check examples/local-relay/console.js
       - run: npm run validate:fixtures
       - run: npm run typecheck
       - run: npm run build:ts
       - run: npm test
       - run: npm run test:ts
+      - run: npm run demo:admission
+      - run: npm run demo:replay
       - name: Run end-to-end local demo
         shell: bash
         run: |
@@ -36,9 +38,29 @@ jobs:
             sleep 0.2
           done
           npm run demo
-  rust:
+  rust-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace
+        with:
+          toolchain: '1.94.1'
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+  rust:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: ['1.81.0', '1.94.1']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+      - run: cargo test --workspace --all-targets --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm run test:interop

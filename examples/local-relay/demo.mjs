@@ -4,6 +4,8 @@
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { SseParser } from "../../sdks/typescript/src/sse.js";
+import { validateEnvelope } from "../../sdks/typescript/src/validation.js";
 
 const base = "http://127.0.0.1:" + (process.env.XEIP_PORT ?? "8787");
 const token = process.env.XEIP_DEV_TOKEN;
@@ -34,19 +36,16 @@ async function subscribe(entity) {
   const worker = (async () => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = "";
+    const parser = new SseParser();
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-        let boundary;
-        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          if (!frame.includes("event: xeip.message")) continue;
-          const line = frame.split("\n").find(l => l.startsWith("data:"));
-          if (line) received.push(JSON.parse(line.slice(5).trimStart()));
+        for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+          if (frame.event !== "xeip.message") continue;
+          const message = JSON.parse(frame.data);
+          validateEnvelope(message);
+          received.push(message);
         }
       }
     } catch (error) {

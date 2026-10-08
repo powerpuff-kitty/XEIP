@@ -10,3 +10,7 @@ publish = false
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[dev-dependencies]
+# Only the loopback example uses HTTP; the core remains transport-neutral.
+ureq = { version = "=3.2.1", default-features = false }

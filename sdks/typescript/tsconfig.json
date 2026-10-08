@@ -5,6 +5,8 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM"],
     "strict": true,
+    "allowJs": true,
+    "checkJs": true,
     "noUncheckedIndexedAccess": true,
     "noEmitOnError": true,
     "declaration": true,
@@ -12,5 +14,5 @@
     "rootDir": "src",
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.js"]
 }

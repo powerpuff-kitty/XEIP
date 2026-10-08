@@ -21,13 +21,19 @@ Deliverables:
 - [x] Authenticated **loopback-only** HTTP + SSE example relay (shared demo credential, no identity binding).
 - [x] Human → agent → machine demonstration and basic node tests.
 - [x] CI for Node tests/schema fixtures, TypeScript typecheck and Rust tests.
-- [ ] **Independent implementation conformance**, including schema validation against a JSON Schema engine.
-- [ ] Threat-model review and message/session canonical semantics review.
+- [x] JSON Schema engine with enforced formats and shared Rust/TypeScript/relay validation vectors.
+- [x] Incremental, bounded SSE framing and a bounded relay subscriber queue.
+- [x] Dependency lockfiles and CI checks for Rust 1.81 plus a pinned newer toolchain.
+- [x] Separate Rust and TypeScript HTTP/SSE implementations exchange the public message fixture and nested Unicode JSON over the loopback relay; CI is configured to run the harness.
+- [ ] **External client interoperability**: an independently authored third-party client exchanges public wire fixtures. The in-repository cross-language test does not establish independent authorship.
+- [x] Internal threat-model and message/session semantics review, with documented residual risks, exact URI routing and duplicate-message tests, and regression fixes for HTTP authority, MIME matching, JSON nesting and acceptance responses. See [spec/threat-model.md](spec/threat-model.md); external security review remains future work.
 
 Exit criteria: two independently authored clients exchange the same 0.1 envelopes using public fixtures; automated tests pass; known gaps listed. Local relay is demonstrator **only**.
 
 ## v0.2 — Trust and reliable sessions (P0/P1)
 
+- [x] First local admission slice: separately provisioned entity credentials, credential-bound senders/subscriptions, closed session memberships, recipient authorization, owner-controlled rotation/revocation, active stream removal and bounded subscriptions. Includes separate-credential TypeScript/Rust exchange and negative HTTP checks. See [spec/local-admission.md](spec/local-admission.md) and [ADR 0001](spec/decisions/0001-local-admission.md). This local prototype only partially addresses issues #1/#3.
+- [x] First delivery slice: opt-in bounded suppression of identical authenticated retries, conflicting-ID rejection, fixed monotonic expiry, refusal to evict live records under pressure, and an explicit duplicate acceptance flag. Includes a delivery-state diagram, lost-response/concurrent/reconnect checks and TypeScript/Rust exchange. See [spec/local-replay.md](spec/local-replay.md) and [ADR 0002](spec/decisions/0002-local-replay-window.md). Issue #4 remains incomplete: recipient receipts, ordering, durable replay and resume are pending.
 - Cryptographically verifiable entity/device identities and key rotation; authenticated session admission.
 - Per-entity credentials, signed or authenticated envelopes as required, scoped grants, revocation and agent delegation.
 - Clear direct/group sessions, membership, per-member filtering, presence and access control.

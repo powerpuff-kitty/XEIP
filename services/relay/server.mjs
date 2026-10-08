@@ -1,20 +1,33 @@
 /**
  * XEIP 0.1 development-only relay. NEVER expose it to untrusted networks.
- * One shared demo token authenticates all connections, but does not bind entity identities.
+ * Shared-token mode has no identity binding; the opt-in admission profile binds
+ * locally provisioned credentials to entities. Neither mode is a production relay.
  */
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
+import { validateEnvelope, requireUri } from "../../sdks/typescript/src/validation.js";
+import { LocalAdmission, LOCAL_ADMISSION_PROFILE } from "./admission.mjs";
+import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
 
 const MAX_BODY = 64 * 1024;
-const allowedKinds = new Set(["message", "event", "command", "receipt"]);
-const absoluteUri = value => typeof value === "string" &&
-  /^[a-z][a-z0-9+.-]*:[^\s]+$/i.test(value);
-const utcTime = value => typeof value === "string" &&
-  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value) &&
-  Number.isFinite(Date.parse(value));
-const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const MAX_JSON_DEPTH = 64;
+const MAX_FRAME = 128 * 1024;
+const MAX_PENDING = 256 * 1024;
+const absoluteUri = value => { try { requireUri(value); return true; } catch { return false; } };
+
+// A write returning false still queues its bytes. Bound that queue without allowing
+// one stalled client to block delivery to the rest of the session.
+function writeEvent(res, frame) {
+  if (res.destroyed || res.writableEnded) return false;
+  if (res.writableLength + Buffer.byteLength(frame) > MAX_PENDING) {
+    res.destroy();
+    return false;
+  }
+  res.write(frame);
+  return true;
+}
 
 function authorize(header, token) {
   if (typeof header !== "string" || !header.startsWith("Bearer ")) return false;
@@ -31,25 +44,22 @@ function writeJson(res, status, data) {
   });
   res.end(JSON.stringify(data));
 }
+function unauthorized(res) {
+  res.setHeader("WWW-Authenticate", "Bearer");
+  return writeJson(res, 401, { error: "unauthorized" });
+}
 function validateMessage(raw) {
-  if (!isRecord(raw)) return "message must be object";
-  const allowed = new Set(["xeip", "id", "kind", "sender", "recipient", "session", "timestamp", "body", "replyTo", "expiresAt", "extensions"]);
-  if (Object.keys(raw).some(k => !allowed.has(k))) return "unrecognized envelope field";
-  if (raw.xeip !== "0.1") return "unsupported XEIP version";
-  if (!absoluteUri(raw.id) || !absoluteUri(raw.sender) || !absoluteUri(raw.session)) return "invalid message, sender or session URI";
-  if (raw.recipient !== undefined && !absoluteUri(raw.recipient)) return "invalid recipient URI";
-  if (raw.replyTo !== undefined && !absoluteUri(raw.replyTo)) return "invalid replyTo URI";
-  if (!allowedKinds.has(raw.kind)) return "invalid message kind";
-  if (!utcTime(raw.timestamp)) return "invalid timestamp";
-  if (!isRecord(raw.body) || typeof raw.body.contentType !== "string" || !raw.body.contentType.trim() ||
-      !Object.hasOwn(raw.body, "data") || Object.keys(raw.body).some(k => !["contentType", "data"].includes(k)))
-    return "invalid message body";
-  if (raw.extensions !== undefined && !isRecord(raw.extensions)) return "invalid extensions";
-  if (raw.expiresAt !== undefined) {
-    if (!utcTime(raw.expiresAt)) return "invalid expiresAt";
-    if (Date.parse(raw.expiresAt) <= Date.now()) return "message expired";
-  }
+  try { validateEnvelope(raw); }
+  catch (error) { return error.message; }
+  if (raw.expiresAt !== undefined && expiryMillis(raw.expiresAt) <= Date.now()) return "message expired";
   return null;
+}
+function expiryMillis(timestamp) {
+  // Date.parse does not accept leap seconds. Map :60 onto the following second.
+  const leapSecond = timestamp.slice(17, 19) === "60";
+  const normalized = timestamp.slice(0, 10) + "T" + timestamp.slice(11, 17) +
+    (leapSecond ? "59" : timestamp.slice(17, 19)) + timestamp.slice(19);
+  return Date.parse(normalized) + (leapSecond ? 1000 : 0);
 }
 async function readLimitedBody(req) {
   if (Number(req.headers["content-length"]) > MAX_BODY) throw new RangeError("body too large");
@@ -60,22 +70,58 @@ async function readLimitedBody(req) {
     if (size > MAX_BODY) throw new RangeError("body too large");
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
+}
+
+function requireBoundedJsonDepth(value) {
+  const stack = [[value, 1]];
+  while (stack.length) {
+    const [current, depth] = stack.pop();
+    if (current === null || typeof current !== "object") continue;
+    if (depth > MAX_JSON_DEPTH) throw new RangeError("JSON nesting exceeds 64 containers");
+    for (const child of Object.values(current)) stack.push([child, depth + 1]);
+  }
 }
 
 function loopbackOnly(req) {
   return ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
 }
 
+function localOrigin(req) {
+  // Check the literal authority, not DNS resolution: a remote hostname may
+  // resolve to loopback during rebinding. No proxy or wildcard hosts are supported.
+  const host = req.headers.host;
+  const match = typeof host === "string" && /^(localhost|127\.0\.0\.1|\[::1\])(?::([0-9]{1,5}))?$/i.exec(host);
+  if (!match || (match[2] !== undefined && (Number(match[2]) < 1 || Number(match[2]) > 65535))) return null;
+  if (req.rawHeaders.filter((header, index) => index % 2 === 0 && header.toLowerCase() === "host").length !== 1) return null;
+  return new URL("http://" + host).origin;
+}
+
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token }) {
-  if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
+export function createRelay({ token, admission, replay }) {
+  if (admission !== undefined) {
+    if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
+    if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
+  } else if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
+  if (replay !== undefined && !admission) throw new TypeError("replay requires local admission mode");
+  const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
   const sessions = new Map(); // session ID -> Set({res, entity, heartbeat})
   const server = createServer(async (req, res) => {
     // Reject non-loopback connections even if a consumer accidentally binds a public interface.
     if (!loopbackOnly(req)) return writeJson(res, 403, { error: "loopback-only development relay" });
+    const origin = localOrigin(req);
+    if (!origin) return writeJson(res, 403, { error: "literal loopback Host required" });
+    if (req.headers.origin !== undefined && req.headers.origin !== origin) {
+      return writeJson(res, 403, { error: "same-origin browser request required" });
+    }
+    if (!req.url?.startsWith("/") || req.url.startsWith("//")) {
+      return writeJson(res, 400, { error: "origin-form request target required" });
+    }
     let url;
-    try { url = new URL(req.url ?? "/", "http://localhost"); }
+    try {
+      url = new URL(req.url, origin);
+      if (url.origin !== origin) return writeJson(res, 400, { error: "request target must preserve the local origin" });
+    }
     catch { return writeJson(res, 400, { error: "invalid URL" }); }
     const staticPages = {
       "/console": ["console.html", "text/html"],
@@ -94,18 +140,35 @@ export function createRelay({ token }) {
       res.end(fileContent);
       return;
     }
+    if (req.method === "GET" && ["/sse.js", "/validation.js"].includes(url.pathname)) {
+      const content = readFileSync(new URL("../../sdks/typescript/src" + url.pathname, import.meta.url));
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      res.end(content);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/health") {
-      return writeJson(res, 200, { status: "ok", protocol: "xeip/0.1", mode: "development-only" });
+      return writeJson(res, 200, admission
+        ? { status: "ok", protocol: "xeip/0.1", mode: "local-admission", profile: LOCAL_ADMISSION_PROFILE,
+          ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
+        : { status: "ok", protocol: "xeip/0.1", mode: "development-only" });
     }
-    if (!authorize(req.headers.authorization, token)) {
-      res.setHeader("WWW-Authenticate", "Bearer");
-      return writeJson(res, 401, { error: "unauthorized" });
-    }
+    const principal = admission ? admission.authenticate(req.headers.authorization) : null;
+    if (admission ? !principal : !authorize(req.headers.authorization, token)) return unauthorized(res);
     if (req.method === "GET" && url.pathname === "/events") {
       const session = url.searchParams.get("session");
       const entity = url.searchParams.get("entity");
       if (!absoluteUri(session) || !absoluteUri(entity)) return writeJson(res, 400, { error: "valid session and entity URIs required" });
-      // Entity strings are client-supplied selectors, NOT authenticated identities.
+      if (admission) {
+        if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
+        let total = 0, entityStreams = 0;
+        for (const clients of sessions.values()) for (const client of clients) {
+          if (client.res.destroyed || client.res.writableEnded) continue;
+          total++;
+          if (client.entity === principal.entity) entityStreams++;
+        }
+        if (total >= 256 || entityStreams >= 4) return writeJson(res, 429, { error: "subscription limit reached" });
+      }
+      // Only admission mode derives the stored identity from authenticated credentials.
       res.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
@@ -113,13 +176,13 @@ export function createRelay({ token }) {
         "X-Accel-Buffering": "no",
         "X-Content-Type-Options": "nosniff"
       });
-      res.write(": connected\n\n");
+      writeEvent(res, ": connected\n\n");
       const clients = sessions.get(session) ?? new Set();
       sessions.set(session, clients);
-      const subscription = { res, entity };
+      const subscription = { res, entity: admission ? principal.entity : entity, principal };
       clients.add(subscription);
       const heartbeat = setInterval(() => {
-        if (!res.destroyed) res.write(": heartbeat\n\n");
+        writeEvent(res, ": heartbeat\n\n");
       }, 15000);
       heartbeat.unref();
       res.once("close", () => {
@@ -130,26 +193,59 @@ export function createRelay({ token }) {
       return;
     }
     if (req.method === "POST" && url.pathname === "/messages") {
-      if (!(req.headers["content-type"] ?? "").startsWith("application/json")) {
+      if ((req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase() !== "application/json") {
         return writeJson(res, 415, { error: "application/json content type required" });
       }
       let raw;
-      try { raw = JSON.parse(await readLimitedBody(req)); }
+      try {
+        raw = JSON.parse(await readLimitedBody(req));
+        requireBoundedJsonDepth(raw);
+      }
       catch (err) { return writeJson(res, err instanceof RangeError ? 413 : 400, { error: "invalid or oversized JSON" }); }
       const error = validateMessage(raw);
       if (error) return writeJson(res, 422, { error });
+      // A credential or membership can change while the asynchronous body read waits.
+      if (admission) {
+        if (!admission.isCurrent(principal)) return unauthorized(res);
+        if (!admission.canSend(principal, raw)) return writeJson(res, 403, { error: "forbidden" });
+      }
       let written = 0;
+      const frame = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
+      // Compact numeric notation can expand when JSON is reserialized. Keep
+      // the emitted bytes compatible with both reference readers before routing.
+      if (Buffer.byteLength(frame) > MAX_FRAME) return writeJson(res, 413, { error: "serialized SSE frame too large" });
+      if (replayWindow) {
+        // Record accepted scope before any write, with no asynchronous gap in routing.
+        const decision = replayWindow.accept(raw);
+        if (decision.status === "duplicate") return writeJson(res, 202, { accepted: true, delivered: 0, duplicate: true });
+        if (decision.status === "conflict") return writeJson(res, 409, { error: "message ID conflict" });
+        if (decision.status === "full") {
+          res.setHeader("Retry-After", String(decision.retryAfter));
+          return writeJson(res, 503, { error: "replay window full" });
+        }
+      }
       for (const subscriber of sessions.get(raw.session) ?? []) {
+        if (admission && !admission.canSubscribe(subscriber.principal, raw.session)) continue;
         if (raw.recipient !== undefined && subscriber.entity !== raw.recipient) continue;
         if (subscriber.res.destroyed || subscriber.res.writableEnded) continue;
         // This is only a write to a current stream, NOT a delivery acknowledgment.
-        subscriber.res.write("event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n");
-        written += 1;
+        if (writeEvent(subscriber.res, frame)) written += 1;
       }
-      return writeJson(res, 202, { accepted: true, delivered: written });
+      return writeJson(res, 202, { accepted: true, delivered: written, ...(replayWindow ? { duplicate: false } : {}) });
     }
     writeJson(res, 404, { error: "route not found" });
   });
+  const checkSubscriptions = () => {
+    for (const [session, clients] of sessions) for (const client of clients) {
+      if (!admission.canSubscribe(client.principal, session)) client.res.destroy();
+    }
+  };
+  let stopChanges;
+  server.on("listening", () => {
+    stopChanges?.();
+    stopChanges = admission?.onChange(checkSubscriptions);
+  });
+  server.on("close", () => { stopChanges?.(); stopChanges = undefined; });
   return server;
 }
 

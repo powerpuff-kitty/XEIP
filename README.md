@@ -25,19 +25,35 @@ Open **http://127.0.0.1:8787/console** to use the browser console. Open two or t
 
 The demo connects three simulated participants (human, AI agent, machine) to an authenticated local HTTP + Server-Sent Events relay, exchanges typed messages, and verifies delivery. It does **not** invoke an LLM, access a real camera, provide multi-user identity authentication, or implement federation.
 
+For separate, locally provisioned entity credentials and closed session membership, run the self-contained admission demo:
+
+```bash
+npm run demo:admission
+```
+
+It starts an ephemeral loopback relay, generates separate credentials without printing them, exchanges three simulated messages, rejects sender spoofing, and revokes an active participant. [The local admission profile](spec/local-admission.md) documents provisioning, membership, rotation and limits. This is an opt-in local prototype; the shared-token CLI above retains its original behavior.
+
+Run `npm run demo:replay` to additionally suppress identical retries within a bounded window, reject changed-content retries, and check that reconnecting only receives fresh messages. [The local replay profile](spec/local-replay.md) distinguishes acceptance, stream writes and unverified consumption. It keeps no offline queue and provides no exactly-once execution guarantee.
+
 ```bash
 node --test services/relay/*.test.mjs
-node tools/validate-fixtures.mjs
-npm run typecheck            # requires TypeScript CLI (see package.json)
-cargo test --workspace       # requires Rust
+npm ci --ignore-scripts      # development tools only; the relay/demo need no install
+npm run validate:fixtures    # JSON Schema validation with format checks
+npm run typecheck
+npm run build:ts
+npm run test:ts
+cargo test --workspace --all-targets --locked
+npm run test:interop         # Rust 1.81+ required; starts its own loopback relay
 ```
+
+The interoperability test connects the TypeScript SDK and a separate Rust HTTP/SSE example to ephemeral relays in shared-token, local-admission and local-replay modes. It checks the public message fixture and a nested Unicode JSON payload in both directions, including reply correlation, extension preservation and explicit duplicate attempts. See [conformance/README.md](conformance/README.md) for its scope and limitations.
 
 ## Architecture
 
 ```text
 human / AI agent / machine / service
        |       |      |
-       +--- XEIP 0.1 manifests, messages, sessions, grants ---+
+       +--- XEIP 0.1 manifests, messages, sessions ---+
                           |
         +-----------------+------------------+
         |                 |                  |
@@ -49,6 +65,7 @@ human / AI agent / machine / service
 ```
 
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
+- **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
 - **Rust reference models:** [crates/xeip-core](crates/xeip-core).
 - **TypeScript SDK:** [sdks/typescript](sdks/typescript).
@@ -73,15 +90,20 @@ human / AI agent / machine / service
 | Rust core models and validation | Implemented starter |
 | TypeScript models, validation and HTTP/SSE client | Implemented starter |
 | Authenticated, loopback HTTP/SSE broadcast demo | Implemented; development only |
-| Cross-language conformance, cryptographic identities | Planned |
+| Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
+| Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
+| Shared Rust/TypeScript/schema validation vectors | Implemented |
+| Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
+| Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |
+| Cryptographic identities | Planned |
 | Production messaging, offline persistence, groups, federation | Planned |
 | MCP/A2A/Matrix bridges, service surfaces and media | Planned |
 
-**Important:** The demo authenticates clients using one shared development token; it does not bind a message sender to a distinct verified identity. Its in-memory routing is not safe for untrusted participants. See [SECURITY.md](SECURITY.md) before experimenting outside localhost.
+**Important:** The shared-token demo does not bind senders to distinct identities. The optional admission profile binds bearer credentials to locally provisioned entities and membership, but still requires a trusted workstation and provisioner. Neither mode supports public deployment. See [SECURITY.md](SECURITY.md).
 
 ## Scope and compatibility
 
-XEIP is an *interoperability envelope and capability profile*, not a replacement for existing protocols. Agent task adapters should preserve A2A task semantics; tool adapters should preserve MCP authorization; voice/video belongs on established real-time media transports. The core deliberately keeps a small number of object types: entity, endpoint, capability, message, session and grant.
+XEIP is an *interoperability envelope and capability profile*, not a replacement for existing protocols. Agent task adapters should preserve A2A task semantics; tool adapters should preserve MCP authorization; voice/video belongs on established real-time media transports. The implemented core keeps a small number of object types: entity, endpoint, capability, message and session. Grants and their enforcement are planned for v0.2.
 
 We welcome discussion through [issues](https://github.com/powerpuff-kitty/XEIP/issues). Proposed protocol changes should follow [CONTRIBUTING.md](CONTRIBUTING.md). Code is Apache-2.0; the specification and examples are licensed under [CC BY 4.0](LICENSE-SPEC).
 
