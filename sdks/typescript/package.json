@@ -1,0 +1,15 @@
+{
+  "name": "@xeip/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Experimental XEIP TypeScript SDK",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "license": "Apache-2.0"
+}

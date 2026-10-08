@@ -1,0 +1,21 @@
+{
+  "name": "xeip-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test services/relay/*.test.mjs",
+    "test:ts": "node --test sdks/typescript/*.test.mjs",
+    "validate:fixtures": "node tools/validate-fixtures.mjs",
+    "typecheck": "tsc -p sdks/typescript/tsconfig.json --noEmit",
+    "build:ts": "tsc -p sdks/typescript/tsconfig.json",
+    "demo": "node examples/local-relay/demo.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "license": "Apache-2.0"
+}
