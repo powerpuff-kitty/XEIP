@@ -35,11 +35,11 @@ Exit criteria: two independently authored clients exchange the same 0.1 envelope
 - [x] First local admission slice: separately provisioned entity credentials, credential-bound senders/subscriptions, closed session memberships, recipient authorization, owner-controlled rotation/revocation, active stream removal and bounded subscriptions. Includes separate-credential TypeScript/Rust exchange and negative HTTP checks. See [spec/local-admission.md](spec/local-admission.md) and [ADR 0001](spec/decisions/0001-local-admission.md). This local prototype only partially addresses issues #1/#3.
 - [x] First delivery slice: opt-in bounded suppression of identical authenticated retries, conflicting-ID rejection, fixed monotonic expiry, refusal to evict live records under pressure, and an explicit duplicate acceptance flag. Includes a delivery-state diagram, lost-response/concurrent/reconnect checks and TypeScript/Rust exchange. See [spec/local-replay.md](spec/local-replay.md) and [ADR 0002](spec/decisions/0002-local-replay-window.md). Issue #4 remains incomplete: recipient receipts, durable ordering and persistence are pending.
 - [x] Second delivery slice: opt-in per-session sequencing, transport framing of the sequence (`seq`/SSE `id`) and bounded reconnect resume by cursor with an explicit gap signal, across HTTP/SSE and WebSocket. See [spec/local-delivery.md](spec/local-delivery.md) and [ADR 0003](spec/decisions/0003-local-delivery-resume.md). Issue #4 remains incomplete: retention is in-memory, receipts are unverified and cross-relay/durable ordering is pending.
-- Cryptographically verifiable entity/device identities and key rotation; authenticated session admission.
+- Cryptographically verifiable entity/device identities and key rotation; authenticated session admission. Design proposed in [spec/identity.md](spec/identity.md) and [ADR 0004](spec/decisions/0004-verifiable-identity.md); no implementation yet.
 - Per-entity credentials, signed or authenticated envelopes as required, scoped grants, revocation and agent delegation.
 - Clear direct/group sessions, membership, per-member filtering, presence and access control.
 - Delivery receipts, ordering scopes, idempotency/replay protection, reconnect/resume and bounded durable queue design.
-- WebSocket transport: first local slice with a dependency-free `/ws` profile, bounded outbound queues, size quotas, ping/pong and close codes sharing the HTTP/SSE routing/admission path. See [spec/transports/websocket.md](spec/transports/websocket.md). Issue #7 remains incomplete: reconnect/resume, a Rust client adapter and production hardening are pending.
+- WebSocket transport: first local slice with a dependency-free `/ws` profile, bounded outbound queues, size quotas, ping/pong, close codes and in-memory cursor resume sharing the HTTP/SSE routing/admission path. Includes a reference Rust client example. See [spec/transports/websocket.md](spec/transports/websocket.md). Issue #7 remains incomplete: durable reconnect, compression and production hardening are pending.
 - Cross-language conformance harness and fuzz/security tests.
 
 Exit criteria: no sender spoofing or cross-session leakage in a multi-tenant harness; documented security review; reconnect scenarios pass. Do not publish a production relay beforehand.
@@ -72,7 +72,7 @@ Exit criteria: independent Monitor and Agent Room examples consume one shared ma
 
 ## GitHub issue map
 
-The live issue tracker is authoritative; completion requires passing acceptance tests, not merely merging code.
+The live issue tracker is authoritative; completion requires passing acceptance tests, not merely merging code. A checked item below means the described local prototype slice is implemented and tested; its linked GitHub issue stays **open** until every acceptance criterion (often including independent review, durability or production hardening) is met.
 
 | Stage | Open follow-up work |
 | --- | --- |

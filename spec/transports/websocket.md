@@ -2,7 +2,7 @@
 
 **Experimental reference transport only.** Intended for loopback demonstrations, not untrusted or public deployment. It carries the same XEIP 0.1 envelopes as [HTTP + SSE](http-sse.md) and reuses the same validation, admission and optional [local replay](../local-replay.md) path; it is an additional transport, not a separate protocol version.
 
-The reference implementation is a dependency-free server role in `services/relay/websocket.mjs`, exercised by `services/relay/websocket.test.mjs`. It is a partial slice of issue #7: reconnect/resume, a Rust client adapter, compression and production hardening are **not** implemented.
+The reference implementation is a dependency-free server role in `services/relay/websocket.mjs`, exercised by `services/relay/websocket.test.mjs`, with a dependency-free reference client in `crates/xeip-core/examples/websocket_peer.rs`. It is a partial slice of issue #7: in-memory cursor resume (via the [local delivery](../local-delivery.md) profile) is implemented, but durable reconnect, compression and production hardening are **not**.
 
 ## Endpoint and handshake
 

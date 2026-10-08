@@ -67,6 +67,7 @@ human / AI agent / machine / service
 ```
 
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
+- **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
@@ -93,7 +94,7 @@ human / AI agent / machine / service
 | Rust core models and validation | Implemented starter |
 | TypeScript models, validation and HTTP/SSE client | Implemented starter |
 | Authenticated, loopback HTTP/SSE broadcast demo | Implemented; development only |
-| Loopback WebSocket transport (shared routing, bounded queues, close codes) | Partial v0.2 slice; no reconnect/resume or Rust client |
+| Loopback WebSocket transport (shared routing, bounded queues, close codes, in-memory cursor resume) | Partial v0.2 slice; no durable resume or production hardening; reference Rust client example |
 | Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
@@ -110,5 +111,5 @@ human / AI agent / machine / service
 
 XEIP is an *interoperability envelope and capability profile*, not a replacement for existing protocols. Agent task adapters should preserve A2A task semantics; tool adapters should preserve MCP authorization; voice/video belongs on established real-time media transports. The implemented core keeps a small number of object types: entity, endpoint, capability, message and session. Grants and their enforcement are planned for v0.2.
 
-We welcome discussion through [issues](https://github.com/powerpuff-kitty/XEIP/issues). Proposed protocol changes should follow [CONTRIBUTING.md](CONTRIBUTING.md). Code is Apache-2.0; the specification and examples are licensed under [CC BY 4.0](LICENSE-SPEC).
+We welcome discussion through [issues](https://github.com/powerpuff-kitty/XEIP/issues). Proposed protocol changes should follow [CONTRIBUTING.md](CONTRIBUTING.md) and, for versioned releases, [RELEASING.md](RELEASING.md). Code is Apache-2.0; the specification and examples are licensed under [CC BY 4.0](LICENSE-SPEC).
 
