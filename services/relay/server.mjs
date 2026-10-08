@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { validateEnvelope, requireUri } from "../../sdks/typescript/src/validation.js";
 import { LocalAdmission, LOCAL_ADMISSION_PROFILE } from "./admission.mjs";
 import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
+import { DeliveryLog, LOCAL_DELIVERY_PROFILE } from "./delivery.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 const MAX_BODY = 64 * 1024;
@@ -45,6 +46,21 @@ function writeEvent(res, frame) {
   }
   res.write(frame);
   return true;
+}
+
+// SSE frame for one envelope; the optional delivery sequence uses the standard
+// `id:` line so clients can resume with Last-Event-ID.
+function sseFrame(raw, seq) {
+  return (seq === undefined ? "" : "id: " + seq + "\n") +
+    "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
+}
+
+// Returns undefined when absent, null when malformed, or a non-negative cursor.
+function parseCursor(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
+  const cursor = Number(value);
+  return Number.isSafeInteger(cursor) ? cursor : null;
 }
 
 function authorize(header, token) {
@@ -116,13 +132,14 @@ function localOrigin(req) {
 }
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay }) {
+export function createRelay({ token, admission, replay, delivery }) {
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
   } else if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
   if (replay !== undefined && !admission) throw new TypeError("replay requires local admission mode");
   const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
+  const deliveryLog = delivery === undefined ? null : new DeliveryLog(delivery);
   // session ID -> Set of transport-neutral clients:
   // { entity, principal, alive(), write(frame, raw) -> boolean, destroy() }
   const sessions = new Map();
@@ -155,10 +172,10 @@ export function createRelay({ token, admission, replay }) {
       if (!admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
       if (!admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
     }
-    const frame = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
+    const base = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
     // Compact numeric notation can expand when JSON is reserialized. Keep the
     // emitted bytes compatible with both reference readers before routing.
-    if (Buffer.byteLength(frame) > MAX_FRAME) return { status: 413, error: "serialized SSE frame too large" };
+    if (Buffer.byteLength(base) > MAX_FRAME) return { status: 413, error: "serialized SSE frame too large" };
     if (replayWindow) {
       // Record accepted scope before any write, with no asynchronous gap in routing.
       const decision = replayWindow.accept(raw);
@@ -166,15 +183,19 @@ export function createRelay({ token, admission, replay }) {
       if (decision.status === "conflict") return { status: 409, error: "message ID conflict" };
       if (decision.status === "full") return { status: 503, error: "replay window full", retryAfter: decision.retryAfter };
     }
+    // Assign the delivery sequence in the same synchronous step as the writes so
+    // the per-session order equals acceptance order across both transports.
+    const seq = deliveryLog ? deliveryLog.append(raw.session, raw) : undefined;
+    const frame = sseFrame(raw, seq);
     let written = 0;
     for (const subscriber of sessions.get(raw.session) ?? []) {
       if (admission && !admission.canSubscribe(subscriber.principal, raw.session)) continue;
       if (raw.recipient !== undefined && subscriber.entity !== raw.recipient) continue;
       if (!subscriber.alive()) continue;
       // A write to a current stream is not a delivery acknowledgment.
-      if (subscriber.write(frame, raw)) written += 1;
+      if (subscriber.write(frame, raw, seq)) written += 1;
     }
-    return { status: 202, body: { accepted: true, delivered: written, ...(replayWindow ? { duplicate: false } : {}) } };
+    return { status: 202, body: { accepted: true, delivered: written, ...(seq === undefined ? {} : { seq }), ...(replayWindow ? { duplicate: false } : {}) } };
   };
   const server = createServer(async (req, res) => {
     // Reject non-loopback connections even if a consumer accidentally binds a public interface.
@@ -217,11 +238,16 @@ export function createRelay({ token, admission, replay }) {
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
-      return writeJson(res, 200, admission
+      const base = admission
         ? { status: "ok", protocol: "xeip/0.1", mode: "local-admission", profile: LOCAL_ADMISSION_PROFILE,
           transports: ["http-sse", "websocket"],
           ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
-        : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] });
+        : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] };
+      if (deliveryLog) {
+        base.resumeProfile = LOCAL_DELIVERY_PROFILE;
+        base.resume = deliveryLog.limits;
+      }
+      return writeJson(res, 200, base);
     }
     const principal = admission ? admission.authenticate(req.headers.authorization) : null;
     if (admission ? !principal : !authorize(req.headers.authorization, token)) return unauthorized(res);
@@ -229,6 +255,10 @@ export function createRelay({ token, admission, replay }) {
       const session = url.searchParams.get("session");
       const entity = url.searchParams.get("entity");
       if (!absoluteUri(session) || !absoluteUri(entity)) return writeJson(res, 400, { error: "valid session and entity URIs required" });
+      const cursorRaw = req.headers["last-event-id"] ?? url.searchParams.get("after") ?? undefined;
+      const cursor = parseCursor(cursorRaw);
+      if (cursor === null) return writeJson(res, 400, { error: "invalid resume cursor" });
+      if (cursor !== undefined && !deliveryLog) return writeJson(res, 400, { error: "delivery resume profile not enabled" });
       if (admission) {
         if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
         const { total, entityStreams } = activeCounts(principal.entity);
@@ -243,6 +273,14 @@ export function createRelay({ token, admission, replay }) {
         "X-Content-Type-Options": "nosniff"
       });
       writeEvent(res, ": connected\n\n");
+      if (cursor !== undefined) {
+        const { entries, gap, from } = deliveryLog.since(session, cursor);
+        if (gap) writeEvent(res, "event: xeip.gap\ndata: " + JSON.stringify({ session, from }) + "\n\n");
+        for (const entry of entries) {
+          if (entry.message.recipient !== undefined && entry.message.recipient !== entity) continue;
+          if (!writeEvent(res, sseFrame(entry.message, entry.seq))) break;
+        }
+      }
       const client = {
         entity: admission ? principal.entity : entity,
         principal,
@@ -325,23 +363,39 @@ export function createRelay({ token, admission, replay }) {
       if (value.type === "subscribe") {
         const { session, entity } = value;
         if (!absoluteUri(session) || !absoluteUri(entity)) return control({ type: "error", status: 400, error: "valid session and entity URIs required" });
+        let after;
+        if (value.after !== undefined) {
+          if (!Number.isSafeInteger(value.after) || value.after < 0) return control({ type: "error", status: 400, error: "invalid resume cursor" });
+          after = value.after;
+        }
+        if (after !== undefined && !deliveryLog) return control({ type: "error", status: 400, error: "delivery resume profile not enabled" });
         if (admission) {
           if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return control({ type: "error", status: 403, error: "forbidden" });
           const { total, entityStreams } = activeCounts(principal.entity);
           if (total >= 256 || entityStreams >= 4) return control({ type: "error", status: 429, error: "subscription limit reached" });
         }
+        const storedEntity = admission ? principal.entity : entity;
         const previous = ownSubscriptions.get(session);
         if (previous) { removeClient(session, previous); ownSubscriptions.delete(session); }
         const client = {
-          entity: admission ? principal.entity : entity,
+          entity: storedEntity,
           principal,
           alive: () => connection.isOpen(),
-          write: (frame, raw) => connection.sendText(JSON.stringify({ type: "message", message: raw })),
+          write: (frame, raw, seq) => connection.sendText(JSON.stringify({ type: "message", ...(seq === undefined ? {} : { seq }), message: raw })),
           destroy: () => connection.close(CLOSE.policy, "authorization changed")
         };
         addClient(session, client);
         ownSubscriptions.set(session, client);
-        return control({ type: "subscribed", session });
+        control({ type: "subscribed", session });
+        if (after !== undefined) {
+          const { entries, gap, from } = deliveryLog.since(session, after);
+          if (gap) control({ type: "gap", session, from });
+          for (const entry of entries) {
+            if (entry.message.recipient !== undefined && entry.message.recipient !== storedEntity) continue;
+            connection.sendText(JSON.stringify({ type: "message", seq: entry.seq, message: entry.message }));
+          }
+        }
+        return;
       }
       if (value.type === "send") {
         try { requireBoundedJsonDepth(value.message); }
@@ -352,7 +406,9 @@ export function createRelay({ token, admission, replay }) {
           return connection.close(CLOSE.policy, "revoked credential");
         }
         if (outcome.error !== undefined) return control({ type: "error", status: outcome.status, error: outcome.error });
-        return control({ type: "accepted", delivered: outcome.body.delivered, ...(outcome.body.duplicate !== undefined ? { duplicate: outcome.body.duplicate } : {}) });
+        return control({ type: "accepted", delivered: outcome.body.delivered,
+          ...(outcome.body.seq === undefined ? {} : { seq: outcome.body.seq }),
+          ...(outcome.body.duplicate !== undefined ? { duplicate: outcome.body.duplicate } : {}) });
       }
       return control({ type: "error", status: 400, error: "unknown control type" });
     });

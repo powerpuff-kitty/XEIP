@@ -285,6 +285,35 @@ test("bounds outbound buffering and closes a slow socket with 1013", () => {
   assert.equal(closeFrame.readUInt16BE(2), CLOSE.tryAgain);
 });
 
+test("resumes a WebSocket subscriber after a sequence cursor and reports gaps", async t => {
+  await withRelay(t, { token: TOKEN, delivery: { maxPerSession: 1 } }, async (base, open) => {
+    const sender = await open({ token: TOKEN });
+    sender.send({ type: "send", message: envelope() });
+    await sender.waitFor(() => sender.messages.some(m => m.type === "accepted"), "first accepted");
+    assert.equal(sender.messages.find(m => m.type === "accepted").seq, 1);
+    sender.send({ type: "send", message: envelope() });
+    await sender.waitFor(() => sender.messages.filter(m => m.type === "accepted").length === 2, "second accepted");
+    assert.equal(sender.messages.filter(m => m.type === "accepted")[1].seq, 2);
+
+    const resumed = await open({ token: TOKEN });
+    resumed.send({ type: "subscribe", session: room, entity: b, after: 0 });
+    await resumed.waitFor(() => resumed.messages.some(m => m.type === "gap"), "gap control");
+    await resumed.waitFor(() => resumed.messages.some(m => m.type === "message"), "replayed message");
+    assert.equal(resumed.messages.find(m => m.type === "gap").from, 2);
+    assert.equal(resumed.messages.find(m => m.type === "message").seq, 2);
+
+    const next = await open({ token: TOKEN });
+    next.send({ type: "subscribe", session: room, entity: b, after: 2 });
+    await next.waitFor(() => next.messages.some(m => m.type === "subscribed"), "subscribed");
+    await delay(50);
+    assert.equal(next.messages.filter(m => m.type === "message").length, 0);
+    sender.send({ type: "send", message: envelope() });
+    await next.waitFor(() => next.messages.some(m => m.type === "message"), "live after cursor");
+    assert.equal(next.messages.find(m => m.type === "message").seq, 3);
+    sender.close(); resumed.close(); next.close();
+  });
+});
+
 test("keeps routing to a healthy WebSocket subscriber while another is stalled", { timeout: 10000 }, async t => {
   await withRelay(t, { token: TOKEN }, async (base, open) => {
     const healthy = await open({ token: TOKEN });

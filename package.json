@@ -15,7 +15,8 @@
     "build:ts": "tsc -p sdks/typescript/tsconfig.json",
     "demo": "node examples/local-relay/demo.mjs",
     "demo:admission": "node examples/local-relay/admission-demo.mjs",
-    "demo:replay": "node examples/local-relay/admission-demo.mjs --replay"
+    "demo:replay": "node examples/local-relay/admission-demo.mjs --replay",
+    "demo:delivery": "node examples/local-relay/delivery-demo.mjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",

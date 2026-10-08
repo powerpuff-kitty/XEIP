@@ -35,6 +35,8 @@ It starts an ephemeral loopback relay, generates separate credentials without pr
 
 Run `npm run demo:replay` to additionally suppress identical retries within a bounded window, reject changed-content retries, and check that reconnecting only receives fresh messages. [The local replay profile](spec/local-replay.md) distinguishes acceptance, stream writes and unverified consumption. It keeps no offline queue and provides no exactly-once execution guarantee.
 
+Run `npm run demo:delivery` to assign a per-session sequence, resume a disconnected subscriber from a cursor, receive an explicit gap when older messages aged out, and reject an invalid cursor. [The local delivery profile](spec/local-delivery.md) is in-memory and bounded; a new process or an out-of-window cursor cannot recover the backlog.
+
 ```bash
 node --test services/relay/*.test.mjs
 npm ci --ignore-scripts      # development tools only; the relay/demo need no install
@@ -94,6 +96,7 @@ human / AI agent / machine / service
 | Loopback WebSocket transport (shared routing, bounded queues, close codes) | Partial v0.2 slice; no reconnect/resume or Rust client |
 | Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
+| Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |

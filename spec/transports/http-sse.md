@@ -8,6 +8,8 @@ The contract below describes the shared-token CLI mode. The opt-in [local admiss
 
 Admission may additionally select the [local replay profile](../local-replay.md) using `replay: { windowMs, maxEntries }`. It adds an optional boolean `duplicate` to HTTP acceptance responses, rejects conflicting reuse with 409, and refuses new scopes with 503/Retry-After when its bounded ledger is full. `duplicate: true` means no new stream writes; acceptance is still not recipient acknowledgment. Neither profile changes the base envelope version.
 
+The [local delivery profile](../local-delivery.md) may be selected independently using `delivery: { windowMs, maxPerSession, maxSessions }`. It assigns a per-session `seq`, adds `id: <seq>` to each `xeip.message` frame and `seq` to the HTTP acceptance body, and lets `/events` resume with `Last-Event-ID` or `after`. A cursor outside the in-memory retention window produces an `xeip.gap` frame. It is not durable or exactly-once.
+
 - `GET /health`: returns JSON health status.
 - `GET /events?session=<encoded-session-URI>&entity=<encoded-entity-URI>`: returns HTTP 200 with a text/event-stream. Both selectors are required. Header `Authorization: Bearer <XEIP_DEV_TOKEN>` required. Send via `fetch()`; standard `EventSource` does not allow custom bearer headers.
 - `POST /messages`: accepts a JSON XEIP message, requires the same bearer token and the exact `application/json` media type (case-insensitive, parameters permitted), validates its structure and broadcasts to current subscribers for that session. A `Content-Type` prefix such as `application/jsonp` is rejected.
@@ -28,7 +30,7 @@ Errors return JSON `{ error: string }` with a transport status; the text is diag
 
 | Status | Condition |
 | --- | --- |
-| 400 | Invalid request target/URL, malformed UTF-8/JSON or invalid event selectors |
+| 400 | Invalid request target/URL, malformed UTF-8/JSON or invalid event selectors; malformed resume cursor or a cursor supplied when the delivery profile is not enabled |
 | 401 | Missing/incorrect bearer token, or revoked credential in admission mode |
 | 403 | Non-loopback socket peer, disallowed Host or mismatching Origin; generic authorization denial in admission mode |
 | 404 | Unknown route or unsupported method |

@@ -17,15 +17,16 @@ Every data frame is a masked client / unmasked server **text** frame containing 
 
 Client → server:
 
-- `{ "type": "subscribe", "session": "<session-URI>", "entity": "<entity-URI>" }` — both selectors required. Admission mode requires the entity to equal the authenticated principal and the session to admit it. Success replies `{ "type": "subscribed", "session": "..." }`. Re-subscribing the same session on one connection replaces the previous subscription.
-- `{ "type": "send", "message": { <XEIP envelope> } }` — the envelope is validated, authorized and routed exactly as an HTTP `POST /messages` (including the optional replay profile). Success replies `{ "type": "accepted", "delivered": <integer> }` and, when the replay profile is selected, an explicit boolean `duplicate`.
+- `{ "type": "subscribe", "session": "<session-URI>", "entity": "<entity-URI>", "after": <seq> }` — both selectors required; `after` is optional and only valid when the [local delivery](../local-delivery.md) profile is enabled. Admission mode requires the entity to equal the authenticated principal and the session to admit it. Success replies `{ "type": "subscribed", "session": "..." }`. Re-subscribing the same session on one connection replaces the previous subscription.
+- `{ "type": "send", "message": { <XEIP envelope> } }` — the envelope is validated, authorized and routed exactly as an HTTP `POST /messages` (including the optional replay profile). Success replies `{ "type": "accepted", "delivered": <integer> }` and, when configured, `seq` and an explicit boolean `duplicate`.
 
 Server → client:
 
-- `{ "type": "message", "message": { <XEIP envelope> } }` — one per live delivery. This is a write to a current connection, **not** a recipient receipt.
+- `{ "type": "message", "seq": <integer>, "message": { <XEIP envelope> } }` — one per live or resumed delivery. `seq` is present only when the delivery profile is enabled. This is a write to a current connection, **not** a recipient receipt.
+- `{ "type": "gap", "session": "...", "from": <seq> }` — sent before a resume backlog when the requested cursor predates the oldest retained sequence.
 - `{ "type": "error", "status": <HTTP-like code>, "error": "<diagnostic>" }` — the diagnostic is not a stable typed code.
 
-An unknown `type`, a non-object frame, a non-URI selector or invalid JSON yields `400`; an invalid envelope yields `422`; a denied subscription or send yields `403`; a revoked credential yields `401` and closes the connection with code `1008`; a subscription quota denial yields `429`.
+An unknown `type`, a non-object frame, a non-URI selector or invalid JSON yields `400`; an invalid resume cursor, or a cursor without the delivery profile, yields `400`; an invalid envelope yields `422`; a denied subscription or send yields `403`; a revoked credential yields `401` and closes the connection with code `1008`; a subscription quota denial yields `429`.
 
 ## Framing, limits and close codes
 
