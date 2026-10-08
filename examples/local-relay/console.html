@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>XEIP / Development Console</title>
+  <link rel="stylesheet" href="/console.css">
+  <script type="module" src="/console.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brandicon">X</span><div><strong>XEIP</strong><span>PROTOCOL INSPECTOR</span></div></div>
+    <div class="state"><span class="version">0.1 · EXPERIMENTAL</span><span class="warning">LOCAL DEVELOPMENT ONLY</span></div>
+  </header>
+  <main class="workspace">
+    <aside class="panel sidebar">
+      <h2>CONNECTION</h2>
+      <label>Local token <input id="token" type="password" placeholder="XEIP_DEV_TOKEN" autocomplete="off"></label>
+      <label>Session URI <input id="session" value="urn:xeip:session:demo" spellcheck="false"></label>
+      <label>Connect as
+        <select id="actor">
+          <option value="urn:xeip:entity:human-01">Human 01</option>
+          <option value="urn:xeip:entity:agent-01">Agent 01</option>
+          <option value="urn:xeip:entity:camera-01">Camera 01 · machine</option>
+        </select>
+      </label>
+      <div class="buttons"><button id="connect">Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></div>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">Disconnected</span></div>
+      <div class="separator"></div>
+      <h2>TESTING</h2>
+      <p>Open this console in multiple tabs. Select different identities but keep the same session and token.</p>
+      <p>This is a simulated identity selector, <strong>not</strong> identity verification or secure group membership.</p>
+      <a class="link" href="https://github.com/powerpuff-kitty/XEIP" target="_blank" rel="noopener noreferrer">Protocol source ↗</a>
+    </aside>
+    <section class="panel timeline">
+      <div class="panel-head"><div><div class="eyebrow">SESSION STREAM</div><h1>Live interactions</h1></div><button class="secondary subtle" id="clear">Clear</button></div>
+      <div class="metrics">
+        <div><span>Received</span><strong id="received">0</strong></div>
+        <div><span>Last relay writes</span><strong id="delivered">—</strong></div>
+        <div><span>Transport</span><strong>HTTP / SSE</strong></div>
+      </div>
+      <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions">
+        <div class="empty" id="empty"><span class="orbit">↗</span><strong>No messages yet</strong><span>Connect a participant to subscribe to the session.</span></div>
+      </div>
+      <form id="compose" class="compose">
+        <div class="options">
+          <label>Recipient
+            <select id="recipient">
+              <option value="">Everyone in session</option>
+              <option value="urn:xeip:entity:human-01">Human 01</option>
+              <option value="urn:xeip:entity:agent-01" selected>Agent 01</option>
+              <option value="urn:xeip:entity:camera-01">Camera 01</option>
+            </select>
+          </label>
+          <label>Kind
+            <select id="kind"><option>message</option><option>event</option><option>command</option><option>receipt</option></select>
+          </label>
+        </div>
+        <textarea id="body" rows="3" placeholder="Write a message or event payload…" required></textarea>
+        <div class="compose-foot"><span>Ctrl/⌘ + Enter to send · text/plain payload</span><button id="send" type="submit">Send <span>↗</span></button></div>
+      </form>
+    </section>
+    <aside class="panel inspector">
+      <h2>ENVELOPE INSPECTOR</h2>
+      <p>Wire-format preview of your most recent outgoing message.</p>
+      <pre id="envelope">{ "xeip": "0.1", "status": "idle" }</pre>
+      <div class="separator"></div>
+      <h2>TRANSPORT LIMITATIONS</h2>
+      <ul>
+        <li>No durable messages</li>
+        <li>No verified identity</li>
+        <li>No session authorization</li>
+        <li>No remote/federated access</li>
+        <li>No end-to-end encryption</li>
+      </ul>
+      <small>Never expose this local development relay to the internet.</small>
+    </aside>
+  </main>
+</body>
+</html>

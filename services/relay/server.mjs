@@ -5,6 +5,7 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
 const MAX_BODY = 64 * 1024;
 const allowedKinds = new Set(["message", "event", "command", "receipt"]);
@@ -76,6 +77,23 @@ export function createRelay({ token }) {
     let url;
     try { url = new URL(req.url ?? "/", "http://localhost"); }
     catch { return writeJson(res, 400, { error: "invalid URL" }); }
+    const staticPages = {
+      "/console": ["console.html", "text/html"],
+      "/console.css": ["console.css", "text/css"],
+      "/console.js": ["console.js", "text/javascript"]
+    };
+    if (req.method === "GET" && Object.hasOwn(staticPages, url.pathname)) {
+      const [file, type] = staticPages[url.pathname];
+      const fileContent = readFileSync(new URL("../../examples/local-relay/" + file, import.meta.url));
+      res.writeHead(200, {
+        "Content-Type": type + "; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      });
+      res.end(fileContent);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       return writeJson(res, 200, { status: "ok", protocol: "xeip/0.1", mode: "development-only" });
     }

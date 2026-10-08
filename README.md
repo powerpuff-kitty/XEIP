@@ -21,6 +21,8 @@ node services/relay/server.mjs
 XEIP_DEV_TOKEN="change-me-to-a-long-random-value" node examples/local-relay/demo.mjs
 ```
 
+Open **http://127.0.0.1:8787/console** to use the browser console. Open two or three tabs, enter the same development token, select a different participant in each tab, and click **Connect** before sending messages. Credentials stay in memory and are not persisted; do not reuse a real secret.
+
 The demo connects three simulated participants (human, AI agent, machine) to an authenticated local HTTP + Server-Sent Events relay, exchanges typed messages, and verifies delivery. It does **not** invoke an LLM, access a real camera, provide multi-user identity authentication, or implement federation.
 
 ```bash
