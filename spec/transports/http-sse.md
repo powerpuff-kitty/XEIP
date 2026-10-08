@@ -2,6 +2,8 @@
 
 **Experimental reference transport only.** Intended for loopback demonstrations, not untrusted or public deployment.
 
+A sibling [WebSocket transport](websocket.md) carries the same envelopes, validation, admission and replay path over `GET /ws`. Both transports share one routing table, so a message can be delivered to a mix of HTTP/SSE and WebSocket subscribers in one acceptance.
+
 The contract below describes the shared-token CLI mode. The opt-in [local admission profile](../local-admission.md) uses the same routes and XEIP 0.1 envelopes, with separate entity credentials, owner-provisioned memberships, generic authorization denials and subscription quotas. It must be selected explicitly through `createRelay({ admission })`; authentication failures never fall back to shared-token mode.
 
 Admission may additionally select the [local replay profile](../local-replay.md) using `replay: { windowMs, maxEntries }`. It adds an optional boolean `duplicate` to HTTP acceptance responses, rejects conflicting reuse with 409, and refuses new scopes with 503/Retry-After when its bounded ledger is full. `duplicate: true` means no new stream writes; acceptance is still not recipient acknowledgment. Neither profile changes the base envelope version.

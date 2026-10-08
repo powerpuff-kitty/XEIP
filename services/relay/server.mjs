@@ -10,11 +10,29 @@ import { readFileSync } from "node:fs";
 import { validateEnvelope, requireUri } from "../../sdks/typescript/src/validation.js";
 import { LocalAdmission, LOCAL_ADMISSION_PROFILE } from "./admission.mjs";
 import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
+import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 const MAX_BODY = 64 * 1024;
 const MAX_JSON_DEPTH = 64;
 const MAX_FRAME = 128 * 1024;
 const MAX_PENDING = 256 * 1024;
+
+const STATUS_TEXT = {
+  400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+  409: "Conflict", 413: "Payload Too Large", 415: "Unsupported Media Type",
+  422: "Unprocessable Entity", 429: "Too Many Requests", 503: "Service Unavailable"
+};
+
+function refuseUpgrade(socket, status, error) {
+  const body = JSON.stringify({ error });
+  socket.write(
+    "HTTP/1.1 " + status + " " + (STATUS_TEXT[status] ?? "Error") + "\r\n" +
+    "Connection: close\r\n" +
+    "Content-Type: application/json; charset=utf-8\r\n" +
+    "Content-Length: " + Buffer.byteLength(body) + "\r\n\r\n" + body
+  );
+  socket.destroy();
+}
 const absoluteUri = value => { try { requireUri(value); return true; } catch { return false; } };
 
 // A write returning false still queues its bytes. Bound that queue without allowing
@@ -105,7 +123,59 @@ export function createRelay({ token, admission, replay }) {
   } else if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
   if (replay !== undefined && !admission) throw new TypeError("replay requires local admission mode");
   const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
-  const sessions = new Map(); // session ID -> Set({res, entity, heartbeat})
+  // session ID -> Set of transport-neutral clients:
+  // { entity, principal, alive(), write(frame, raw) -> boolean, destroy() }
+  const sessions = new Map();
+  const addClient = (session, client) => {
+    const clients = sessions.get(session) ?? new Set();
+    sessions.set(session, clients);
+    clients.add(client);
+  };
+  const removeClient = (session, client) => {
+    const clients = sessions.get(session);
+    if (!clients) return;
+    clients.delete(client);
+    if (clients.size === 0) sessions.delete(session);
+  };
+  const activeCounts = entity => {
+    let total = 0, entityStreams = 0;
+    for (const clients of sessions.values()) for (const client of clients) {
+      if (!client.alive()) continue;
+      total++;
+      if (client.entity === entity) entityStreams++;
+    }
+    return { total, entityStreams };
+  };
+  // Shared validation, admission, replay and routing for HTTP and WebSocket.
+  // Returns an error outcome or an acceptance body; it never performs HTTP writes.
+  const routeMessage = (principal, raw) => {
+    const error = validateMessage(raw);
+    if (error) return { status: 422, error };
+    if (admission) {
+      if (!admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
+      if (!admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
+    }
+    const frame = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
+    // Compact numeric notation can expand when JSON is reserialized. Keep the
+    // emitted bytes compatible with both reference readers before routing.
+    if (Buffer.byteLength(frame) > MAX_FRAME) return { status: 413, error: "serialized SSE frame too large" };
+    if (replayWindow) {
+      // Record accepted scope before any write, with no asynchronous gap in routing.
+      const decision = replayWindow.accept(raw);
+      if (decision.status === "duplicate") return { status: 202, body: { accepted: true, delivered: 0, duplicate: true } };
+      if (decision.status === "conflict") return { status: 409, error: "message ID conflict" };
+      if (decision.status === "full") return { status: 503, error: "replay window full", retryAfter: decision.retryAfter };
+    }
+    let written = 0;
+    for (const subscriber of sessions.get(raw.session) ?? []) {
+      if (admission && !admission.canSubscribe(subscriber.principal, raw.session)) continue;
+      if (raw.recipient !== undefined && subscriber.entity !== raw.recipient) continue;
+      if (!subscriber.alive()) continue;
+      // A write to a current stream is not a delivery acknowledgment.
+      if (subscriber.write(frame, raw)) written += 1;
+    }
+    return { status: 202, body: { accepted: true, delivered: written, ...(replayWindow ? { duplicate: false } : {}) } };
+  };
   const server = createServer(async (req, res) => {
     // Reject non-loopback connections even if a consumer accidentally binds a public interface.
     if (!loopbackOnly(req)) return writeJson(res, 403, { error: "loopback-only development relay" });
@@ -149,8 +219,9 @@ export function createRelay({ token, admission, replay }) {
     if (req.method === "GET" && url.pathname === "/health") {
       return writeJson(res, 200, admission
         ? { status: "ok", protocol: "xeip/0.1", mode: "local-admission", profile: LOCAL_ADMISSION_PROFILE,
+          transports: ["http-sse", "websocket"],
           ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
-        : { status: "ok", protocol: "xeip/0.1", mode: "development-only" });
+        : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] });
     }
     const principal = admission ? admission.authenticate(req.headers.authorization) : null;
     if (admission ? !principal : !authorize(req.headers.authorization, token)) return unauthorized(res);
@@ -160,12 +231,7 @@ export function createRelay({ token, admission, replay }) {
       if (!absoluteUri(session) || !absoluteUri(entity)) return writeJson(res, 400, { error: "valid session and entity URIs required" });
       if (admission) {
         if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
-        let total = 0, entityStreams = 0;
-        for (const clients of sessions.values()) for (const client of clients) {
-          if (client.res.destroyed || client.res.writableEnded) continue;
-          total++;
-          if (client.entity === principal.entity) entityStreams++;
-        }
+        const { total, entityStreams } = activeCounts(principal.entity);
         if (total >= 256 || entityStreams >= 4) return writeJson(res, 429, { error: "subscription limit reached" });
       }
       // Only admission mode derives the stored identity from authenticated credentials.
@@ -177,18 +243,21 @@ export function createRelay({ token, admission, replay }) {
         "X-Content-Type-Options": "nosniff"
       });
       writeEvent(res, ": connected\n\n");
-      const clients = sessions.get(session) ?? new Set();
-      sessions.set(session, clients);
-      const subscription = { res, entity: admission ? principal.entity : entity, principal };
-      clients.add(subscription);
+      const client = {
+        entity: admission ? principal.entity : entity,
+        principal,
+        alive: () => !res.destroyed && !res.writableEnded,
+        write: frame => writeEvent(res, frame),
+        destroy: () => res.destroy()
+      };
+      addClient(session, client);
       const heartbeat = setInterval(() => {
         writeEvent(res, ": heartbeat\n\n");
       }, 15000);
       heartbeat.unref();
       res.once("close", () => {
         clearInterval(heartbeat);
-        clients.delete(subscription);
-        if (clients.size === 0) sessions.delete(session);
+        removeClient(session, client);
       });
       return;
     }
@@ -202,44 +271,97 @@ export function createRelay({ token, admission, replay }) {
         requireBoundedJsonDepth(raw);
       }
       catch (err) { return writeJson(res, err instanceof RangeError ? 413 : 400, { error: "invalid or oversized JSON" }); }
-      const error = validateMessage(raw);
-      if (error) return writeJson(res, 422, { error });
       // A credential or membership can change while the asynchronous body read waits.
-      if (admission) {
-        if (!admission.isCurrent(principal)) return unauthorized(res);
-        if (!admission.canSend(principal, raw)) return writeJson(res, 403, { error: "forbidden" });
-      }
-      let written = 0;
-      const frame = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
-      // Compact numeric notation can expand when JSON is reserialized. Keep
-      // the emitted bytes compatible with both reference readers before routing.
-      if (Buffer.byteLength(frame) > MAX_FRAME) return writeJson(res, 413, { error: "serialized SSE frame too large" });
-      if (replayWindow) {
-        // Record accepted scope before any write, with no asynchronous gap in routing.
-        const decision = replayWindow.accept(raw);
-        if (decision.status === "duplicate") return writeJson(res, 202, { accepted: true, delivered: 0, duplicate: true });
-        if (decision.status === "conflict") return writeJson(res, 409, { error: "message ID conflict" });
-        if (decision.status === "full") {
-          res.setHeader("Retry-After", String(decision.retryAfter));
-          return writeJson(res, 503, { error: "replay window full" });
-        }
-      }
-      for (const subscriber of sessions.get(raw.session) ?? []) {
-        if (admission && !admission.canSubscribe(subscriber.principal, raw.session)) continue;
-        if (raw.recipient !== undefined && subscriber.entity !== raw.recipient) continue;
-        if (subscriber.res.destroyed || subscriber.res.writableEnded) continue;
-        // This is only a write to a current stream, NOT a delivery acknowledgment.
-        if (writeEvent(subscriber.res, frame)) written += 1;
-      }
-      return writeJson(res, 202, { accepted: true, delivered: written, ...(replayWindow ? { duplicate: false } : {}) });
+      const outcome = routeMessage(principal, raw);
+      if (outcome.status === 401) return unauthorized(res);
+      if (outcome.retryAfter !== undefined) res.setHeader("Retry-After", String(outcome.retryAfter));
+      if (outcome.error !== undefined) return writeJson(res, outcome.status, { error: outcome.error });
+      return writeJson(res, outcome.status, outcome.body);
     }
     writeJson(res, 404, { error: "route not found" });
   });
   const checkSubscriptions = () => {
     for (const [session, clients] of sessions) for (const client of clients) {
-      if (!admission.canSubscribe(client.principal, session)) client.res.destroy();
+      if (!admission.canSubscribe(client.principal, session)) client.destroy();
     }
   };
+  // WebSocket upgrade: same authority/browser gates and credentials as HTTP,
+  // then a JSON control protocol over text frames. Envelopes are unchanged.
+  server.on("upgrade", (req, socket, head) => {
+    if (!loopbackOnly(req)) return refuseUpgrade(socket, 403, "loopback-only development relay");
+    const origin = localOrigin(req);
+    if (!origin) return refuseUpgrade(socket, 403, "literal loopback Host required");
+    if (req.headers.origin !== undefined && req.headers.origin !== origin) {
+      return refuseUpgrade(socket, 403, "same-origin browser request required");
+    }
+    let url;
+    try {
+      if (!req.url?.startsWith("/") || req.url.startsWith("//")) throw new Error("bad target");
+      url = new URL(req.url, origin);
+      if (url.origin !== origin) throw new Error("bad origin");
+    } catch { return refuseUpgrade(socket, 400, "invalid URL"); }
+    if (url.pathname !== "/ws") return refuseUpgrade(socket, 404, "route not found");
+    if (!isWebSocketUpgrade(req)) return refuseUpgrade(socket, 400, "websocket upgrade required");
+    const principal = admission ? admission.authenticate(req.headers.authorization) : null;
+    if (admission ? !principal : !authorize(req.headers.authorization, token)) return refuseUpgrade(socket, 401, "unauthorized");
+    const connection = acceptWebSocket(req, socket, head, { maxFrame: MAX_FRAME, maxMessage: MAX_FRAME, maxPending: MAX_PENDING });
+    const ownSubscriptions = new Map(); // session -> client
+    const control = value => connection.sendText(JSON.stringify(value));
+    let awaitingPong = 0;
+    const heartbeat = setInterval(() => {
+      if (awaitingPong >= 2) return connection.close(CLOSE.tryAgain, "no pong");
+      awaitingPong += 1;
+      connection.ping();
+    }, 15000);
+    heartbeat.unref();
+    connection.on("pong", () => { awaitingPong = 0; });
+    connection.on("message", text => {
+      let value;
+      try { value = JSON.parse(text); }
+      catch { return control({ type: "error", status: 400, error: "invalid or oversized JSON" }); }
+      if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.type !== "string") {
+        return control({ type: "error", status: 400, error: "invalid control frame" });
+      }
+      if (value.type === "subscribe") {
+        const { session, entity } = value;
+        if (!absoluteUri(session) || !absoluteUri(entity)) return control({ type: "error", status: 400, error: "valid session and entity URIs required" });
+        if (admission) {
+          if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return control({ type: "error", status: 403, error: "forbidden" });
+          const { total, entityStreams } = activeCounts(principal.entity);
+          if (total >= 256 || entityStreams >= 4) return control({ type: "error", status: 429, error: "subscription limit reached" });
+        }
+        const previous = ownSubscriptions.get(session);
+        if (previous) { removeClient(session, previous); ownSubscriptions.delete(session); }
+        const client = {
+          entity: admission ? principal.entity : entity,
+          principal,
+          alive: () => connection.isOpen(),
+          write: (frame, raw) => connection.sendText(JSON.stringify({ type: "message", message: raw })),
+          destroy: () => connection.close(CLOSE.policy, "authorization changed")
+        };
+        addClient(session, client);
+        ownSubscriptions.set(session, client);
+        return control({ type: "subscribed", session });
+      }
+      if (value.type === "send") {
+        try { requireBoundedJsonDepth(value.message); }
+        catch { return control({ type: "error", status: 413, error: "invalid or oversized JSON" }); }
+        const outcome = routeMessage(principal, value.message);
+        if (outcome.status === 401) {
+          control({ type: "error", status: 401, error: "unauthorized" });
+          return connection.close(CLOSE.policy, "revoked credential");
+        }
+        if (outcome.error !== undefined) return control({ type: "error", status: outcome.status, error: outcome.error });
+        return control({ type: "accepted", delivered: outcome.body.delivered, ...(outcome.body.duplicate !== undefined ? { duplicate: outcome.body.duplicate } : {}) });
+      }
+      return control({ type: "error", status: 400, error: "unknown control type" });
+    });
+    connection.on("close", () => {
+      clearInterval(heartbeat);
+      for (const [session, client] of ownSubscriptions) removeClient(session, client);
+      ownSubscriptions.clear();
+    });
+  });
   let stopChanges;
   server.on("listening", () => {
     stopChanges?.();

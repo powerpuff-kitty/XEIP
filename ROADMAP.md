@@ -38,7 +38,7 @@ Exit criteria: two independently authored clients exchange the same 0.1 envelope
 - Per-entity credentials, signed or authenticated envelopes as required, scoped grants, revocation and agent delegation.
 - Clear direct/group sessions, membership, per-member filtering, presence and access control.
 - Delivery receipts, ordering scopes, idempotency/replay protection, reconnect/resume and bounded durable queue design.
-- WebSocket transport profile, backpressure, size quotas and error codes.
+- WebSocket transport: first local slice with a dependency-free `/ws` profile, bounded outbound queues, size quotas, ping/pong and close codes sharing the HTTP/SSE routing/admission path. See [spec/transports/websocket.md](spec/transports/websocket.md). Issue #7 remains incomplete: reconnect/resume, a Rust client adapter and production hardening are pending.
 - Cross-language conformance harness and fuzz/security tests.
 
 Exit criteria: no sender spoofing or cross-session leakage in a multi-tenant harness; documented security review; reconnect scenarios pass. Do not publish a production relay beforehand.

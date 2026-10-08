@@ -59,13 +59,14 @@ human / AI agent / machine / service
         |                 |                  |
    TypeScript SDK     Rust core        Other clients
         |                 |                  |
-   HTTP + SSE demo   Transport-neutral  Planned: Swift
+   HTTP+SSE / WS demo Transport-neutral  Planned: Swift
         |
    Loopback relay (development only)
 ```
 
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
+- **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
 - **Rust reference models:** [crates/xeip-core](crates/xeip-core).
 - **TypeScript SDK:** [sdks/typescript](sdks/typescript).
@@ -90,6 +91,7 @@ human / AI agent / machine / service
 | Rust core models and validation | Implemented starter |
 | TypeScript models, validation and HTTP/SSE client | Implemented starter |
 | Authenticated, loopback HTTP/SSE broadcast demo | Implemented; development only |
+| Loopback WebSocket transport (shared routing, bounded queues, close codes) | Partial v0.2 slice; no reconnect/resume or Rust client |
 | Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
