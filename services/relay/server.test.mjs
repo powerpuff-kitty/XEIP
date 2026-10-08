@@ -103,3 +103,17 @@ test("routes live messages only to the selected session and recipient", async ()
     }
   });
 });
+
+test("serves a localhost-only console with strict browser security headers", async () => {
+  await withRelay(async base => {
+    const page = await fetch(base + "/console");
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get("content-security-policy") ?? "", /connect-src 'self'/);
+    const html = await page.text();
+    assert.match(html, /PROTOCOL INSPECTOR/);
+    assert.doesNotMatch(html, /test-token-very-long-and-secret/);
+    const js = await fetch(base + "/console.js");
+    assert.equal(js.status, 200);
+    assert.match(await js.text(), /consumeSse/);
+  });
+});

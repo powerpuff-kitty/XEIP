@@ -9,3 +9,7 @@
 - Accepted messages return HTTP 202 and JSON `{ accepted: true, delivered: number }`. This only counts **writes to active SSE connections**, not consumption or durability.
 
 Restrictions: local loopback bind, request-body limit, no store-and-forward, no independent sender authentication, no verified session membership, no offline queues, no federation, no E2EE, and no per-entity permissions. For production, use authenticated identities, session admission, transport encryption and replay protection.
+
+## Local test console
+
+The reference relay also serves `GET /console`, `/console.js` and `/console.css` on loopback. These static files require no token to load, but streaming and posting require the shared development bearer token. Open multiple tabs, select separate simulated entities, and connect with the same session. The console deliberately does **not** persist its entered token.
