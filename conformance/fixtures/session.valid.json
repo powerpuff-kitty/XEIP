@@ -1,0 +1,11 @@
+{
+  "xeip": "0.1",
+  "id": "urn:xeip:session:demo",
+  "mode": "group",
+  "members": [
+    "urn:xeip:entity:human-01",
+    "urn:xeip:entity:agent-01",
+    "urn:xeip:entity:camera-01"
+  ],
+  "createdAt": "2026-10-08T20:00:00.000Z"
+}

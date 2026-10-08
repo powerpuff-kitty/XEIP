@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/powerpuff-kitty/XEIP/schemas/message.schema.json",
+  "title": "XEIP message envelope 0.1",
+  "type": "object",
+  "required": [
+    "xeip",
+    "id",
+    "kind",
+    "sender",
+    "session",
+    "timestamp",
+    "body"
+  ],
+  "properties": {
+    "xeip": {
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "kind": {
+      "enum": [
+        "message",
+        "event",
+        "command",
+        "receipt"
+      ]
+    },
+    "sender": {
+      "type": "string",
+      "format": "uri"
+    },
+    "recipient": {
+      "type": "string",
+      "format": "uri"
+    },
+    "session": {
+      "type": "string",
+      "format": "uri"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "body": {
+      "type": "object",
+      "required": [
+        "contentType",
+        "data"
+      ],
+      "properties": {
+        "contentType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "data": {}
+      },
+      "additionalProperties": false
+    },
+    "replyTo": {
+      "type": "string",
+      "format": "uri"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

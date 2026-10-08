@@ -1,0 +1,12 @@
+{
+  "xeip": "9.9",
+  "id": "urn:uuid:62329b2e-f25f-441f-b218-a1b8d6d7f01a",
+  "kind": "message",
+  "sender": "urn:xeip:entity:human-01",
+  "session": "urn:xeip:session:demo",
+  "timestamp": "2026-10-08T20:00:00.000Z",
+  "body": {
+    "contentType": "text/plain",
+    "data": "Should reject unsupported version"
+  }
+}

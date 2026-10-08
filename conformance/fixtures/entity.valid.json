@@ -1,0 +1,24 @@
+{
+  "xeip": "0.1",
+  "id": "urn:xeip:entity:camera-01",
+  "name": "Camera 01",
+  "kinds": [
+    "machine",
+    "agent"
+  ],
+  "endpoints": [
+    {
+      "transport": "http-sse",
+      "url": "http://127.0.0.1:8787/events"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "messaging"
+    },
+    {
+      "id": "camera.snapshot",
+      "description": "Permission-gated snapshot"
+    }
+  ]
+}

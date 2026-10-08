@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/powerpuff-kitty/XEIP/schemas/session.schema.json",
+  "title": "XEIP session descriptor 0.1",
+  "type": "object",
+  "required": [
+    "xeip",
+    "id",
+    "mode",
+    "members",
+    "createdAt"
+  ],
+  "properties": {
+    "xeip": {
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "mode": {
+      "enum": [
+        "direct",
+        "group"
+      ]
+    },
+    "members": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/powerpuff-kitty/XEIP/schemas/entity.schema.json",
+  "title": "XEIP entity manifest 0.1",
+  "type": "object",
+  "required": [
+    "xeip",
+    "id",
+    "kinds"
+  ],
+  "properties": {
+    "xeip": {
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "kinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "human",
+          "agent",
+          "machine",
+          "service"
+        ]
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "transport",
+          "url"
+        ],
+        "properties": {
+          "transport": {
+            "enum": [
+              "http-sse",
+              "http",
+              "websocket",
+              "local",
+              "webrtc",
+              "a2a",
+              "mcp"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "capability.schema.json"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
