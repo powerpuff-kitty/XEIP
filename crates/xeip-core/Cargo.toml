@@ -1,0 +1,12 @@
+[package]
+name = "xeip-core"
+version = "0.1.0"
+description = "Experimental transport-neutral types for the XEIP protocol"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
