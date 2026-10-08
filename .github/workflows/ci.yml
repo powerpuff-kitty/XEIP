@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit
+      - run: npm run validate:fixtures
+      - run: npm run typecheck
+      - run: npm run build:ts
+      - run: npm test
+      - run: npm run test:ts
+      - name: Run end-to-end local demo
+        shell: bash
+        run: |
+          export XEIP_DEV_TOKEN="$(openssl rand -hex 24)"
+          node services/relay/server.mjs &
+          relay_pid=$!
+          trap 'kill "$relay_pid" 2>/dev/null || true' EXIT
+          for n in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:8787/health >/dev/null; then break; fi
+            sleep 0.2
+          done
+          npm run demo
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
