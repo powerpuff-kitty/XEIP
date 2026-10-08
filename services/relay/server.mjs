@@ -369,6 +369,10 @@ export function createRelay({ token, admission, replay, delivery }) {
           after = value.after;
         }
         if (after !== undefined && !deliveryLog) return control({ type: "error", status: 400, error: "delivery resume profile not enabled" });
+        if (admission && !admission.isCurrent(principal)) {
+          control({ type: "error", status: 401, error: "unauthorized" });
+          return connection.close(CLOSE.policy, "revoked credential");
+        }
         if (admission) {
           if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return control({ type: "error", status: 403, error: "forbidden" });
           const { total, entityStreams } = activeCounts(principal.entity);

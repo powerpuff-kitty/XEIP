@@ -51,15 +51,26 @@ test("expires entries by a fixed monotonic window without moving the clock backw
   const log = new DeliveryLog({ windowMs: 100, maxPerSession: 8 });
   assert.equal(log.append(sessionA, message("a1"), 0), 1);
   assert.equal(log.append(sessionA, message("a2"), 50), 2);
-  assert.equal(log.since(sessionA, 0).entries.length, 2);
+  assert.equal(log.since(sessionA, 0, 50).entries.length, 2);
   assert.equal(log.append(sessionA, message("a3"), 200), 3);
-  const resumed = log.since(sessionA, 0);
+  const resumed = log.since(sessionA, 0, 200);
   assert.equal(resumed.from, 3);
   assert.equal(resumed.gap, true);
   assert.deepEqual(resumed.entries.map(entry => entry.seq), [3]);
   // A later append with a smaller elapsed value must not resurrect expired entries.
   log.append(sessionA, message("a4"), 150);
-  assert.deepEqual(log.since(sessionA, 0).entries.map(entry => entry.seq), [3, 4]);
+  assert.deepEqual(log.since(sessionA, 0, 200).entries.map(entry => entry.seq), [3, 4]);
+});
+
+test("reclaims entries past the window on resume even without a new append", () => {
+  const log = new DeliveryLog({ windowMs: 100, maxPerSession: 8 });
+  log.append(sessionA, message("a1"), 0);
+  assert.deepEqual(log.since(sessionA, 0, 99).entries.map(entry => entry.seq), [1]);
+  const expired = log.since(sessionA, 0, 100);
+  assert.deepEqual(expired.entries, []);
+  assert.equal(expired.gap, true);
+  assert.equal(expired.from, 2);
+  for (const elapsed of [NaN, Infinity, -1, "1"]) assert.throws(() => log.since(sessionA, 0, elapsed));
 });
 
 test("bounds retained entries per session and evicts least-recently-used sessions", () => {

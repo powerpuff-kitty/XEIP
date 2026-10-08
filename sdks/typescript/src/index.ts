@@ -101,6 +101,8 @@ export interface SendAcceptance {
   delivered: number;
   /** Present when the relay selected the optional local replay profile. */
   duplicate?: boolean;
+  /** Per-session delivery sequence, present when the local delivery profile is enabled. */
+  seq?: number;
 }
 
 export class XeipHttpSseClient {
@@ -134,25 +136,38 @@ export class XeipHttpSseClient {
     if (responseBody.accepted !== true || typeof delivered !== "number" || !Number.isSafeInteger(delivered) || delivered < 0) {
       throw new TypeError("invalid relay response");
     }
+    const acceptance: SendAcceptance = { accepted: true, delivered };
     if (Object.hasOwn(responseBody, "duplicate")) {
       const duplicate = responseBody.duplicate;
       if (typeof duplicate !== "boolean" || (duplicate && delivered !== 0)) throw new TypeError("invalid relay response");
-      return { accepted: true, delivered, duplicate };
+      acceptance.duplicate = duplicate;
     }
-    return { accepted: true, delivered };
+    if (Object.hasOwn(responseBody, "seq")) {
+      const seq = responseBody.seq;
+      if (!Number.isSafeInteger(seq) || (seq as number) < 0) throw new TypeError("invalid relay response");
+      acceptance.seq = seq as number;
+    }
+    return acceptance;
   }
 
-  /** Returns the relay's events; caller owns the abort signal to close the stream. */
-  async *events(session: string, entity: string, signal?: AbortSignal): AsyncGenerator<Envelope> {
+  /**
+   * Returns the relay's events. Pass an abort signal to close the subscription
+   * and an optional `after` sequence to resume within the local delivery window.
+   */
+  async *events(session: string, entity: string, signal?: AbortSignal, after?: number): AsyncGenerator<Envelope> {
     requireUri(session, "session");
     requireUri(entity, "entity");
+    const headers: Record<string, string> = {
+      "Authorization": "Bearer " + this.token, "Accept": "text/event-stream"
+    };
+    if (after !== undefined) {
+      if (!Number.isSafeInteger(after) || after < 0) throw new TypeError("after must be a non-negative safe integer");
+      headers["Last-Event-ID"] = String(after);
+    }
     const url = new URL(this.baseUrl + "/events");
     url.searchParams.set("session", session);
     url.searchParams.set("entity", entity);
-    const response = await this.fetchImpl(url, {
-      headers: { "Authorization": "Bearer " + this.token, "Accept": "text/event-stream" },
-      signal
-    });
+    const response = await this.fetchImpl(url, { headers, signal });
     if (response.status !== 200 || !response.body) {
       await response.body?.cancel().catch(() => {});
       throw new Error("XEIP event connection failed: HTTP " + response.status);

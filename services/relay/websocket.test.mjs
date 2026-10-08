@@ -109,7 +109,7 @@ function withAdmission(t, options, run) {
     sessions: [room, other].map(id => ({ xeip: "0.1", id, mode: "group",
       members: id === room ? [a, b] : [a, c], createdAt: "2026-10-09T00:00:00Z" }))
   });
-  return withRelay(t, { admission, ...options }, (base, open) => run(base, open, credentials));
+  return withRelay(t, { admission, ...options }, (base, open) => run(base, open, credentials, admission));
 }
 async function subscribeSse(base, credentials, actor, sessionUri = room) {
   const controller = new AbortController();
@@ -199,6 +199,18 @@ test("binds WebSocket subscriptions and sends to authenticated entities only", a
     await recipient.waitFor(() => recipient.messages.some(m => m.type === "message"), "delivery");
     assert.equal(recipient.messages.find(m => m.type === "message").message.sender, a);
     recipient.close(); spoof.close(); crossSession.close(); sender.close();
+  });
+});
+
+test("rejects a subscribe that uses a credential revoked after connect", async t => {
+  await withAdmission(t, {}, async (base, open, credentials, admission) => {
+    const client = await open({ token: credentials.get(a) });
+    admission.revokeCredential(a);
+    client.send({ type: "subscribe", session: room, entity: a });
+    await client.waitFor(() => client.messages.some(m => m.type === "error") || client.closeCode !== null, "revoked subscribe");
+    assert.equal(client.messages.find(m => m.type === "error")?.status, 401);
+    await client.waitFor(() => client.closeCode !== null, "policy close");
+    assert.equal(client.closeCode, CLOSE.policy);
   });
 });
 

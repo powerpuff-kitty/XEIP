@@ -119,6 +119,17 @@ test("supports the after query, emits a gap, and rejects malformed or unsupporte
   withoutProfile.closeAllConnections(); await new Promise(resolve => withoutProfile.close(resolve));
 });
 
+test("does not replay messages older than the fixed retention window", async t => {
+  const { post, subscribe } = await setup(t, { windowMs: 120 });
+  await post(envelope());
+  await delay(200);
+  const resumed = await subscribe(b, { after: "0" });
+  await waitFor(resumed, frames => frames.some(frame => frame.event === "xeip.gap"), "gap after window");
+  assert.deepEqual(messages(resumed.frames), []);
+  assert.deepEqual(JSON.parse(resumed.frames.find(frame => frame.event === "xeip.gap").data), { session: room, from: 2 });
+  await resumed.close();
+});
+
 test("filters the resume backlog by recipient", async t => {
   const { post, subscribe } = await setup(t);
   await post(envelope({ recipient: b, id: "urn:uuid:" + randomUUID() }));

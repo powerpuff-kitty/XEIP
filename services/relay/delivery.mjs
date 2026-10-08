@@ -61,12 +61,17 @@ export class DeliveryLog {
 
   /**
    * Returns retained entries with sequence strictly greater than `after`.
-   * `gap` is true when one or more sequences between `after` and the oldest
-   * retained entry were already dropped, so a client must not assume continuity.
+   * Entries past the fixed monotonic window are reclaimed first, even when no
+   * new message has been appended. `gap` is true when one or more sequences
+   * between `after` and the oldest retained entry were already dropped, so a
+   * client must not assume continuity.
    */
-  since(session, after) {
+  since(session, after, elapsedMs = performance.now()) {
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
+    const now = Math.max(this.#elapsed, elapsedMs);
     const log = this.#sessions.get(session);
     if (!log) return { entries: [], gap: false, from: after + 1 };
+    this.#expire(log, now);
     const oldest = log.entries.length > 0 ? log.entries[0].seq : log.nextSeq;
     return {
       entries: log.entries.filter(entry => entry.seq > after),

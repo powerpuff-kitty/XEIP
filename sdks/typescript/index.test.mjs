@@ -58,6 +58,32 @@ test("send rejects a duplicate acceptance claiming new stream writes", async () 
   await assert.rejects(client.send(fixture("message.valid.json")), /invalid relay response/);
 });
 
+test("send preserves the optional delivery sequence and rejects malformed values", async () => {
+  const accepted = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response(JSON.stringify({ accepted: true, delivered: 1, seq: 7 }), { status: 202 }) });
+  assert.deepEqual(await accepted.send(fixture("message.valid.json")), { accepted: true, delivered: 1, seq: 7 });
+  for (const seq of [-1, 1.5, "1", null]) {
+    const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+      fetchImpl: async () => new Response(JSON.stringify({ accepted: true, delivered: 0, seq }), { status: 202 }) });
+    await assert.rejects(client.send(fixture("message.valid.json")), /invalid relay response/);
+  }
+});
+
+test("events sends a Last-Event-ID resume cursor and rejects an invalid one before fetch", async () => {
+  let seen = null;
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async (_url, options) => { seen = options.headers; return new Response("", { status: 200, headers: { "content-type": "text/event-stream" } }); } });
+  for await (const _message of client.events("urn:xeip:session:demo", "urn:xeip:entity:human-01", undefined, 4)) void _message;
+  assert.equal(seen["Last-Event-ID"], "4");
+
+  let called = false;
+  const invalid = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => { called = true; return new Response("", { status: 200 }); } });
+  const iterator = invalid.events("urn:xeip:session:demo", "urn:xeip:entity:human-01", undefined, -1);
+  await assert.rejects(iterator.next(), /after/);
+  assert.equal(called, false);
+});
+
 test("events requires HTTP 200 and cancels an unexpected successful response", async () => {
   let cancelled = false;
   const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
