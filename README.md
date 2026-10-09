@@ -39,6 +39,10 @@ Run `npm run demo:delivery` to assign a per-session sequence, resume a disconnec
 
 Run `npm run demo:receipts` to record an authenticated recipient acknowledgment against a retained delivery, see idempotent duplicate handling, and observe ineligible-recipient and unknown-target denials. [The local receipts profile](spec/local-receipts.md) requires admission and delivery, is bounded and in-memory, and is advisory — never proof of processing or exactly-once execution.
 
+Run `npm run demo:durable` to persist accepted messages to a directory, restart the relay, and resume across the restart with an explicit gap when older messages aged out. [The local durable profile](spec/local-durable.md) is a bounded, checksummed append-only store; it is not a production queue and still lacks multi-process locking and at-rest encryption.
+
+Run `npm run demo:limits` to see the opt-in [local limits profile](spec/local-limits.md) return `429` with `Retry-After` after a burst, refill over time, and enforce a connection/subscription cap. These are advisory local bounds, not production rate limiting.
+
 ```bash
 node --test services/relay/*.test.mjs
 npm ci --ignore-scripts      # development tools only; the relay/demo need no install
@@ -72,6 +76,7 @@ human / AI agent / machine / service
 - **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
 - **Durable delivery (first slice implemented):** [spec/local-durable.md](spec/local-durable.md).
+- **Rate/connection limits:** [spec/local-limits.md](spec/local-limits.md) (opt-in local prototype).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
@@ -103,8 +108,9 @@ human / AI agent / machine / service
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
 | Bounded per-principal recipient receipts | Opt-in local receipts prototype; in-memory, advisory, not proof of processing |
-| Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in first slice; checksummed append-only log with persisted sequence; no compaction/locking/encryption |
-| Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder (`tools/derive-keyid.mjs`) with vectors; signing/verification pending |
+| Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in first slice; checksummed append-only log with persisted sequence; no multi-process locking/encryption |
+| Opt-in request-rate and connection/subscription limits (`xeip.local-limits/0.1`) | Local prototype; per-principal token bucket with `Retry-After`, not production rate limiting |
+| Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder/decoder (`tools/derive-keyid.mjs`) with positive/negative vectors; signing/verification pending |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |

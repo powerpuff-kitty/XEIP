@@ -29,6 +29,8 @@ Admission may select the [local replay extension](local-replay.md) to suppress i
 
 Either mode may select the [local delivery extension](local-delivery.md) to assign a per-session sequence and let a reconnecting subscriber resume within a bounded in-memory window, with an explicit gap when a cursor predates retention. It stores full envelopes in memory, is lost on restart, and is not a durable queue, recipient receipt or exactly-once guarantee. A member can occupy retention slots until expiry, so broader quotas and fair scheduling remain needed. Admission plus delivery may additionally select the [local receipts extension](local-receipts.md), a bounded per-principal in-memory ledger where an authenticated recipient asserts it holds a retained acceptance; it asserts retention, not processing, durability or exactly-once execution, and is never broadcast to other principals.
 
+Any mode may select the opt-in [local limits extension](local-limits.md) to bound request rate (per-principal or per-peer token bucket with `Retry-After`) and global connection/subscription counts. It is local, advisory rate limiting, not a production fairness or DDoS control; without it, request rates and connection counts are unbounded.
+
 ## Disclosure
 
 Report vulnerabilities privately as described in [../SECURITY.md](../SECURITY.md). Future security decisions require a design review and negative conformance tests.

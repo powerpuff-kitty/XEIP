@@ -40,6 +40,7 @@ Exit criteria: two independently authored clients exchange the same 0.1 envelope
 - Clear direct/group sessions, membership, per-member filtering, presence and access control.
 - Delivery receipts, ordering scopes, idempotency/replay protection, reconnect/resume and bounded durable queue design. A first restart-surviving durable-store slice is implemented behind [spec/local-durable.md](spec/local-durable.md) and [ADR 0006](spec/decisions/0006-durable-delivery.md); compaction, multi-process locking, durable receipts and at-rest encryption remain pending.
 - WebSocket transport: first local slice with a dependency-free `/ws` profile, bounded outbound queues, size quotas, ping/pong, close codes and in-memory cursor resume sharing the HTTP/SSE routing/admission path. Includes a reference Rust client example. See [spec/transports/websocket.md](spec/transports/websocket.md). Issue #7 remains incomplete: durable reconnect, compression and production hardening are pending.
+- Opt-in request-rate and connection/subscription limits (`xeip.local-limits/0.1`) with `Retry-After`, addressing the residual fair-scheduling gap. See [spec/local-limits.md](spec/local-limits.md) and [ADR 0008](spec/decisions/0008-local-limits.md). It is advisory local limiting, not production rate limiting.
 - Cross-language conformance harness and fuzz/security tests.
 
 Exit criteria: no sender spoofing or cross-session leakage in a multi-tenant harness; documented security review; reconnect scenarios pass. Do not publish a production relay beforehand.
