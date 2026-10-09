@@ -1,6 +1,6 @@
 # XEIP 0.1 conformance checks
 
-`npm run validate:fixtures` checks JSON Schemas and the shared structural validation vectors. Rust and TypeScript run the same vectors in their own tests.
+`npm run validate:fixtures` checks JSON Schemas and the shared structural validation vectors. Rust and TypeScript run the same vectors in their own tests. It also validates the self-certifying key-ID vectors (`conformance/fixtures/identity-keyid/`) with `tools/derive-keyid.mjs`, including negative cases a decoder must reject.
 
 For a real HTTP/SSE exchange between the TypeScript SDK and a separately implemented Rust example:
 
@@ -10,6 +10,8 @@ npm run test:interop
 ```
 
 This requires Node 22+ and Rust 1.81+. The harness builds the TypeScript SDK and the Rust `local_relay_peer` example using the checked-in lockfiles, chooses free loopback ports, generates temporary credentials, and cleans up all streams and processes. It runs the bidirectional exchange in shared-token, local-admission and local-replay modes. No separately running relay is needed. CI runs it on both supported Rust toolchains.
+
+The same command also runs `conformance/websocket.test.mjs`, which builds the Rust `websocket_peer` example and drives it against the Node `/ws` transport: a TypeScript HTTP send reaches the Rust WebSocket subscriber and a Rust WebSocket send reaches a TypeScript SSE subscriber (including nested Unicode), plus admission binding, unauthenticated/wrong-token/misrouted upgrade rejection, and delivery resume/gap. The `local_relay_peer`/`websocket_peer` examples are short-lived references, not production networking SDKs.
 
 The TypeScript client subscribes as `message.valid.json`'s sender; Rust subscribes as its recipient. TypeScript sends the public fixture, then a command envelope containing nested JSON, null, booleans, numbers, a newline, accented text, emoji and a namespaced extension. Rust validates each envelope using `xeip-core`, preserves its content, kind, timestamp and extensions, swaps sender/recipient, appends `-reply` to the ID and sets `replyTo` to the original ID. TypeScript validates and compares the complete reply. These are transport echoes, not command execution or delivery receipts. The `delivered` response reports writes to active streams only.
 

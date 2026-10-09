@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { requireUri } from "../sdks/typescript/src/validation.js";
+import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -49,4 +50,19 @@ for (const vector of vectors) {
     throw new Error(vector.name + ": unexpected schema result: " + ajv.errorsText(validate?.errors));
   }
 }
-console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length + " vectors passed (draft 2020-12, formats enforced)");
+const keyidVectors = readJson(new URL("../conformance/fixtures/identity-keyid/identity-keyid.vectors.json", import.meta.url));
+for (const vector of keyidVectors) {
+  if (vector.valid === false) {
+    let rejected = false;
+    try { decodeKeyId(vector.keyId); } catch { rejected = true; }
+    if (!rejected) throw new Error("key-id vector " + vector.name + ": expected rejection");
+    continue;
+  }
+  const keyId = encodeKeyId(Uint8Array.from(Buffer.from(vector.publicKeyHex, "hex")));
+  if (keyId !== vector.keyId || entityUrn(keyId) !== vector.entityUrn || deviceUrn(keyId) !== vector.deviceUrn) {
+    throw new Error("key-id vector mismatch: " + vector.name);
+  }
+  decodeKeyId(keyId);
+}
+console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
+  " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors passed");

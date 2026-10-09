@@ -40,5 +40,29 @@
     "keyId": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
     "entityUrn": "urn:xeip:entity:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
     "deviceUrn": "urn:xeip:device:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+  },
+  {
+    "name": "negative: missing multibase prefix",
+    "valid": false,
+    "reason": "key-id must start with the base58btc multibase prefix 'z'",
+    "keyId": "6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"
+  },
+  {
+    "name": "negative: extra leading digit changes the payload length",
+    "valid": false,
+    "reason": "payload must be 34 bytes",
+    "keyId": "z16MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"
+  },
+  {
+    "name": "negative: invalid base58btc character",
+    "valid": false,
+    "reason": "invalid base58btc character",
+    "keyId": "z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw0"
+  },
+  {
+    "name": "negative: wrong multicodec prefix",
+    "valid": false,
+    "reason": "key-id does not carry the ed25519-pub multicodec prefix",
+    "keyId": "z1111111111111111111111111111111111"
   }
 ]

@@ -7,6 +7,7 @@ import {
   ED25519_MULTICODEC,
   base58btcDecode,
   base58btcEncode,
+  decodeKeyId,
   deviceUrn,
   encodeKeyId,
   entityUrn,
@@ -121,6 +122,43 @@ test("parses the same key from hex and base64url", () => {
   assert.throws(() => parsePublicKey("not a key!"), /hex characters or base64url/);
 });
 
+test("decodeKeyId round-trips canonical key-ids and rejects non-canonical input", () => {
+  const key = hexBytes(RFC8032_PUBLIC_KEY_HEX);
+  const keyId = encodeKeyId(key);
+  assert.deepEqual(bytesToArray(decodeKeyId(keyId)), bytesToArray(key));
+
+  assert.throws(() => decodeKeyId(""), TypeError);
+  assert.throws(() => decodeKeyId(keyId.slice(1)), /multibase prefix 'z'/);
+  assert.throws(() => decodeKeyId("z1" + keyId.slice(1)), /payload must be/);
+  assert.throws(() => decodeKeyId("1" + keyId), /multibase prefix 'z'/);
+  assert.throws(() => decodeKeyId(keyId + "0"), /invalid base58btc character/);
+  assert.throws(() => decodeKeyId(keyId.slice(0, -2)), /payload must be/);
+
+  const wrongPrefix =
+    "z" + base58btcEncode(Uint8Array.from([0x00, 0x00, ...new Uint8Array(32)]));
+  assert.throws(() => decodeKeyId(wrongPrefix), /multicodec prefix/);
+});
+
+test("entity and device URNs require a canonical key-id", () => {
+  const keyId = encodeKeyId(hexBytes(RFC8032_PUBLIC_KEY_HEX));
+  assert.throws(() => entityUrn("z1" + keyId.slice(1)), /payload must be/);
+  assert.throws(() => deviceUrn(keyId + " "), /invalid base58btc character/);
+  assert.throws(() => entityUrn("urn:xeip:entity:%61"), /multibase prefix 'z'/);
+});
+
+test("parsePublicKey rejects non-canonical encodings", () => {
+  assert.throws(() => parsePublicKey(" " + RFC8032_PUBLIC_KEY_HEX), /whitespace/);
+  const base64url = Buffer.from(hexBytes(RFC8032_PUBLIC_KEY_HEX)).toString("base64url");
+  assert.throws(() => parsePublicKey(base64url + "="), /64 hex characters or base64url/);
+  assert.throws(() => parsePublicKey("AAAAA"), /64 hex characters or base64url/);
+});
+
+test("byte coercion rejects out-of-range array values", () => {
+  assert.throws(() => base58btcEncode([256]), /integers in \[0, 255\]/);
+  assert.throws(() => base58btcEncode([-1]), /integers in \[0, 255\]/);
+  assert.throws(() => base58btcEncode([1.5]), /integers in \[0, 255\]/);
+});
+
 test("conformance fixtures reproduce every vector", () => {
   const path = new URL(
     "../conformance/fixtures/identity-keyid/identity-keyid.vectors.json",
@@ -132,6 +170,10 @@ test("conformance fixtures reproduce every vector", () => {
   const names = new Set();
   for (const vector of vectors) {
     names.add(vector.name);
+    if (vector.valid === false) {
+      assert.throws(() => decodeKeyId(vector.keyId), vector.name);
+      continue;
+    }
     const keyId = encodeKeyId(hexBytes(vector.publicKeyHex));
     assert.equal(keyId, vector.keyId, vector.name);
     assert.equal(entityUrn(keyId), vector.entityUrn, vector.name);

@@ -43,7 +43,14 @@ export const BASE58BTC_ALPHABET =
  */
 function toBytes(input) {
   if (input instanceof Uint8Array) return input;
-  if (Array.isArray(input)) return Uint8Array.from(input);
+  if (Array.isArray(input)) {
+    for (const value of input) {
+      if (!Number.isInteger(value) || value < 0 || value > 255) {
+        throw new TypeError("byte array values must be integers in [0, 255]");
+      }
+    }
+    return Uint8Array.from(input);
+  }
   throw new TypeError("expected a Uint8Array or an array of byte values");
 }
 
@@ -143,19 +150,44 @@ export function encodeKeyId(publicKeyBytes) {
   return MULTIBASE_BASE58BTC + base58btcEncode(payload);
 }
 
-function assertKeyId(keyId) {
+/**
+ * Decode and canonical-validate a key-id produced by `encodeKeyId`. Returns the
+ * 32 raw public-key bytes. Rejects a missing `z` multibase prefix, a wrong total
+ * payload length, a missing `ed25519-pub` multicodec prefix, invalid base58btc
+ * characters, and any non-canonical spelling (compared by re-encoding).
+ */
+export function decodeKeyId(keyId) {
   if (typeof keyId !== "string" || keyId.length === 0) {
     throw new TypeError("key-id must be a non-empty string");
   }
+  if (keyId[0] !== MULTIBASE_BASE58BTC) {
+    throw new Error("key-id must start with the base58btc multibase prefix 'z'");
+  }
+  const payload = base58btcDecode(keyId.slice(1));
+  const expectedLength = ED25519_MULTICODEC.length + ED25519_PUBLIC_KEY_LENGTH;
+  if (payload.length !== expectedLength) {
+    throw new Error(`key-id payload must be ${expectedLength} bytes; received ${payload.length}`);
+  }
+  if (payload[0] !== ED25519_MULTICODEC[0] || payload[1] !== ED25519_MULTICODEC[1]) {
+    throw new Error("key-id does not carry the ed25519-pub multicodec prefix");
+  }
+  if (MULTIBASE_BASE58BTC + base58btcEncode(payload) !== keyId) {
+    throw new Error("key-id is not in canonical form");
+  }
+  return payload.slice(ED25519_MULTICODEC.length);
+}
+
+function assertKeyId(keyId) {
+  decodeKeyId(keyId);
   return keyId;
 }
 
-/** `urn:xeip:entity:<key-id>` for a key-id produced by encodeKeyId. */
+/** `urn:xeip:entity:<key-id>` for a canonical key-id produced by encodeKeyId. */
 export function entityUrn(keyId) {
   return `urn:xeip:entity:${assertKeyId(keyId)}`;
 }
 
-/** `urn:xeip:device:<key-id>` for a key-id produced by encodeKeyId. */
+/** `urn:xeip:device:<key-id>` for a canonical key-id produced by encodeKeyId. */
 export function deviceUrn(keyId) {
   return `urn:xeip:device:${assertKeyId(keyId)}`;
 }
@@ -178,12 +210,17 @@ function hexToBytes(hex) {
  */
 export function parsePublicKey(text) {
   if (typeof text !== "string") throw new TypeError("public key input must be a string");
-  const trimmed = text.trim();
-  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return hexToBytes(trimmed);
-  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(trimmed)) {
+  if (text !== text.trim()) throw new Error("public key must not contain surrounding whitespace");
+  if (/^[0-9a-fA-F]{64}$/.test(text)) return hexToBytes(text);
+  // Canonical, unpadded base64url only: reject padding, invalid characters and
+  // the length ≡ 1 (mod 4) case that cannot represent whole bytes.
+  if (!/^[A-Za-z0-9_-]+$/.test(text) || text.length % 4 === 1) {
     throw new Error("public key must be 64 hex characters or base64url");
   }
-  const bytes = Uint8Array.from(Buffer.from(trimmed, "base64url"));
+  const bytes = Uint8Array.from(Buffer.from(text, "base64url"));
+  if (Buffer.from(bytes).toString("base64url") !== text) {
+    throw new Error("public key base64url is not canonical");
+  }
   return bytes;
 }
 
