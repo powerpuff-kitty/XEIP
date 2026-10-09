@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -598,15 +598,22 @@ fn connect(host: &str, port: u16, path: &str, token: &str) -> io::Result<WebSock
         ));
     }
     let key = base64_encode(&random_bytes());
-    let request = format!(
+    // An empty token deliberately sends no Authorization header so the same
+    // reference client can exercise an unauthenticated upgrade rejection.
+    let mut request = format!(
         "GET {path} HTTP/1.1\r\n\
          Host: {host}:{port}\r\n\
          Connection: Upgrade\r\n\
          Upgrade: websocket\r\n\
          Sec-WebSocket-Version: 13\r\n\
-         Sec-WebSocket-Key: {key}\r\n\
-         Authorization: Bearer {token}\r\n\r\n"
+         Sec-WebSocket-Key: {key}\r\n"
     );
+    if !token.is_empty() {
+        request.push_str("Authorization: Bearer ");
+        request.push_str(token);
+        request.push_str("\r\n");
+    }
+    request.push_str("\r\n");
     let mut stream = TcpStream::connect((host, port))?;
     stream.set_nodelay(true).ok();
     stream.write_all(request.as_bytes())?;
@@ -680,50 +687,237 @@ fn control_type(value: &serde_json::Value) -> &str {
     value["type"].as_str().unwrap_or("")
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
-    let token = std::env::var("XEIP_DEV_TOKEN")?;
-    if token.len() < 16 {
-        return Err("XEIP_DEV_TOKEN must be at least 16 bytes".into());
-    }
-    let port: u16 = std::env::var("XEIP_PORT")
-        .unwrap_or_else(|_| "8787".into())
-        .parse()?;
-    if port == 0 {
-        return Err("XEIP_PORT must be nonzero".into());
-    }
-    let fixture: Envelope = serde_json::from_str(include_str!(
-        "../../../conformance/fixtures/message.valid.json"
-    ))?;
-    fixture.validate()?;
-    let entity = fixture
-        .recipient
-        .as_deref()
-        .ok_or("fixture needs a recipient")?;
+/// How the peer produces envelopes once it is subscribed.
+#[derive(Debug, Clone, Copy)]
+enum Mode {
+    /// Only observe deliveries until the relay closes the socket.
+    Listen,
+    /// Send each newline-delimited JSON envelope read from standard input.
+    Stdin,
+    /// Send each newline-delimited JSON envelope read from `--file`.
+    File,
+    /// Send the checked-in `message.valid.json` fixture once.
+    Fixture,
+}
 
-    let mut websocket = connect("127.0.0.1", port, "/ws", &token)?;
-    websocket.subscribe(&fixture.session, entity, None)?;
+/// CLI configuration assembled from flags with `XEIP_*` environment fallbacks.
+struct Args {
+    host: String,
+    port: u16,
+    path: String,
+    token: String,
+    session: String,
+    entity: String,
+    after: Option<u64>,
+    mode: Mode,
+    file: Option<String>,
+}
+
+fn argument_value(
+    name: &str,
+    inline: Option<String>,
+    args: &mut std::iter::Skip<std::env::Args>,
+) -> Result<String, Box<dyn Error>> {
+    match inline {
+        Some(value) => Ok(value),
+        None => args
+            .next()
+            .ok_or_else(|| format!("missing value for {name}").into()),
+    }
+}
+
+fn parse_mode(value: Option<&str>) -> Result<Mode, Box<dyn Error>> {
+    match value {
+        None | Some("") | Some("listen") => Ok(Mode::Listen),
+        Some("stdin") => Ok(Mode::Stdin),
+        Some("file") => Ok(Mode::File),
+        Some("fixture") => Ok(Mode::Fixture),
+        Some(other) => Err(format!("unknown send mode: {other}").into()),
+    }
+}
+
+impl Args {
+    fn parse() -> Result<Self, Box<dyn Error>> {
+        let mut host = std::env::var("XEIP_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let mut port = std::env::var("XEIP_PORT").ok();
+        let mut path = std::env::var("XEIP_PATH").unwrap_or_else(|_| "/ws".into());
+        let mut token = std::env::var("XEIP_DEV_TOKEN").unwrap_or_default();
+        let mut session = std::env::var("XEIP_SESSION").ok();
+        let mut entity = std::env::var("XEIP_ENTITY").ok();
+        let mut after = std::env::var("XEIP_AFTER").ok();
+        let mut mode = std::env::var("XEIP_MODE").ok();
+        let mut file = std::env::var("XEIP_FILE").ok();
+
+        let mut args = std::env::args().skip(1);
+        while let Some(arg) = args.next() {
+            let (name, inline) = match arg.split_once('=') {
+                Some((name, value)) => (name.to_string(), Some(value.to_string())),
+                None => (arg, None),
+            };
+            match name.as_str() {
+                "--host" => host = argument_value("--host", inline, &mut args)?,
+                "--port" => port = Some(argument_value("--port", inline, &mut args)?),
+                "--path" => path = argument_value("--path", inline, &mut args)?,
+                "--token" => token = argument_value("--token", inline, &mut args)?,
+                "--session" => session = Some(argument_value("--session", inline, &mut args)?),
+                "--entity" => entity = Some(argument_value("--entity", inline, &mut args)?),
+                "--after" => after = Some(argument_value("--after", inline, &mut args)?),
+                "--mode" => mode = Some(argument_value("--mode", inline, &mut args)?),
+                "--file" => file = Some(argument_value("--file", inline, &mut args)?),
+                "--help" | "-h" => {
+                    print_usage();
+                    std::process::exit(0);
+                }
+                other => return Err(format!("unknown argument: {other}").into()),
+            }
+        }
+
+        let port = port
+            .ok_or("port is required (--port or XEIP_PORT)")?
+            .parse::<u16>()?;
+        let session = session.ok_or("session is required (--session or XEIP_SESSION)")?;
+        let entity = entity.ok_or("entity is required (--entity or XEIP_ENTITY)")?;
+        let after = match after.as_deref() {
+            Some(value) if !value.is_empty() => Some(value.parse::<u64>()?),
+            _ => None,
+        };
+        let mode = parse_mode(mode.as_deref())?;
+        Ok(Args {
+            host,
+            port,
+            path,
+            token,
+            session,
+            entity,
+            after,
+            mode,
+            file,
+        })
+    }
+}
+
+fn print_usage() {
+    println!(
+        "XEIP dependency-free WebSocket peer\n\
+         \n\
+         Usage: websocket_peer --port <port> --session <uri> --entity <uri> [options]\n\
+         \n\
+         Options:\n\
+           --host <host>     loopback host (default 127.0.0.1)\n\
+           --port <port>     relay port (required)\n\
+           --path <path>     upgrade path (default /ws)\n\
+           --token <token>   bearer token; empty omits Authorization\n\
+           --session <uri>   session URI (required)\n\
+           --entity <uri>    subscribing entity URI (required)\n\
+           --after <seq>     resume cursor (requires local delivery)\n\
+           --mode <mode>     listen (default), stdin, file, fixture\n\
+           --file <path>     newline-delimited envelopes for file mode\n\
+         \n\
+         Environment fallbacks: XEIP_HOST, XEIP_PORT, XEIP_PATH, XEIP_DEV_TOKEN,\n\
+         XEIP_SESSION, XEIP_ENTITY, XEIP_AFTER, XEIP_MODE, XEIP_FILE.\n\
+         Received messages are printed one JSON object per line."
+    );
+}
+
+/// Sends one envelope and prints controls until the matching acceptance.
+fn send_and_await(websocket: &mut WebSocket, message: &Envelope) -> Result<(), Box<dyn Error>> {
+    websocket.send_envelope(message)?;
+    loop {
+        let control = read_control(websocket)?;
+        match control_type(&control) {
+            "accepted" => {
+                println!("{control}");
+                return Ok(());
+            }
+            "message" | "gap" => println!("{control}"),
+            "error" => return Err(format!("relay error: {control}").into()),
+            other => return Err(format!("unexpected control: {other}").into()),
+        }
+    }
+}
+
+fn is_disconnect(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::UnexpectedEof
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::BrokenPipe
+    )
+}
+
+/// Produces outbound envelopes according to `mode`, printing received controls.
+fn drive(websocket: &mut WebSocket, args: &Args) -> Result<(), Box<dyn Error>> {
+    match args.mode {
+        Mode::Listen => loop {
+            match websocket.read_message() {
+                Ok(Message::Text(text)) => {
+                    let control: serde_json::Value = serde_json::from_str(&text)?;
+                    println!("{control}");
+                }
+                Ok(Message::Ping(payload)) => websocket.pong(&payload)?,
+                Ok(Message::Pong(_)) => {}
+                Ok(Message::Close { .. }) => break,
+                Err(error) if is_disconnect(&error) => break,
+                Err(error) => return Err(error.into()),
+            }
+        },
+        Mode::Fixture => {
+            let fixture: Envelope = serde_json::from_str(include_str!(
+                "../../../conformance/fixtures/message.valid.json"
+            ))?;
+            fixture.validate()?;
+            send_and_await(websocket, &fixture)?;
+        }
+        Mode::Stdin => {
+            let stdin = io::stdin();
+            for line in stdin.lock().lines() {
+                let line = line?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let message: Envelope = serde_json::from_str(&line)?;
+                message.validate()?;
+                send_and_await(websocket, &message)?;
+            }
+        }
+        Mode::File => {
+            let path = args
+                .file
+                .as_deref()
+                .ok_or("--file is required for file mode")?;
+            let content = std::fs::read_to_string(path)?;
+            for line in content.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let message: Envelope = serde_json::from_str(line)?;
+                message.validate()?;
+                send_and_await(websocket, &message)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse()?;
+    if args.port == 0 {
+        return Err("port must be nonzero".into());
+    }
+    let mut websocket = connect(&args.host, args.port, &args.path, &args.token)?;
+    websocket.subscribe(&args.session, &args.entity, args.after)?;
     let subscribed = read_control(&mut websocket)?;
     if control_type(&subscribed) != "subscribed" {
         return Err(format!("expected subscribed, got {subscribed}").into());
     }
     println!("{{\"type\":\"ready\"}}");
+    io::stdout().flush()?;
 
-    websocket.send_envelope(&fixture)?;
-    loop {
-        let control = read_control(&mut websocket)?;
-        match control_type(&control) {
-            "accepted" => {
-                println!("{{\"type\":\"accepted\"}}");
-                break;
-            }
-            "message" => println!("{{\"type\":\"message\"}}"),
-            "gap" => println!("{{\"type\":\"gap\"}}"),
-            "error" => return Err(format!("relay error: {control}").into()),
-            other => return Err(format!("unexpected control: {other}").into()),
-        }
-    }
+    drive(&mut websocket, &args)?;
     websocket.close(CLOSE_NORMAL, "")?;
     println!("{{\"type\":\"done\"}}");
+    io::stdout().flush()?;
     Ok(())
 }
 
@@ -986,6 +1180,38 @@ mod tests {
             }
         }
         assert!(distinct);
+    }
+
+    #[test]
+    fn cli_mode_parsing_defaults_to_listen_and_rejects_unknown_modes() {
+        assert!(matches!(parse_mode(None), Ok(Mode::Listen)));
+        assert!(matches!(parse_mode(Some("")), Ok(Mode::Listen)));
+        assert!(matches!(parse_mode(Some("listen")), Ok(Mode::Listen)));
+        assert!(matches!(parse_mode(Some("stdin")), Ok(Mode::Stdin)));
+        assert!(matches!(parse_mode(Some("file")), Ok(Mode::File)));
+        assert!(matches!(parse_mode(Some("fixture")), Ok(Mode::Fixture)));
+        assert!(parse_mode(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn argument_value_prefers_inline_equals_form() {
+        let mut none = std::env::args().skip(0);
+        assert_eq!(
+            argument_value("--token", Some("inline".into()), &mut none).unwrap(),
+            "inline"
+        );
+    }
+
+    #[test]
+    fn clean_disconnects_are_not_failures() {
+        assert!(is_disconnect(&io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "closed"
+        )));
+        assert!(!is_disconnect(&io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "unauthorized"
+        )));
     }
 
     #[test]
