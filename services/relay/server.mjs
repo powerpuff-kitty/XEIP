@@ -13,6 +13,7 @@ import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
 import { DeliveryLog, LOCAL_DELIVERY_PROFILE } from "./delivery.mjs";
 import { DurableStore, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
 import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
+import { LimitPolicy, LOCAL_LIMITS_PROFILE } from "./limits.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 const MAX_BODY = 64 * 1024;
@@ -139,7 +140,7 @@ function localOrigin(req) {
 }
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery, durable, receipts }) {
+export function createRelay({ token, admission, replay, delivery, durable, receipts, limits }) {
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
@@ -159,6 +160,12 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
   const durableStore = durable === undefined ? null : new DurableStore(durable);
   const store = durableStore ?? deliveryLog;
   const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts);
+  const limitPolicy = limits === undefined ? null : new LimitPolicy(limits);
+  // One token-bucket decision for the current request's rate-limit key, or null
+  // when the profile is disabled. The key is derived here so the policy itself
+  // stays unaware of transports and principals.
+  const limitDecision = (req, principal) =>
+    limitPolicy === null ? null : limitPolicy.take(limitPolicy.keyFor(principal, req.socket.remoteAddress));
   // session ID -> Set of transport-neutral clients:
   // { entity, principal, alive(), write(frame, raw) -> boolean, destroy() }
   const sessions = new Map();
@@ -313,10 +320,22 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         base.receiptProfile = LOCAL_RECEIPTS_PROFILE;
         base.receipts = receiptLedger.limits;
       }
+      if (limitPolicy) {
+        base.limitsProfile = LOCAL_LIMITS_PROFILE;
+        base.limits = limitPolicy.limits;
+      }
       return writeJson(res, 200, base);
     }
     const principal = admission ? admission.authenticate(req.headers.authorization) : null;
     if (admission ? !principal : !authorize(req.headers.authorization, token)) return unauthorized(res);
+    // Public health and static console assets return above and are never limited.
+    if (limitPolicy) {
+      const decision = limitDecision(req, principal);
+      if (!decision.allowed) {
+        res.setHeader("Retry-After", String(decision.retryAfter));
+        return writeJson(res, 429, { error: "rate limit exceeded" });
+      }
+    }
     if (req.method === "GET" && url.pathname === "/events") {
       const session = url.searchParams.get("session");
       const entity = url.searchParams.get("entity");
@@ -329,6 +348,14 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
         const { total, entityStreams } = activeCounts(principal.entity);
         if (total >= 256 || entityStreams >= 4) return writeJson(res, 429, { error: "subscription limit reached" });
+      }
+      // An SSE stream is a long-lived transport connection and one subscription.
+      if (limitPolicy) {
+        if (!limitPolicy.acquireConnection()) return writeJson(res, 429, { error: "connection limit exceeded" });
+        if (!limitPolicy.acquireSubscription()) {
+          limitPolicy.releaseConnection();
+          return writeJson(res, 429, { error: "subscription limit exceeded" });
+        }
       }
       // Only admission mode derives the stored identity from authenticated credentials.
       res.writeHead(200, {
@@ -362,6 +389,10 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
       res.once("close", () => {
         clearInterval(heartbeat);
         removeClient(session, client);
+        if (limitPolicy) {
+          limitPolicy.releaseConnection();
+          limitPolicy.releaseSubscription();
+        }
       });
       return;
     }
@@ -423,9 +454,23 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     if (!isWebSocketUpgrade(req)) return refuseUpgrade(socket, 400, "websocket upgrade required");
     const principal = admission ? admission.authenticate(req.headers.authorization) : null;
     if (admission ? !principal : !authorize(req.headers.authorization, token)) return refuseUpgrade(socket, 401, "unauthorized");
+    if (limitPolicy) {
+      const decision = limitDecision(req, principal);
+      if (!decision.allowed) return refuseUpgrade(socket, 429, "rate limit exceeded");
+      if (!limitPolicy.acquireConnection()) return refuseUpgrade(socket, 429, "connection limit exceeded");
+    }
     const connection = acceptWebSocket(req, socket, head, { maxFrame: MAX_FRAME, maxMessage: MAX_FRAME, maxPending: MAX_PENDING });
     const ownSubscriptions = new Map(); // session -> client
     const control = value => connection.sendText(JSON.stringify(value));
+    // Rate-limits one control frame; the reply is a 429 error control when denied.
+    const allowControl = () => {
+      const decision = limitDecision(req, principal);
+      if (decision && !decision.allowed) {
+        control({ type: "error", status: 429, error: "rate limit exceeded" });
+        return false;
+      }
+      return true;
+    };
     let awaitingPong = 0;
     const heartbeat = setInterval(() => {
       if (awaitingPong >= 2) return connection.close(CLOSE.tryAgain, "no pong");
@@ -442,6 +487,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         return control({ type: "error", status: 400, error: "invalid control frame" });
       }
       if (value.type === "subscribe") {
+        if (!allowControl()) return;
         const { session, entity } = value;
         if (!absoluteUri(session) || !absoluteUri(entity)) return control({ type: "error", status: 400, error: "valid session and entity URIs required" });
         let after;
@@ -461,6 +507,11 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         }
         const storedEntity = admission ? principal.entity : entity;
         const previous = ownSubscriptions.get(session);
+        // Replacing an existing subscription keeps the same held slot; a brand
+        // new subscription must fit the shared subscription cap.
+        if (!previous && limitPolicy && !limitPolicy.acquireSubscription()) {
+          return control({ type: "error", status: 429, error: "subscription limit exceeded" });
+        }
         if (previous) { removeClient(session, previous); ownSubscriptions.delete(session); }
         const client = {
           entity: storedEntity,
@@ -483,6 +534,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         return;
       }
       if (value.type === "send") {
+        if (!allowControl()) return;
         try { requireBoundedJsonDepth(value.message); }
         catch { return control({ type: "error", status: 413, error: "invalid or oversized JSON" }); }
         const outcome = routeMessage(principal, value.message);
@@ -496,6 +548,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
           ...(outcome.body.duplicate !== undefined ? { duplicate: outcome.body.duplicate } : {}) });
       }
       if (value.type === "receipt") {
+        if (!allowControl()) return;
         // The `type` discriminator is transport framing, not part of the receipt.
         const document = { ...value };
         delete document.type;
@@ -513,8 +566,12 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     });
     connection.on("close", () => {
       clearInterval(heartbeat);
-      for (const [session, client] of ownSubscriptions) removeClient(session, client);
+      for (const [session, client] of ownSubscriptions) {
+        removeClient(session, client);
+        if (limitPolicy) limitPolicy.releaseSubscription();
+      }
       ownSubscriptions.clear();
+      if (limitPolicy) limitPolicy.releaseConnection();
     });
   });
   let stopChanges;

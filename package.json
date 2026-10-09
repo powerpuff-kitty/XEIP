@@ -18,7 +18,8 @@
     "demo:replay": "node examples/local-relay/admission-demo.mjs --replay",
     "demo:delivery": "node examples/local-relay/delivery-demo.mjs",
     "demo:receipts": "node examples/local-relay/receipts-demo.mjs",
-    "demo:durable": "node examples/local-relay/durable-demo.mjs"
+    "demo:durable": "node examples/local-relay/durable-demo.mjs",
+    "demo:limits": "node examples/local-relay/limits-demo.mjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",

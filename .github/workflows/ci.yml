@@ -29,6 +29,7 @@ jobs:
       - run: npm run demo:delivery
       - run: npm run demo:receipts
       - run: npm run demo:durable
+      - run: npm run demo:limits
       - name: Run end-to-end local demo
         shell: bash
         run: |
