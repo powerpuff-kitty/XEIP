@@ -265,6 +265,25 @@ test("returns typed control errors and bounds JSON nesting", async t => {
   });
 });
 
+test("closes with 1002 on an invalid close code or a non-minimal length", async t => {
+  await withRelay(t, { token: TOKEN }, async (base, open) => {
+    const badClose = await open({ token: TOKEN });
+    const closeBody = Buffer.alloc(2);
+    closeBody.writeUInt16BE(1005, 0);
+    badClose.raw(encodeFrame(OPCODES.close, closeBody, true, randomBytes(4)));
+    await badClose.waitFor(() => badClose.closeCode !== null, "invalid close code");
+    assert.equal(badClose.closeCode, CLOSE.protocol);
+
+    const badLength = await open({ token: TOKEN });
+    const payload = Buffer.from("abc");
+    const mask = randomBytes(4);
+    const masked = Buffer.from([payload[0] ^ mask[0], payload[1] ^ mask[1], payload[2] ^ mask[2]]);
+    badLength.raw(Buffer.concat([Buffer.from([0x81, 0x80 | 126, 0x00, 0x03]), mask, masked]));
+    await badLength.waitFor(() => badLength.closeCode !== null, "non-minimal length");
+    assert.equal(badLength.closeCode, CLOSE.protocol);
+  });
+});
+
 test("answers protocol pings and completes the close handshake", async t => {
   await withRelay(t, { token: TOKEN }, async (base, open) => {
     const client = await open({ token: TOKEN });

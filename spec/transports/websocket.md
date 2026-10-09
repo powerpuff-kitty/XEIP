@@ -32,15 +32,17 @@ An unknown `type`, a non-object frame, a non-URI selector or invalid JSON yields
 
 - Only text messages are supported. A binary frame closes with `1003`.
 - Client frames MUST be masked; an unmasked frame closes with `1002`.
+- Lengths MUST use the minimal encoding and the 64-bit form MUST clear its high bit; a malformed length closes with `1002`.
 - Fragmented text messages are reassembled; a message exceeding 128 KiB closes with `1009`. Each individual frame is also bounded to 128 KiB.
 - A text message that is not valid UTF-8 closes with `1007`. Control frames must be final and at most 125 bytes, and reserved bits must be clear (`1002` otherwise).
+- A received close code outside the allowed set (`1000`–`1014` except `1004`/`1005`/`1006`, or `3000`–`4999`) closes with `1002`; a close reason that is not valid UTF-8 closes with `1007`.
 - The outbound queue per connection is bounded to 256 KiB. A write that would exceed it closes the connection with `1013` and does not block other subscribers.
 - The server sends a protocol ping every 15 seconds. Two consecutive missed pongs close the connection with `1013`.
 - Close codes: `1000` normal, `1002` protocol error, `1003` unsupported data, `1007` invalid payload, `1008` policy violation, `1009` message too big, `1013` try again later.
 
 ## Delivery, authorization and resource notes
 
-- Routing, replay equality, expiry and admission are the transport-independent path shared with HTTP; see [http-sse.md](http-sse.md) for acceptance-versus-acknowledgment and expiry semantics.
+- Routing, replay equality, expiry and admission are the transport-independent path shared with HTTP; see [http-sse.md](http-sse.md) for acceptance-versus-acknowledgment and expiry semantics. Unlike the HTTP `POST /messages` body limit of 64 KiB, an inbound WebSocket `send` text message may be up to the 128 KiB WebSocket limit; an envelope large enough may therefore be accepted over `/ws` and rejected over HTTP.
 - `delivered` counts writes to active WebSocket **and** HTTP/SSE subscribers of the session, because both transports share one routing table. A single POST or `send` can therefore deliver to a mix of transports.
 - Admission subscription quotas (total and per-entity) are shared across transports.
 - No offline queue, resume cursor, ordering guarantee, federation, TLS or end-to-end encryption is provided. Encryption and identity verification remain required for production.

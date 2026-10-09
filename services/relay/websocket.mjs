@@ -37,6 +37,15 @@ export class WebSocketError extends Error {
   }
 }
 
+// Close codes a peer may send: the RFC 6455 range minus reserved codes, plus
+// the registered/private application ranges. 1005/1006/1015 must never appear
+// on the wire.
+function isValidCloseCode(code) {
+  if (code >= 3000 && code <= 4999) return true;
+  if (code < 1000 || code > 1014) return false;
+  return code !== 1004 && code !== 1005 && code !== 1006;
+}
+
 export function websocketAccept(key) {
   return createHash("sha1").update(key + GUID).digest("base64");
 }
@@ -121,12 +130,15 @@ export class FrameParser {
       if (buffer.length < offset + 2) return null;
       length = buffer.readUInt16BE(offset);
       offset += 2;
+      if (length < 126) throw new WebSocketError(CLOSE.protocol, "non-minimal length encoding");
     } else if (length === 127) {
       if (buffer.length < offset + 8) return null;
+      if ((buffer[offset] & 0x80) !== 0) throw new WebSocketError(CLOSE.protocol, "invalid 64-bit length");
       const wide = buffer.readBigUInt64BE(offset);
-      if (wide > BigInt(Number.MAX_SAFE_INTEGER)) throw new WebSocketError(CLOSE.tooBig, "frame exceeds supported size");
       length = Number(wide);
       offset += 8;
+      if (length <= 0xffff) throw new WebSocketError(CLOSE.protocol, "non-minimal length encoding");
+      if (wide > BigInt(Number.MAX_SAFE_INTEGER)) throw new WebSocketError(CLOSE.tooBig, "frame exceeds supported size");
     }
     const isControl = opcode >= 0x8;
     if (isControl && (length > MAX_CONTROL_PAYLOAD || !fin)) throw new WebSocketError(CLOSE.protocol, "invalid control frame");
@@ -149,8 +161,16 @@ export class FrameParser {
   #handleFrame({ fin, opcode, payload }, events) {
     if (opcode === OPCODES.close) {
       if (payload.length === 1) throw new WebSocketError(CLOSE.protocol, "invalid close payload");
-      const code = payload.length >= 2 ? payload.readUInt16BE(0) : CLOSE.normal;
-      events.push({ type: "close", code, reason: payload.subarray(2).toString("utf8") });
+      if (payload.length === 0) return events.push({ type: "close", code: CLOSE.normal, reason: "" });
+      const code = payload.readUInt16BE(0);
+      if (!isValidCloseCode(code)) throw new WebSocketError(CLOSE.protocol, "invalid close code");
+      let reason;
+      try {
+        reason = new TextDecoder("utf-8", { fatal: true }).decode(payload.subarray(2));
+      } catch {
+        throw new WebSocketError(CLOSE.invalidPayload, "invalid close reason");
+      }
+      events.push({ type: "close", code, reason });
       return;
     }
     if (opcode === OPCODES.ping) return events.push({ type: "ping", payload });
@@ -187,6 +207,7 @@ export class WebSocketConnection extends EventEmitter {
   #parser;
   #closed = false;
   #closeSent = false;
+  #closeTimer = null;
 
   constructor(socket, head = Buffer.alloc(0), { maxFrame = 128 * 1024, maxMessage = 128 * 1024, maxPending = 256 * 1024 } = {}) {
     super();
@@ -214,7 +235,10 @@ export class WebSocketConnection extends EventEmitter {
       this.close(CLOSE.tryAgain, "outbound queue full");
       return false;
     }
-    return this.#write(frame);
+    // A false socket.write only means the bytes were queued, not that they
+    // failed, so count the frame as delivered once it is within the bound.
+    this.#write(frame);
+    return true;
   }
 
   ping(payload = Buffer.alloc(0)) {
@@ -232,6 +256,12 @@ export class WebSocketConnection extends EventEmitter {
       this.#write(encodeFrame(OPCODES.close, body));
     }
     this.#socket.end();
+    // The upgraded socket is half-open: if the peer keeps its side open after
+    // our FIN, force cleanup so heartbeat/streams/server.close() do not hang.
+    if (this.#closeTimer === null) {
+      this.#closeTimer = setTimeout(() => this.#socket.destroy(), 1000);
+      this.#closeTimer.unref();
+    }
   }
 
   destroy() {
@@ -268,6 +298,7 @@ export class WebSocketConnection extends EventEmitter {
   #finalize() {
     if (this.#closed) return;
     this.#closed = true;
+    if (this.#closeTimer !== null) { clearTimeout(this.#closeTimer); this.#closeTimer = null; }
     this.emit("close");
   }
 }

@@ -17,6 +17,9 @@ const MAX_BODY = 64 * 1024;
 const MAX_JSON_DEPTH = 64;
 const MAX_FRAME = 128 * 1024;
 const MAX_PENDING = 256 * 1024;
+// Reserve room for the SSE `id:` line and the WebSocket message wrapper so the
+// exact emitted frame stays within MAX_FRAME across both transports.
+const FRAME_OVERHEAD = 96;
 
 const STATUS_TEXT = {
   400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
@@ -57,8 +60,8 @@ function sseFrame(raw, seq) {
 
 // Returns undefined when absent, null when malformed, or a non-negative cursor.
 function parseCursor(value) {
-  if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value === "" || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
   const cursor = Number(value);
   return Number.isSafeInteger(cursor) ? cursor : null;
 }
@@ -174,8 +177,9 @@ export function createRelay({ token, admission, replay, delivery }) {
     }
     const base = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
     // Compact numeric notation can expand when JSON is reserialized. Keep the
-    // emitted bytes compatible with both reference readers before routing.
-    if (Buffer.byteLength(base) > MAX_FRAME) return { status: 413, error: "serialized SSE frame too large" };
+    // emitted bytes compatible with both reference readers before routing,
+    // reserving room for the id line and WebSocket wrapper added below.
+    if (Buffer.byteLength(base) > MAX_FRAME - FRAME_OVERHEAD) return { status: 413, error: "serialized SSE frame too large" };
     if (replayWindow) {
       // Record accepted scope before any write, with no asynchronous gap in routing.
       const decision = replayWindow.accept(raw);

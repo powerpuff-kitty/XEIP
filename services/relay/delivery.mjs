@@ -10,6 +10,7 @@ export class DeliveryLog {
   #maxPerSession;
   #maxSessions;
   #sessions = new Map(); // session ID -> { entries: [{seq, at, message}], nextSeq }
+  #known = new Map(); // evicted session ID -> last assigned seq, for honest gap reporting
   #elapsed = 0;
 
   constructor(configuration = {}) {
@@ -44,7 +45,10 @@ export class DeliveryLog {
       // Move to the most-recently-used position for bounded session eviction.
       this.#sessions.delete(session);
     } else {
-      log = { entries: [], nextSeq: 1 };
+      // Restore monotonicity if this session was previously evicted.
+      const last = this.#known.get(session);
+      log = { entries: [], nextSeq: last === undefined ? 1 : last + 1 };
+      this.#known.delete(session);
     }
     this.#sessions.set(session, log);
     this.#expire(log, now);
@@ -54,6 +58,7 @@ export class DeliveryLog {
     while (this.#sessions.size > this.#maxSessions) {
       const oldestSession = this.#sessions.keys().next().value;
       if (oldestSession === session) break;
+      this.#remember(oldestSession, this.#sessions.get(oldestSession).nextSeq - 1);
       this.#sessions.delete(oldestSession);
     }
     return seq;
@@ -63,21 +68,35 @@ export class DeliveryLog {
    * Returns retained entries with sequence strictly greater than `after`.
    * Entries past the fixed monotonic window are reclaimed first, even when no
    * new message has been appended. `gap` is true when one or more sequences
-   * between `after` and the oldest retained entry were already dropped, so a
-   * client must not assume continuity.
+   * between `after` and the oldest retained entry were already dropped (or the
+   * whole session was evicted), so a client must not assume continuity.
    */
   since(session, after, elapsedMs = performance.now()) {
     if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
     const now = Math.max(this.#elapsed, elapsedMs);
+    this.#elapsed = now;
     const log = this.#sessions.get(session);
-    if (!log) return { entries: [], gap: false, from: after + 1 };
+    if (!log) {
+      const last = this.#known.get(session);
+      if (last !== undefined && after < last) return { entries: [], gap: true, from: last + 1 };
+      return { entries: [], gap: false, from: after + 1 };
+    }
     this.#expire(log, now);
+    // Reading is activity: keep an actively resumed session from being evicted.
+    this.#sessions.delete(session);
+    this.#sessions.set(session, log);
     const oldest = log.entries.length > 0 ? log.entries[0].seq : log.nextSeq;
     return {
       entries: log.entries.filter(entry => entry.seq > after),
       gap: after < oldest - 1,
       from: oldest
     };
+  }
+
+  #remember(session, lastSeq) {
+    this.#known.delete(session);
+    this.#known.set(session, lastSeq);
+    while (this.#known.size > this.#maxSessions * 4) this.#known.delete(this.#known.keys().next().value);
   }
 
   #expire(log, now) {

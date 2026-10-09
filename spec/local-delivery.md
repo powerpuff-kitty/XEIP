@@ -18,7 +18,7 @@ When delivery is enabled, the relay assigns a strictly increasing integer `seq` 
 - HTTP/SSE frames carry `id: <seq>` before `event: xeip.message`.
 - WebSocket `send` acceptance returns `{ type: "accepted", delivered: n, seq }` and live messages are delivered as `{ type: "message", seq, message }`.
 
-A sequence is assigned only after authentication, validation, expiry and optional replay checks pass, and before any write. A replay-suppressed duplicate keeps its original sequence and receives no new one. A message accepted with zero live subscribers still receives a sequence and is retained for resume.
+A sequence is assigned only after authentication, validation, expiry and optional replay checks pass, and before any write. A replay-suppressed duplicate keeps its original sequence and receives no new one; its acceptance response carries `duplicate: true` and no `seq`. A message accepted with zero live subscribers still receives a sequence and is retained for resume.
 
 ## Resume
 
@@ -38,7 +38,9 @@ A cursor with no retained entries produces a gap only when earlier accepted mess
 
 ## Retention, ordering and remaining limits
 
-Retention is bounded per session by `maxPerSession` and by `windowMs` on a process-monotonic clock; the relay evicts the oldest entry within a session and the least-recently-used session when `maxSessions` is exceeded. Resuming outside those bounds yields a gap. Retention is memory-only and is lost on process restart; a new relay factory does not restore a prior sequence or backlog.
+Retention is bounded per session by `maxPerSession` and by `windowMs` on a process-monotonic clock; the relay evicts the oldest entry within a session and the least-recently-used session when `maxSessions` is exceeded. Resuming counts as activity, so an actively resumed session is not evicted ahead of a colder one. If a session is evicted, a cursor below its last assigned sequence yields a gap, and a later message for that session continues the same monotonically increasing sequence. Retention is memory-only and is lost on process restart; a new relay factory does not restore a prior sequence or backlog.
+
+These bounds count entries, not total bytes. Retained bodies may each approach the transport frame limit, so a process can retain substantially more memory than the entry count alone suggests; there is no total-byte budget.
 
 Because a sequence is assigned once per acceptance on one relay, the per-session order is a total order of acceptance, which implies per-sender order for one sender. It does **not** establish sender local creation order, cross-relay order, or delivery/consumption order.
 

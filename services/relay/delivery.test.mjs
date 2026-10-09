@@ -80,8 +80,27 @@ test("bounds retained entries per session and evicts least-recently-used session
   log.append(sessionA, message("a3"), 0);
   assert.deepEqual(log.since(sessionA, 0).entries.map(entry => entry.seq), [2, 3]);
   log.append(sessionB, message("b1"), 1);
-  assert.deepEqual(log.since(sessionA, 0), { entries: [], gap: false, from: 1 });
+  assert.deepEqual(log.since(sessionA, 0), { entries: [], gap: true, from: 4 });
   assert.deepEqual(log.since(sessionB, 0).entries.map(entry => entry.message.body.data), ["b1"]);
+});
+
+test("reports a gap and preserves sequence after a session is evicted", () => {
+  const log = new DeliveryLog({ maxSessions: 1, maxPerSession: 4 });
+  assert.equal(log.append(sessionA, message("a1"), 0), 1);
+  assert.equal(log.append(sessionB, message("b1"), 0), 1); // evicts A after seq 1
+  assert.deepEqual(log.since(sessionA, 0, 0), { entries: [], gap: true, from: 2 });
+  assert.equal(log.append(sessionA, message("a2"), 0), 2); // continues monotonically
+  assert.deepEqual(log.since(sessionA, 1, 0).entries.map(entry => entry.seq), [2]);
+});
+
+test("resuming a session keeps it from least-recently-used eviction", () => {
+  const log = new DeliveryLog({ maxSessions: 2, maxPerSession: 4 });
+  log.append(sessionA, message("a1"), 0);
+  log.append(sessionB, message("b1"), 0);
+  log.since(sessionA, 0, 0); // touch A so A is more recent than B
+  log.append("urn:xeip:session:ef", message("c1"), 0);
+  assert.equal(log.since(sessionA, 0, 0).entries.length, 1);
+  assert.equal(log.since(sessionB, 0, 0).gap, true);
 });
 
 test("copies limits and rejects invalid elapsed time", () => {
