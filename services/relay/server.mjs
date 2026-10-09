@@ -11,9 +11,11 @@ import { validateEnvelope, requireUri } from "../../sdks/typescript/src/validati
 import { LocalAdmission, LOCAL_ADMISSION_PROFILE } from "./admission.mjs";
 import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
 import { DeliveryLog, LOCAL_DELIVERY_PROFILE } from "./delivery.mjs";
+import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 const MAX_BODY = 64 * 1024;
+const RECEIPT_FIELDS = ["session", "seq", "id", "status"];
 const MAX_JSON_DEPTH = 64;
 const MAX_FRAME = 128 * 1024;
 const MAX_PENDING = 256 * 1024;
@@ -29,13 +31,14 @@ const STATUS_TEXT = {
 
 function refuseUpgrade(socket, status, error) {
   const body = JSON.stringify({ error });
-  socket.write(
-    "HTTP/1.1 " + status + " " + (STATUS_TEXT[status] ?? "Error") + "\r\n" +
+  const response = "HTTP/1.1 " + status + " " + (STATUS_TEXT[status] ?? "Error") + "\r\n" +
     "Connection: close\r\n" +
     "Content-Type: application/json; charset=utf-8\r\n" +
-    "Content-Length: " + Buffer.byteLength(body) + "\r\n\r\n" + body
-  );
-  socket.destroy();
+    "Content-Length: " + Buffer.byteLength(body) + "\r\n\r\n" + body;
+  // end() flushes the response before FIN; destroy only if the peer stalls.
+  socket.end(response);
+  const timer = setTimeout(() => socket.destroy(), 1000);
+  timer.unref();
 }
 const absoluteUri = value => { try { requireUri(value); return true; } catch { return false; } };
 
@@ -135,14 +138,20 @@ function localOrigin(req) {
 }
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery }) {
+export function createRelay({ token, admission, replay, delivery, receipts }) {
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
   } else if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
   if (replay !== undefined && !admission) throw new TypeError("replay requires local admission mode");
+  // A shared token cannot bind the acknowledging principal to a recipient, so a
+  // receipt needs both authenticated admission and a retained delivery log.
+  if (receipts !== undefined && (!admission || delivery === undefined)) {
+    throw new TypeError("receipts require local admission and delivery");
+  }
   const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
   const deliveryLog = delivery === undefined ? null : new DeliveryLog(delivery);
+  const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts);
   // session ID -> Set of transport-neutral clients:
   // { entity, principal, alive(), write(frame, raw) -> boolean, destroy() }
   const sessions = new Map();
@@ -201,6 +210,42 @@ export function createRelay({ token, admission, replay, delivery }) {
     }
     return { status: 202, body: { accepted: true, delivered: written, ...(seq === undefined ? {} : { seq }), ...(replayWindow ? { duplicate: false } : {}) } };
   };
+  // Validates a receipt control, correlates it against the retained delivery log
+  // and records a bounded acknowledgment. It never writes a response and never
+  // discloses message existence beyond the necessary status.
+  const routeReceipt = (principal, document) => {
+    if (!receiptLedger) return { status: 400, error: "receipts profile not enabled" };
+    // A credential or membership can change while the asynchronous body read waits.
+    if (!admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
+    if (!document || typeof document !== "object" || Array.isArray(document) ||
+        Object.keys(document).some(key => !RECEIPT_FIELDS.includes(key))) {
+      return { status: 400, error: "invalid receipt control" };
+    }
+    const { session, seq, id, status } = document;
+    if (!absoluteUri(session)) return { status: 400, error: "valid session URI required" };
+    const hasSeq = seq !== undefined, hasId = id !== undefined;
+    if (!hasSeq && !hasId) return { status: 400, error: "a seq or id selector is required" };
+    if (hasSeq && (!Number.isSafeInteger(seq) || seq < 0)) return { status: 400, error: "invalid seq" };
+    if (hasId && !absoluteUri(id)) return { status: 400, error: "invalid id" };
+    if (status !== undefined && status !== "received") return { status: 400, error: "invalid status" };
+    if (!admission.canSubscribe(principal, session)) return { status: 403, error: "forbidden" };
+    let entry;
+    if (hasSeq) {
+      entry = deliveryLog.lookup(session, seq);
+      if (entry === null) return { status: 404, error: "target not retained" };
+      if (hasId && entry.message.id !== id) return { status: 409, error: "selector conflict" };
+    } else {
+      const matches = deliveryLog.lookupAllById(session, id);
+      if (matches.length === 0) return { status: 404, error: "target not retained" };
+      if (matches.length > 1) return { status: 409, error: "ambiguous target" };
+      entry = matches[0];
+    }
+    if (entry.message.recipient !== undefined && entry.message.recipient !== principal.entity) {
+      return { status: 403, error: "forbidden" };
+    }
+    const { duplicate } = receiptLedger.record(principal, session, entry.seq, entry.message.id);
+    return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
+  };
   const server = createServer(async (req, res) => {
     // Reject non-loopback connections even if a consumer accidentally binds a public interface.
     if (!loopbackOnly(req)) return writeJson(res, 403, { error: "loopback-only development relay" });
@@ -250,6 +295,10 @@ export function createRelay({ token, admission, replay, delivery }) {
       if (deliveryLog) {
         base.resumeProfile = LOCAL_DELIVERY_PROFILE;
         base.resume = deliveryLog.limits;
+      }
+      if (receiptLedger) {
+        base.receiptProfile = LOCAL_RECEIPTS_PROFILE;
+        base.receipts = receiptLedger.limits;
       }
       return writeJson(res, 200, base);
     }
@@ -317,6 +366,22 @@ export function createRelay({ token, admission, replay, delivery }) {
       const outcome = routeMessage(principal, raw);
       if (outcome.status === 401) return unauthorized(res);
       if (outcome.retryAfter !== undefined) res.setHeader("Retry-After", String(outcome.retryAfter));
+      if (outcome.error !== undefined) return writeJson(res, outcome.status, { error: outcome.error });
+      return writeJson(res, outcome.status, outcome.body);
+    }
+    if (req.method === "POST" && url.pathname === "/receipts") {
+      if (!receiptLedger) return writeJson(res, 404, { error: "route not found" });
+      if ((req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase() !== "application/json") {
+        return writeJson(res, 415, { error: "application/json content type required" });
+      }
+      let document;
+      try {
+        document = JSON.parse(await readLimitedBody(req));
+        requireBoundedJsonDepth(document);
+      }
+      catch (err) { return writeJson(res, err instanceof RangeError ? 413 : 400, { error: "invalid or oversized JSON" }); }
+      const outcome = routeReceipt(principal, document);
+      if (outcome.status === 401) return unauthorized(res);
       if (outcome.error !== undefined) return writeJson(res, outcome.status, { error: outcome.error });
       return writeJson(res, outcome.status, outcome.body);
     }
@@ -417,6 +482,18 @@ export function createRelay({ token, admission, replay, delivery }) {
         return control({ type: "accepted", delivered: outcome.body.delivered,
           ...(outcome.body.seq === undefined ? {} : { seq: outcome.body.seq }),
           ...(outcome.body.duplicate !== undefined ? { duplicate: outcome.body.duplicate } : {}) });
+      }
+      if (value.type === "receipt") {
+        // The `type` discriminator is transport framing, not part of the receipt.
+        const document = { ...value };
+        delete document.type;
+        const outcome = routeReceipt(principal, document);
+        if (outcome.status === 401) {
+          control({ type: "error", status: 401, error: "unauthorized" });
+          return connection.close(CLOSE.policy, "revoked credential");
+        }
+        if (outcome.error !== undefined) return control({ type: "error", status: outcome.status, error: outcome.error });
+        return control({ type: "acknowledged", session: outcome.body.session, seq: outcome.body.seq, duplicate: outcome.body.duplicate });
       }
       return control({ type: "error", status: 400, error: "unknown control type" });
     });

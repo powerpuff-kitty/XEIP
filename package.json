@@ -16,7 +16,8 @@
     "demo": "node examples/local-relay/demo.mjs",
     "demo:admission": "node examples/local-relay/admission-demo.mjs",
     "demo:replay": "node examples/local-relay/admission-demo.mjs --replay",
-    "demo:delivery": "node examples/local-relay/delivery-demo.mjs"
+    "demo:delivery": "node examples/local-relay/delivery-demo.mjs",
+    "demo:receipts": "node examples/local-relay/receipts-demo.mjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",

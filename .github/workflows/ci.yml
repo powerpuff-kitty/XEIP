@@ -27,6 +27,7 @@ jobs:
       - run: npm run demo:admission
       - run: npm run demo:replay
       - run: npm run demo:delivery
+      - run: npm run demo:receipts
       - name: Run end-to-end local demo
         shell: bash
         run: |

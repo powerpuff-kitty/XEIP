@@ -105,6 +105,13 @@ export interface SendAcceptance {
   seq?: number;
 }
 
+export interface ReceiptAcceptance {
+  acknowledged: true;
+  session: string;
+  seq: number;
+  duplicate: boolean;
+}
+
 export class XeipHttpSseClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -148,6 +155,51 @@ export class XeipHttpSseClient {
       acceptance.seq = seq as number;
     }
     return acceptance;
+  }
+
+  /**
+   * Acknowledges a retained delivery for `session` under the optional
+   * local-receipts profile. At least one of `seq`/`id` must be supplied.
+   */
+  async acknowledge(session: string, target: { seq?: number; id?: string; status?: "received" }, signal?: AbortSignal): Promise<ReceiptAcceptance> {
+    requireUri(session, "session");
+    const selector = requireRecord(target, "receipt target");
+    for (const key of Object.keys(selector)) {
+      if (key !== "seq" && key !== "id" && key !== "status") throw new TypeError("unexpected field: " + key);
+    }
+    if (target.seq === undefined && target.id === undefined) throw new TypeError("receipt requires seq or id");
+    const body: Record<string, unknown> = { session };
+    if (target.seq !== undefined) {
+      if (!Number.isSafeInteger(target.seq) || target.seq < 0) throw new TypeError("seq must be a non-negative safe integer");
+      body.seq = target.seq;
+    }
+    if (target.id !== undefined) {
+      requireUri(target.id, "id");
+      body.id = target.id;
+    }
+    if (target.status !== undefined) {
+      if (target.status !== "received") throw new TypeError("invalid status");
+      body.status = target.status;
+    }
+    const response = await this.fetchImpl(this.baseUrl + "/receipts", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + this.token, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal
+    });
+    if (response.status !== 202) {
+      await response.body?.cancel().catch(() => {});
+      throw new Error("XEIP relay rejected receipt: HTTP " + response.status);
+    }
+    const result: unknown = await response.json();
+    const responseBody = requireRecord(result, "relay response");
+    const duplicate = responseBody.duplicate;
+    const seq = responseBody.seq;
+    if (responseBody.acknowledged !== true || typeof responseBody.session !== "string" ||
+        !Number.isSafeInteger(seq) || (seq as number) < 0 || typeof duplicate !== "boolean") {
+      throw new TypeError("invalid relay response");
+    }
+    return { acknowledged: true, session: responseBody.session, seq: seq as number, duplicate };
   }
 
   /**

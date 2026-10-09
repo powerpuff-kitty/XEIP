@@ -103,6 +103,34 @@ test("resuming a session keeps it from least-recently-used eviction", () => {
   assert.equal(log.since(sessionB, 0, 0).gap, true);
 });
 
+test("looks up retained entries by sequence and id without changing retention", () => {
+  const log = new DeliveryLog({ windowMs: 100, maxPerSession: 4 });
+  log.append(sessionA, message("a1"), 0);
+  log.append(sessionA, message("a2"), 0);
+  assert.equal(log.lookup(sessionA, 1, 0).message.id, "urn:xeip:message:a1");
+  assert.equal(log.lookup(sessionA, 99, 0), null);
+  assert.equal(log.lookup("urn:xeip:session:unknown", 1, 0), null);
+  assert.equal(log.lookupById(sessionA, "urn:xeip:message:a2", 0).seq, 2);
+  assert.equal(log.lookupById(sessionA, "urn:xeip:message:missing", 0), null);
+  assert.deepEqual(log.lookupAllById(sessionA, "urn:xeip:message:a1", 0).map(entry => entry.seq), [1]);
+  // A lookup is not activity and must not reclaim or reorder retained entries.
+  assert.deepEqual(log.since(sessionA, 0, 0).entries.map(entry => entry.seq), [1, 2]);
+  for (const elapsed of [NaN, Infinity, -1, "1"]) {
+    assert.throws(() => log.lookup(sessionA, 1, elapsed));
+    assert.throws(() => log.lookupById(sessionA, "urn:xeip:message:a1", elapsed));
+  }
+});
+
+test("reports every retained id match and excludes entries past the window", () => {
+  const log = new DeliveryLog({ windowMs: 100, maxPerSession: 8 });
+  log.append(sessionA, message("same"), 0);
+  log.append(sessionA, message("other"), 0);
+  log.append(sessionA, message("same"), 0);
+  assert.deepEqual(log.lookupAllById(sessionA, "urn:xeip:message:same", 0).map(entry => entry.seq), [1, 3]);
+  assert.equal(log.lookup(sessionA, 1, 100), null);
+  assert.equal(log.lookupAllById(sessionA, "urn:xeip:message:same", 100).length, 0);
+});
+
 test("copies limits and rejects invalid elapsed time", () => {
   const configuration = { windowMs: 1000, maxPerSession: 2, maxSessions: 2 };
   const log = new DeliveryLog(configuration);

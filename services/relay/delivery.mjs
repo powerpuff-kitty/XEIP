@@ -93,6 +93,40 @@ export class DeliveryLog {
     };
   }
 
+  /**
+   * Read-only correlation lookup: the retained entry with this exact sequence,
+   * or null when it is unknown or no longer retained. Unlike `since` it does not
+   * count as activity, so a receipt can never change retention or eviction order.
+   */
+  lookup(session, seq, elapsedMs = performance.now()) {
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
+    const log = this.#sessions.get(session);
+    if (!log) return null;
+    const now = Math.max(this.#elapsed, elapsedMs);
+    this.#elapsed = now;
+    this.#expire(log, now);
+    return log.entries.find(entry => entry.seq === seq) ?? null;
+  }
+
+  /** The first retained entry whose message id equals `id`, or null when none. */
+  lookupById(session, id, elapsedMs = performance.now()) {
+    return this.lookupAllById(session, id, elapsedMs)[0] ?? null;
+  }
+
+  /**
+   * Every retained entry whose message id equals `id`, oldest first. An id-only
+   * receipt needs this to reject more than one match as ambiguous.
+   */
+  lookupAllById(session, id, elapsedMs = performance.now()) {
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
+    const log = this.#sessions.get(session);
+    if (!log) return [];
+    const now = Math.max(this.#elapsed, elapsedMs);
+    this.#elapsed = now;
+    this.#expire(log, now);
+    return log.entries.filter(entry => entry.message.id === id);
+  }
+
   #remember(session, lastSeq) {
     this.#known.delete(session);
     this.#known.set(session, lastSeq);

@@ -69,6 +69,99 @@ test("send preserves the optional delivery sequence and rejects malformed values
   }
 });
 
+test("acknowledge posts a receipt and parses the acceptance", async () => {
+  let seen = null;
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async (url, options) => {
+      seen = { url: String(url), options };
+      return new Response(JSON.stringify({ acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: false }), {
+        status: 202, headers: { "Content-Type": "application/json" }
+      });
+    }
+  });
+  const acceptance = await client.acknowledge("urn:xeip:session:demo",
+    { seq: 42, id: "urn:xeip:message:x", status: "received" });
+  assert.deepEqual(acceptance, { acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: false });
+  assert.equal(seen.url, "http://localhost/receipts");
+  assert.equal(seen.options.method, "POST");
+  assert.equal(seen.options.headers["Authorization"], "Bearer demo-token");
+  assert.equal(seen.options.headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(seen.options.body),
+    { session: "urn:xeip:session:demo", seq: 42, id: "urn:xeip:message:x", status: "received" });
+});
+
+test("acknowledge omits absent selectors from the request body", async () => {
+  let body = null;
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async (_url, options) => {
+      body = JSON.parse(options.body);
+      return new Response(JSON.stringify({ acknowledged: true, session: "urn:xeip:session:demo", seq: 7, duplicate: false }), { status: 202 });
+    }
+  });
+  await client.acknowledge("urn:xeip:session:demo", { id: "urn:xeip:message:x" });
+  assert.deepEqual(body, { session: "urn:xeip:session:demo", id: "urn:xeip:message:x" });
+});
+
+test("acknowledge preserves a duplicate acknowledgment", async () => {
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response(JSON.stringify({ acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: true }), { status: 202 }) });
+  assert.deepEqual(await client.acknowledge("urn:xeip:session:demo", { seq: 42 }),
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: true });
+});
+
+test("acknowledge rejects a target without a selector before fetch", async () => {
+  let called = false;
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => { called = true; return new Response("{}", { status: 202 }); } });
+  await assert.rejects(client.acknowledge("urn:xeip:session:demo", {}), /seq or id/);
+  assert.equal(called, false);
+});
+
+test("acknowledge rejects malformed selectors before fetch", async () => {
+  for (const [target, pattern] of [
+    [{ seq: -1 }, /seq/],
+    [{ seq: 1.5 }, /seq/],
+    [{ seq: "1" }, /seq/],
+    [{ seq: null }, /seq/],
+    [{ id: "not-a-uri" }, /id/],
+    [{ seq: 1, status: "completed" }, /status/],
+    [{ seq: 1, unknown: true }, /unexpected/]
+  ]) {
+    let called = false;
+    const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+      fetchImpl: async () => { called = true; return new Response("{}", { status: 202 }); } });
+    await assert.rejects(client.acknowledge("urn:xeip:session:demo", target), pattern);
+    assert.equal(called, false, JSON.stringify(target));
+  }
+});
+
+test("acknowledge rejects a non-202 response and cancels the body", async () => {
+  let cancelled = false;
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode("{}")); },
+      cancel() { cancelled = true; }
+    }), { status: 404 })
+  });
+  await assert.rejects(client.acknowledge("urn:xeip:session:demo", { seq: 42 }), /HTTP 404/);
+  assert.equal(cancelled, true);
+});
+
+test("acknowledge rejects a malformed acceptance", async () => {
+  for (const body of [
+    { session: "urn:xeip:session:demo", seq: 42, duplicate: false },
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: "false" },
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: 1.5, duplicate: false },
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: -1, duplicate: false },
+    { acknowledged: true, session: 7, seq: 42, duplicate: false },
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: 42, duplicate: null }
+  ]) {
+    const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+      fetchImpl: async () => new Response(JSON.stringify(body), { status: 202 }) });
+    await assert.rejects(client.acknowledge("urn:xeip:session:demo", { seq: 42 }), /invalid relay response/);
+  }
+});
+
 test("events sends a Last-Event-ID resume cursor and rejects an invalid one before fetch", async () => {
   let seen = null;
   const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
