@@ -13,8 +13,8 @@ jobs:
   node:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit
@@ -28,6 +28,7 @@ jobs:
       - run: npm run demo:replay
       - run: npm run demo:delivery
       - run: npm run demo:receipts
+      - run: npm run demo:durable
       - name: Run end-to-end local demo
         shell: bash
         run: |
@@ -43,8 +44,8 @@ jobs:
   rust-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           toolchain: '1.94.1'
           components: rustfmt, clippy
@@ -56,12 +57,12 @@ jobs:
       matrix:
         rust: ['1.81.0', '1.94.1']
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           toolchain: ${{ matrix.rust }}
       - run: cargo test --workspace --all-targets --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit

@@ -1,17 +1,19 @@
 # Local durable delivery profile — xeip.local-durable/0.1 (design)
 
-**Status: proposed design only; nothing here is implemented.** This document specifies a bounded, restart-surviving delivery store for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It extends the in-memory [local delivery profile](local-delivery.md) and composes with the [local replay](local-replay.md) and [local receipts](local-receipts.md) profiles. It is **not** an exactly-once system, not proof of processing, and not a production queue. [ADR 0006](decisions/0006-durable-delivery.md) records the decision and its deferral.
+**Implementation status (first, dependency-free slice).** `services/relay/durable.mjs` implements a `DurableStore` over a caller-provided directory using only `node:fs`/`node:path`/`node:crypto`: a segmented append-only log of length-prefixed, SHA-256-checksummed records; an atomically written manifest (temp + fsync + rename) holding per-session `nextSeq` high-water marks; per-session persisted monotonic `append(session, message) -> seq`; `since`/`lookup`/`lookupAllById`/`limits`/`status`; bounded `retentionMs`, `maxEntriesPerSession`, `maxSessions` and `maxBytes`; torn-tail recovery reported as `"recovered"`; and fail-closed interior corruption. `createRelay({ durable })` is wired as an alternative to the in-memory `delivery` option, routing sequence assignment, `seq` framing, resume and receipt lookups through whichever store is active, and health reports `durableProfile` plus limits and `state`. **Deferred/partial:** compaction (evicted records remain on disk and are only logically skipped via the manifest `oldestSeq`), multi-process locking, durable receipt records, the SQLite backend, at-rest encryption, and a true `fsync:"batch"` policy (the manifest is fsynced on every append to guarantee no `seq` reuse, while segment fsync is batched). The rest of this document is the design and is unchanged.
 
-This profile exists to advance [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) (offline/persistent delivery profile and stable reconnect cursors) and [issue 21](https://github.com/powerpuff-kitty/XEIP/issues/21) (bounded persistent queues, TTL, resume cursors, failure injection). Both remain **incomplete**: this is a written design with no code, no tests and no benchmarks.
+**Status: a first dependency-free slice is implemented; the rest is design.** This document specifies a bounded, restart-surviving delivery store for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It provides a persistent backing for the delivery semantics — selected instead of the in-memory `delivery` option — and composes with the [local replay](local-replay.md) and [local receipts](local-receipts.md) profiles. It is **not** an exactly-once system, not proof of processing, and not a production queue. [ADR 0006](decisions/0006-durable-delivery.md) records the decision and its deferral.
+
+This profile exists to advance [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) (offline/persistent delivery profile and stable reconnect cursors) and [issue 21](https://github.com/powerpuff-kitty/XEIP/issues/21) (bounded persistent queues, TTL, resume cursors, failure injection). Both remain **incomplete**: a first slice with tests exists (see the status note above), while compaction, multi-process locking, durable receipts, the SQLite backend, at-rest encryption and benchmarks remain design.
 
 ## Selection and limits
 
-Enable explicitly through `createRelay({ token | admission, delivery: { ... }, durable: { ... } })`. Durable requires the existing `delivery` profile because that profile defines the wire framing and cursor contract (`seq`, SSE `id:`, `Last-Event-ID`/`after`, `subscribe.after`); `durable` changes the **backing** from process memory to a persistent store. `durable` without `delivery` is an error, as is `durable` with an unknown backend or a store directory that cannot be created or locked. Null, unknown option keys, non-integers and out-of-range values are errors. Configuration is copied.
+Enable explicitly through `createRelay({ token | admission, durable: { ... } })`, selected **instead of** the in-memory `delivery: { ... }` option. The durable store provides the delivery wire framing and cursor contract (`seq`, SSE `id:`, `Last-Event-ID`/`after`, `subscribe.after`); `durable` changes the **backing** from process memory to a persistent store. Specifying both `delivery` and `durable` is an error, as is `durable` with an unknown backend or a store directory that cannot be created. Null, unknown option keys, non-integers and out-of-range values are errors. Configuration is copied.
 
 ```
 createRelay({
   token | admission,
-  delivery: { windowMs, maxPerSession, maxSessions },  // existing framing/limits profile
+  // Select durable INSTEAD of the in-memory delivery option:
   durable: {
     backend: "segments",       // recommended default; "sqlite" is the alternative
     dir: "/var/lib/xeip/store", // operator-provisioned, owner-only
@@ -25,7 +27,7 @@ createRelay({
 })
 ```
 
-The in-memory `delivery.windowMs`/`maxPerSession`/`maxSessions` bounds continue to apply as the framing profile's documented limits; the durable store additionally enforces `retentionMs`, `maxEntriesPerSession`, `maxSessions` and `maxBytes`. Where both are present, `durable` is authoritative for on-disk retention and eviction. `maxBytes` is the total-byte budget the in-memory profile explicitly lacks.
+The durable store provides the same framing/cursor contract as the in-memory delivery profile and additionally enforces `retentionMs`, `maxEntriesPerSession`, `maxSessions` and `maxBytes`. `maxBytes` is the total-byte budget the in-memory profile explicitly lacks.
 
 Health adds `durableProfile: "xeip.local-durable/0.1"` and `durable: { backend, retentionMs, maxEntriesPerSession, maxSessions, maxBytes, fsync, state }`, where `state` is `"ok"`, `"recovered"` (a torn tail was truncated and a gap will be reported) or `"degraded"` (interior corruption detected; see below). The existing `deliveryProfile`, `resumeProfile` and `receiptProfile` fields are unchanged. Health never exposes message bodies, principals or per-session cursors.
 

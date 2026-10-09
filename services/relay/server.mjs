@@ -11,6 +11,7 @@ import { validateEnvelope, requireUri } from "../../sdks/typescript/src/validati
 import { LocalAdmission, LOCAL_ADMISSION_PROFILE } from "./admission.mjs";
 import { ReplayWindow, LOCAL_REPLAY_PROFILE } from "./replay.mjs";
 import { DeliveryLog, LOCAL_DELIVERY_PROFILE } from "./delivery.mjs";
+import { DurableStore, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
 import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
@@ -138,19 +139,25 @@ function localOrigin(req) {
 }
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery, receipts }) {
+export function createRelay({ token, admission, replay, delivery, durable, receipts }) {
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
   } else if (typeof token !== "string" || token.length < 16) throw new Error("XEIP_DEV_TOKEN must be at least 16 characters");
   if (replay !== undefined && !admission) throw new TypeError("replay requires local admission mode");
+  // `durable` backs the same delivery/resume framing as `delivery`; specify one.
+  if (delivery !== undefined && durable !== undefined) {
+    throw new TypeError("choose either delivery or durable, not both");
+  }
   // A shared token cannot bind the acknowledging principal to a recipient, so a
   // receipt needs both authenticated admission and a retained delivery log.
-  if (receipts !== undefined && (!admission || delivery === undefined)) {
+  if (receipts !== undefined && (!admission || (delivery === undefined && durable === undefined))) {
     throw new TypeError("receipts require local admission and delivery");
   }
   const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
   const deliveryLog = delivery === undefined ? null : new DeliveryLog(delivery);
+  const durableStore = durable === undefined ? null : new DurableStore(durable);
+  const store = durableStore ?? deliveryLog;
   const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts);
   // session ID -> Set of transport-neutral clients:
   // { entity, principal, alive(), write(frame, raw) -> boolean, destroy() }
@@ -198,7 +205,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
     }
     // Assign the delivery sequence in the same synchronous step as the writes so
     // the per-session order equals acceptance order across both transports.
-    const seq = deliveryLog ? deliveryLog.append(raw.session, raw) : undefined;
+    const seq = store ? store.append(raw.session, raw) : undefined;
     const frame = sseFrame(raw, seq);
     let written = 0;
     for (const subscriber of sessions.get(raw.session) ?? []) {
@@ -234,12 +241,12 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
     const eligible = candidate => candidate.message.recipient === undefined || candidate.message.recipient === principal.entity;
     let entry;
     if (hasSeq) {
-      entry = deliveryLog.lookup(session, seq);
+      entry = store.lookup(session, seq);
       if (entry === null) return { status: 404, error: "target not retained" };
       if (hasId && entry.message.id !== id) return { status: 409, error: "selector conflict" };
       if (!eligible(entry)) return { status: 403, error: "forbidden" };
     } else {
-      const matches = deliveryLog.lookupAllById(session, id).filter(eligible);
+      const matches = store.lookupAllById(session, id).filter(eligible);
       if (matches.length === 0) return { status: 404, error: "target not retained" };
       if (matches.length > 1) return { status: 409, error: "ambiguous target" };
       entry = matches[0];
@@ -293,9 +300,14 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
           transports: ["http-sse", "websocket"],
           ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
         : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] };
-      if (deliveryLog) {
+      if (store) {
         base.resumeProfile = LOCAL_DELIVERY_PROFILE;
-        base.resume = deliveryLog.limits;
+        base.resume = store.resumeLimits ?? store.limits;
+      }
+      if (durableStore) {
+        base.durableProfile = LOCAL_DURABLE_PROFILE;
+        base.durable = { backend: durableStore.backend, ...durableStore.limits,
+          fsync: durableStore.fsync, state: durableStore.status() };
       }
       if (receiptLedger) {
         base.receiptProfile = LOCAL_RECEIPTS_PROFILE;
@@ -312,7 +324,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
       const cursorRaw = req.headers["last-event-id"] ?? url.searchParams.get("after") ?? undefined;
       const cursor = parseCursor(cursorRaw);
       if (cursor === null) return writeJson(res, 400, { error: "invalid resume cursor" });
-      if (cursor !== undefined && !deliveryLog) return writeJson(res, 400, { error: "delivery resume profile not enabled" });
+      if (cursor !== undefined && !store) return writeJson(res, 400, { error: "delivery resume profile not enabled" });
       if (admission) {
         if (entity !== principal.entity || !admission.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
         const { total, entityStreams } = activeCounts(principal.entity);
@@ -328,7 +340,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
       });
       writeEvent(res, ": connected\n\n");
       if (cursor !== undefined) {
-        const { entries, gap, from } = deliveryLog.since(session, cursor);
+        const { entries, gap, from } = store.since(session, cursor);
         if (gap) writeEvent(res, "event: xeip.gap\ndata: " + JSON.stringify({ session, from }) + "\n\n");
         for (const entry of entries) {
           if (entry.message.recipient !== undefined && entry.message.recipient !== entity) continue;
@@ -437,7 +449,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
           if (!Number.isSafeInteger(value.after) || value.after < 0) return control({ type: "error", status: 400, error: "invalid resume cursor" });
           after = value.after;
         }
-        if (after !== undefined && !deliveryLog) return control({ type: "error", status: 400, error: "delivery resume profile not enabled" });
+        if (after !== undefined && !store) return control({ type: "error", status: 400, error: "delivery resume profile not enabled" });
         if (admission && !admission.isCurrent(principal)) {
           control({ type: "error", status: 401, error: "unauthorized" });
           return connection.close(CLOSE.policy, "revoked credential");
@@ -461,7 +473,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
         ownSubscriptions.set(session, client);
         control({ type: "subscribed", session });
         if (after !== undefined) {
-          const { entries, gap, from } = deliveryLog.since(session, after);
+          const { entries, gap, from } = store.since(session, after);
           if (gap) control({ type: "gap", session, from });
           for (const entry of entries) {
             if (entry.message.recipient !== undefined && entry.message.recipient !== storedEntity) continue;
@@ -510,7 +522,7 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
     stopChanges?.();
     stopChanges = admission?.onChange(checkSubscriptions);
   });
-  server.on("close", () => { stopChanges?.(); stopChanges = undefined; });
+  server.on("close", () => { stopChanges?.(); stopChanges = undefined; durableStore?.close(); });
   return server;
 }
 
