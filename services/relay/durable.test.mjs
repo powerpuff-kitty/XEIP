@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DurableStore, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
@@ -42,9 +42,10 @@ test("reaps empty sessions so the manifest and session map stay bounded", t => {
   // ...and continues its monotonic sequence when reused.
   assert.equal(store.append(sessionA, message("a2"), T + 3), 2);
   for (let i = 0; i < 50; i++) store.append("urn:xeip:session:bulk-" + i, message("m" + i), T + 4 + i);
+  // "never" throttles manifest rewrites, so close forces the final state.
+  store.close();
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
   assert.ok(Object.keys(manifest.sessions).length <= 2, "empty sessions are reaped, not accumulated");
-  store.close();
 });
 
 test("persists monotonic per-session sequences and replays since/lookup", t => {
@@ -178,6 +179,46 @@ test("a second store on the same directory resumes and continues the sequence", 
   third.close();
 });
 
+test("holds an exclusive lock so a concurrent store on the same dir throws", t => {
+  const dir = makeDir(t);
+  const first = new DurableStore({ dir, fsync: "always" });
+  first.append(sessionA, message("a1"), T);
+  assert.throws(() => new DurableStore({ dir, fsync: "always" }), /durable store is locked/);
+  // A different directory is unaffected.
+  const other = new DurableStore({ dir: makeDir(t), fsync: "always" });
+  other.close();
+  // Closing the holder releases the lock, so this process may reopen it.
+  first.close();
+  const reopened = new DurableStore({ dir, fsync: "always" });
+  assert.equal(reopened.append(sessionA, message("a2"), T + 1), 2);
+  reopened.close();
+});
+
+test("does not steal a stale lock: the operator must remove it", t => {
+  const dir = makeDir(t);
+  writeFileSync(join(dir, "LOCK"), "999999\n");
+  assert.throws(() => new DurableStore({ dir }), /durable store is locked/);
+  unlinkSync(join(dir, "LOCK"));
+  const store = new DurableStore({ dir, fsync: "always" });
+  store.close();
+});
+
+test("throttles manifest rewrites for batch/never but persists on close", t => {
+  const dir = makeDir(t);
+  const store = new DurableStore({ dir, fsync: "batch" });
+  store.append(sessionA, message("a1"), T);
+  // Below the batch interval the manifest still reflects the load (empty) state.
+  const before = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  assert.equal(before.sessions[sessionA], undefined);
+  for (let i = 0; i < 200; i++) store.append(sessionA, message("t" + i), T + 1 + i);
+  const during = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  assert.ok(during.sessions[sessionA].nextSeq > 1, "manifest advanced at the batch interval");
+  store.append(sessionA, message("tail"), T + 1000);
+  store.close();
+  const closed = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  assert.equal(closed.sessions[sessionA].nextSeq, 203);
+});
+
 test("compaction reclaims per-session-evicted bytes and preserves the high-water mark", t => {
   const dir = makeDir(t);
   const store = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
@@ -239,6 +280,10 @@ test("recovers from an interrupted compaction without losing live records or reu
     store.append(sessionA, message("k2"), T + 1);
     store.append(sessionA, message("k3"), T + 2); // k1 evicted
     assert.throws(() => store.compact({ fault }), /compaction interrupted/);
+    // A faulted store releases its lock but leaves the crash state on disk (it
+    // does not rewrite the manifest), so reopening observes the interrupted
+    // compaction rather than a clean shutdown.
+    store.close();
 
     const recovered = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
     assert.equal(recovered.status(), "ok");

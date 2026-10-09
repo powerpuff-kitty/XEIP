@@ -7,8 +7,10 @@
  * lookupAllById, limits) so the relay can use either store. It is NOT a queue
  * with exactly-once semantics: a reserved-but-unappended sequence is a
  * permanent hole, interior corruption fails closed, and only a torn tail is
- * recovered. Bounded compaction reclaims evicted bytes crash-safely;
- * multi-process locking and encryption are deferred.
+ * recovered. Bounded compaction reclaims evicted bytes crash-safely. An
+ * exclusive `<dir>/LOCK` file serialises writers: a stale lock left by a
+ * crashed process must be removed by the operator (it is never stolen). At-rest
+ * encryption is deferred.
  */
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
@@ -24,6 +26,7 @@ const SEGMENT_BYTES = 1024 * 1024;
 const BATCH_FSYNC = 64;
 const RECORD_HEADER = 4 + 32; // uint32 payload length + SHA-256(payload)
 const MANIFEST = "manifest.json";
+const LOCK = "LOCK";
 const SEGMENT_PATTERN = /^segment-([0-9]+)\.log$/;
 const COMPACT_FAULTS = ["after-write", "after-manifest", "torn"];
 
@@ -83,6 +86,10 @@ export class DurableStore {
   #clock = 0;
   #pending = 0;
   #closed = false;
+  #lockPath;
+  #lockHeld = false;
+  #manifestPending = 0;
+  #faulted = false;
 
   constructor(configuration = {}) {
     if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
@@ -124,7 +131,20 @@ export class DurableStore {
     this.#dir = path.resolve(configuration.dir);
     fs.mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
     this.#manifestPath = path.join(this.#dir, MANIFEST);
-    this.#load();
+    this.#lockPath = path.join(this.#dir, LOCK);
+    // The lock is the correctness boundary for a single writer: hold it before
+    // touching any state, and release it if opening fails partway through.
+    this.#acquireLock();
+    try {
+      this.#load();
+    } catch (error) {
+      if (this.#activeFd !== undefined) {
+        try { fs.closeSync(this.#activeFd); } catch { /* best-effort */ }
+        this.#activeFd = undefined;
+      }
+      this.#releaseLock();
+      throw error;
+    }
   }
 
   // Numeric durable limits. `resumeLimits` mirrors the in-memory DeliveryLog
@@ -169,10 +189,12 @@ export class DurableStore {
     state.lastAccess = at;
     this.#totalBytes += entry.bytes;
     this.#enforce(state, entry, at);
-    // Persist the manifest (counter reservation and current capacity state)
-    // before the record, so an interrupted append cannot reuse the seq.
+    // Persist the manifest state before the record so an interrupted append
+    // cannot reuse the seq. "batch"/"never" throttle this rewrite (see
+    // #maybeWriteManifest); recovery reconstructs nextSeq from the records.
+    const segmentsBefore = this.#segments.length;
     this.#rollIfNeeded(entry.bytes);
-    this.#writeManifest();
+    this.#maybeWriteManifest(this.#segments.length !== segmentsBefore);
     this.#appendRecord(entry);
     this.#syncSegment(false);
     // Reclaim bytes evicted by capacity/retention once they dominate the budget.
@@ -235,15 +257,21 @@ export class DurableStore {
   /** Flushes, reclaims dead segments and releases the active segment. Idempotent. */
   close() {
     if (this.#closed) return;
-    if (this.#deadBytes() > 0) this.#compactBestEffort();
-    // Persist the latest reservations on close even in "batch" mode.
-    try { this.#writeManifest(true); } catch { /* best-effort flush on close */ }
+    // After an injected compaction crash the process is considered dead: it must
+    // not rewrite the manifest or compact, or the crash state under test would be
+    // erased. The lock is still released so a recovery store can open.
+    if (!this.#faulted) {
+      if (this.#deadBytes() > 0) this.#compactBestEffort();
+      // Persist the latest reservations on close even in "batch" mode.
+      try { this.#writeManifest(true); } catch { /* best-effort flush on close */ }
+    }
     this.#closed = true;
     if (this.#activeFd !== undefined) {
       try { this.#syncSegment(true); } catch { /* best-effort flush on close */ }
       fs.closeSync(this.#activeFd);
       this.#activeFd = undefined;
     }
+    this.#releaseLock();
   }
 
   /**
@@ -332,6 +360,7 @@ export class DurableStore {
 
     if (fault === "after-write" || fault === "torn") {
       if (fault === "torn") fs.appendFileSync(path.join(this.#dir, names[names.length - 1]), Buffer.from([0, 0, 0]));
+      this.#faulted = true;
       throw new Error("durable store: compaction interrupted");
     }
 
@@ -344,7 +373,7 @@ export class DurableStore {
     this.#refreshOldest();
     this.#writeManifest(true);
 
-    if (fault === "after-manifest") throw new Error("durable store: compaction interrupted");
+    if (fault === "after-manifest") { this.#faulted = true; throw new Error("durable store: compaction interrupted"); }
 
     for (const name of oldSegments) {
       if (names.includes(name)) continue;
@@ -454,7 +483,6 @@ export class DurableStore {
     }
     this.#enforceAll();
     this.#cleanupOrphans();
-    this.#writeManifest(true);
     if (this.#segments.length > 0) {
       this.#activeFile = this.#segments[this.#segments.length - 1];
       const file = path.join(this.#dir, this.#activeFile);
@@ -464,6 +492,10 @@ export class DurableStore {
     } else {
       this.#rollSegment();
     }
+    // Write the manifest only after the active segment is known, so it always
+    // references every segment that holds records. This is what lets "batch"/
+    // "never" skip later manifest rewrites until a roll or the batch interval.
+    this.#writeManifest(true);
   }
 
   #rollIfNeeded(bytes) {
@@ -494,7 +526,21 @@ export class DurableStore {
     this.#pending += 1;
   }
 
+  // Manifest write policy. "always" rewrites on every append. "batch"/"never"
+  // rewrite only when a segment rolls (the manifest records #segments, so a new
+  // segment MUST be referenced before it can be authoritative) or every
+  // BATCH_FSYNC appends; close/compact/load force it. Recovery reconstructs
+  // nextSeq from records, so a skipped write never reuses a sequence.
+  #maybeWriteManifest(rolled) {
+    if (this.#fsync === "always" || rolled || this.#manifestPending + 1 >= BATCH_FSYNC) {
+      this.#writeManifest();
+    } else {
+      this.#manifestPending += 1;
+    }
+  }
+
   #writeManifest(forceFsync = false) {
+    this.#manifestPending = 0;
     const sessions = {};
     for (const [session, state] of this.#sessions) {
       sessions[session] = { nextSeq: state.nextSeq, oldestSeq: state.oldestSeq, lastAccess: state.lastAccess };
@@ -514,6 +560,30 @@ export class DurableStore {
     fs.renameSync(tmp, this.#manifestPath);
     // Only sync the directory when the rename is meant to be durable.
     if (sync) this.#syncDir();
+  }
+
+  // An exclusive writer lock is the existence of <dir>/LOCK, created atomically
+  // with "wx". We deliberately do not steal or time out an existing lock: a
+  // stale lock from a crashed process is an operator-visible condition ("remove
+  // <dir>/LOCK") rather than a silent corruption risk.
+  #acquireLock() {
+    try {
+      const fd = fs.openSync(this.#lockPath, "wx", 0o600);
+      try { fs.writeSync(fd, String(process.pid) + "\n"); }
+      finally { fs.closeSync(fd); }
+      this.#lockHeld = true;
+    } catch (error) {
+      if (error && error.code === "EEXIST") {
+        throw new Error("durable store is locked (another process holds " + this.#dir + ")");
+      }
+      throw error;
+    }
+  }
+
+  #releaseLock() {
+    if (!this.#lockHeld) return;
+    this.#lockHeld = false;
+    try { fs.unlinkSync(this.#lockPath); } catch { /* already gone */ }
   }
 
   #syncSegment(force) {
