@@ -18,6 +18,8 @@ function makeDir(t) {
   return dir;
 }
 const segmentFile = dir => join(dir, readdirSync(dir).find(name => name.startsWith("segment-")));
+const diskText = dir => readdirSync(dir).filter(name => name.startsWith("segment-"))
+  .map(name => readFileSync(join(dir, name), "utf8")).join("\n");
 
 test("advertises the durable profile and rejects invalid configuration", t => {
   const dir = makeDir(t);
@@ -159,4 +161,99 @@ test("a second store on the same directory resumes and continues the sequence", 
   assert.deepEqual(third.since(sessionA, 0, T + 2).entries.map(entry => entry.seq), [1, 2, 3]);
   assert.equal(third.append(sessionA, message("a4"), T + 3), 4);
   third.close();
+});
+
+test("compaction reclaims per-session-evicted bytes and preserves the high-water mark", t => {
+  const dir = makeDir(t);
+  const store = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
+  for (let index = 1; index <= 3; index++) store.append(sessionA, message("p" + index), T + index);
+  // seq 1 is logically evicted but, before compaction, still occupies disk.
+  assert.ok(diskText(dir).includes("urn:xeip:message:p1"));
+  store.compact();
+  assert.ok(!diskText(dir).includes("urn:xeip:message:p1"), "evicted record was reclaimed");
+  assert.ok(diskText(dir).includes("urn:xeip:message:p2"));
+  assert.ok(diskText(dir).includes("urn:xeip:message:p3"));
+  store.close();
+
+  const fresh = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
+  const resumed = fresh.since(sessionA, 0, T + 3);
+  assert.deepEqual(resumed.entries.map(entry => entry.seq), [2, 3]);
+  assert.equal(resumed.from, 2);
+  assert.equal(resumed.gap, true);
+  assert.equal(fresh.append(sessionA, message("p4"), T + 4), 4);
+  fresh.close();
+});
+
+test("compaction enforces maxBytes on disk and the retained set survives restart", t => {
+  const dir = makeDir(t);
+  const recordBytes = 4 + 32 + Buffer.byteLength(JSON.stringify(
+    { session: sessionA, seq: 1, at: T, message: message("z1") }), "utf8");
+  const maxBytes = 2 * recordBytes + 1;
+  const store = new DurableStore({ dir, fsync: "always", maxBytes });
+  for (let index = 1; index <= 5; index++) store.append(sessionA, message("z" + index), T + index);
+  store.compact();
+  const onDisk = diskText(dir);
+  for (const gone of [1, 2, 3]) assert.ok(!onDisk.includes("urn:xeip:message:z" + gone));
+  for (const kept of [4, 5]) assert.ok(onDisk.includes("urn:xeip:message:z" + kept));
+  store.close();
+
+  const fresh = new DurableStore({ dir, fsync: "always", maxBytes });
+  assert.deepEqual(fresh.since(sessionA, 0, T + 5).entries.map(entry => entry.seq), [4, 5]);
+  assert.equal(fresh.append(sessionA, message("z6"), T + 6), 6);
+  fresh.close();
+});
+
+test("compaction triggers automatically once dead bytes dominate the byte budget", t => {
+  const dir = makeDir(t);
+  const recordBytes = 4 + 32 + Buffer.byteLength(JSON.stringify(
+    { session: sessionA, seq: 1, at: T, message: message("z1") }), "utf8");
+  const store = new DurableStore({ dir, fsync: "always", maxBytes: 2 * recordBytes + 1 });
+  for (let index = 1; index <= 6; index++) store.append(sessionA, message("z" + index), T + index);
+  const onDisk = diskText(dir);
+  for (const gone of [1, 2, 3, 4]) assert.ok(!onDisk.includes("urn:xeip:message:z" + gone));
+  assert.ok(onDisk.includes("urn:xeip:message:z5"));
+  assert.ok(onDisk.includes("urn:xeip:message:z6"));
+  store.close();
+});
+
+test("recovers from an interrupted compaction without losing live records or reusing a seq", t => {
+  for (const fault of ["after-write", "after-manifest", "torn"]) {
+    const dir = makeDir(t);
+    const store = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
+    store.append(sessionA, message("k1"), T);
+    store.append(sessionA, message("k2"), T + 1);
+    store.append(sessionA, message("k3"), T + 2); // k1 evicted
+    assert.throws(() => store.compact({ fault }), /compaction interrupted/);
+
+    const recovered = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 2 });
+    assert.equal(recovered.status(), "ok");
+    assert.deepEqual(recovered.since(sessionA, 0, T + 3).entries.map(entry => entry.seq), [2, 3]);
+    assert.equal(recovered.append(sessionA, message("k4"), T + 3), 4);
+    assert.deepEqual(recovered.since(sessionA, 0, T + 4).entries.map(entry => entry.seq), [3, 4]);
+    recovered.close();
+  }
+});
+
+test("close reclaims dead segments without an explicit compact call", t => {
+  const dir = makeDir(t);
+  const store = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 1 });
+  store.append(sessionA, message("q1"), T);
+  store.append(sessionA, message("q2"), T + 1);
+  assert.ok(diskText(dir).includes("urn:xeip:message:q1"));
+  store.close();
+  assert.ok(!diskText(dir).includes("urn:xeip:message:q1"));
+
+  const fresh = new DurableStore({ dir, fsync: "always", maxEntriesPerSession: 1 });
+  assert.deepEqual(fresh.since(sessionA, 0, T + 1).entries.map(entry => entry.seq), [2]);
+  assert.equal(fresh.append(sessionA, message("q3"), T + 2), 3);
+  fresh.close();
+});
+
+test("compact rejects invalid options and a closed store", t => {
+  const store = new DurableStore({ dir: makeDir(t), fsync: "always" });
+  assert.throws(() => store.compact(null), TypeError);
+  assert.throws(() => store.compact([]), TypeError);
+  assert.throws(() => store.compact({ fault: "whenever" }), RangeError);
+  store.close();
+  assert.throws(() => store.compact(), /closed/);
 });

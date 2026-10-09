@@ -7,7 +7,8 @@
  * lookupAllById, limits) so the relay can use either store. It is NOT a queue
  * with exactly-once semantics: a reserved-but-unappended sequence is a
  * permanent hole, interior corruption fails closed, and only a torn tail is
- * recovered. Compaction, multi-process locking and encryption are deferred.
+ * recovered. Bounded compaction reclaims evicted bytes crash-safely;
+ * multi-process locking and encryption are deferred.
  */
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
@@ -23,10 +24,15 @@ const SEGMENT_BYTES = 1024 * 1024;
 const BATCH_FSYNC = 64;
 const RECORD_HEADER = 4 + 32; // uint32 payload length + SHA-256(payload)
 const MANIFEST = "manifest.json";
-const SEGMENT_PATTERN = /^segment-[0-9]{6}\.log$/;
+const SEGMENT_PATTERN = /^segment-([0-9]+)\.log$/;
+const COMPACT_FAULTS = ["after-write", "after-manifest", "torn"];
 
 const sha256 = value => createHash("sha256").update(value).digest();
-const envelopeBytes = message => Buffer.byteLength(JSON.stringify(message), "utf8");
+const encodeRecord = raw => {
+  const header = Buffer.allocUnsafe(4);
+  header.writeUInt32BE(raw.length, 0);
+  return Buffer.concat([header, sha256(raw), raw]);
+};
 
 // Reads length-prefixed, checksummed records from one segment. A truncated or
 // checksum-failing final record is a torn tail and is dropped (torn === true).
@@ -50,7 +56,7 @@ function readRecords(buffer) {
     let record;
     try { record = JSON.parse(payload.toString("utf8")); }
     catch { throw new Error("durable store: invalid record payload"); }
-    records.push(record);
+    records.push({ record, raw: payload, bytes: recordEnd - offset });
     offset = recordEnd;
   }
   return { records, torn: false, validBytes: offset };
@@ -63,8 +69,10 @@ export class DurableStore {
   #activeFile;
   #activeFd;
   #activeBytes = 0;
-  #sessions = new Map(); // session -> { entries: [{seq, at, message, bytes}], nextSeq, oldestSeq, lastAccess }
+  #sessions = new Map(); // session -> { entries: [{seq, at, message, raw, bytes}], nextSeq, oldestSeq, lastAccess }
   #totalBytes = 0;
+  #diskBytes = 0;
+  #nextSegmentIndex = 0;
   #retentionMs;
   #maxEntriesPerSession;
   #maxSessions;
@@ -150,7 +158,8 @@ export class DurableStore {
       this.#sessions.set(session, state);
     }
     const seq = state.nextSeq++;
-    const entry = { seq, at, message, bytes: envelopeBytes(message) };
+    const raw = Buffer.from(JSON.stringify({ session, seq, at, message }), "utf8");
+    const entry = { seq, at, message, raw, bytes: RECORD_HEADER + raw.length };
     state.entries.push(entry);
     state.lastAccess = at;
     this.#totalBytes += entry.bytes;
@@ -159,8 +168,10 @@ export class DurableStore {
     // before the record, so an interrupted append cannot reuse the seq.
     this.#rollIfNeeded(entry.bytes);
     this.#writeManifest();
-    this.#appendRecord(session, entry);
+    this.#appendRecord(entry);
     this.#syncSegment(false);
+    // Reclaim bytes evicted by capacity/retention once they dominate the budget.
+    if (this.#deadBytes() > this.#maxBytes / 2) this.#compactBestEffort();
     return seq;
   }
 
@@ -211,14 +222,134 @@ export class DurableStore {
     return state.entries.filter(entry => entry.message.id === id).map(toEntry);
   }
 
-  /** Flushes and releases the active segment. Idempotent. */
+  /** Flushes, reclaims dead segments and releases the active segment. Idempotent. */
   close() {
     if (this.#closed) return;
+    if (this.#deadBytes() > 0) this.#compactBestEffort();
     this.#closed = true;
     if (this.#activeFd !== undefined) {
       try { this.#syncSegment(true); } catch { /* best-effort flush on close */ }
       fs.closeSync(this.#activeFd);
       this.#activeFd = undefined;
+    }
+  }
+
+  /**
+   * Rewrites only the live records into fresh segment(s), atomically swaps the
+   * manifest (temp + fsync + rename) and then unlinks the superseded segments.
+   * The previous generation stays valid and referenced until the new manifest
+   * is durably in place, so an interruption cannot lose live records or reuse a
+   * `seq`. `options.fault` is a test-only crash injection: "after-write" (new
+   * segments written, manifest not swapped), "after-manifest" (swapped, old
+   * segments not yet unlinked) or "torn" (a truncated new segment).
+   */
+  compact(options) {
+    if (this.#closed) throw new Error("durable store is closed");
+    let fault;
+    if (options !== undefined) {
+      if (!options || typeof options !== "object" || Array.isArray(options)) {
+        throw new TypeError("invalid durable compact options");
+      }
+      fault = options.fault;
+      if (fault !== undefined && !COMPACT_FAULTS.includes(fault)) {
+        throw new RangeError("invalid durable compact fault");
+      }
+    }
+    this.#compact(fault);
+  }
+
+  #compactBestEffort() {
+    try { this.#compact(); }
+    catch { /* a failed compaction leaves the previous generation intact */ }
+  }
+
+  #deadBytes() { return this.#diskBytes - this.#totalBytes; }
+
+  #allocateSegmentName() {
+    const name = "segment-" + String(this.#nextSegmentIndex).padStart(6, "0") + ".log";
+    this.#nextSegmentIndex += 1;
+    return name;
+  }
+
+  #refreshOldest() {
+    for (const state of this.#sessions.values()) {
+      state.oldestSeq = state.entries.length > 0 ? state.entries[0].seq : state.nextSeq;
+    }
+  }
+
+  #compact(fault) {
+    // Freeze the current generation: sync and close the active fd so every
+    // appended byte is durable before the live set is rewritten.
+    if (this.#activeFd !== undefined) {
+      this.#syncSegment(true);
+      fs.closeSync(this.#activeFd);
+      this.#activeFd = undefined;
+    }
+    const oldSegments = this.#segments.slice();
+
+    // Pack live records into fresh segments, preserving verbatim payload bytes.
+    const outputs = [];
+    let chunks = [];
+    let chunkBytes = 0;
+    const flushChunk = () => { outputs.push(Buffer.concat(chunks)); chunks = []; chunkBytes = 0; };
+    for (const state of this.#sessions.values()) {
+      for (const entry of state.entries) {
+        const record = encodeRecord(entry.raw);
+        if (chunkBytes > 0 && chunkBytes + record.length > SEGMENT_BYTES) flushChunk();
+        chunks.push(record);
+        chunkBytes += record.length;
+      }
+    }
+    if (chunks.length > 0) flushChunk();
+
+    const names = [];
+    const count = Math.max(outputs.length, 1);
+    for (let index = 0; index < count; index++) names.push(this.#allocateSegmentName());
+    for (let index = 0; index < outputs.length; index++) {
+      const file = path.join(this.#dir, names[index]);
+      const fd = fs.openSync(file, "w", 0o600);
+      try {
+        fs.writeSync(fd, outputs[index]);
+        if (this.#fsync !== "never") fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+    if (outputs.length === 0) fs.writeFileSync(path.join(this.#dir, names[0]), Buffer.alloc(0), { mode: 0o600 });
+    this.#syncDir();
+
+    if (fault === "after-write" || fault === "torn") {
+      if (fault === "torn") fs.appendFileSync(path.join(this.#dir, names[names.length - 1]), Buffer.from([0, 0, 0]));
+      throw new Error("durable store: compaction interrupted");
+    }
+
+    // Commit: reference the fresh generation before deleting the old one.
+    this.#segments = names;
+    this.#activeFile = names[names.length - 1];
+    this.#activeFd = fs.openSync(path.join(this.#dir, this.#activeFile), "a");
+    this.#activeBytes = outputs.length > 0 ? outputs[outputs.length - 1].length : 0;
+    this.#diskBytes = this.#totalBytes;
+    this.#refreshOldest();
+    this.#writeManifest();
+
+    if (fault === "after-manifest") throw new Error("durable store: compaction interrupted");
+
+    for (const name of oldSegments) {
+      if (names.includes(name)) continue;
+      try { fs.unlinkSync(path.join(this.#dir, name)); } catch { /* already gone */ }
+    }
+    this.#syncDir();
+  }
+
+  // A crashed compaction can leave unreferenced segment files behind. After a
+  // successful load the manifest is authoritative, so they are safe to remove.
+  #cleanupOrphans() {
+    const referenced = new Set(this.#segments);
+    let names;
+    try { names = fs.readdirSync(this.#dir); } catch { return; }
+    for (const name of names) {
+      if (!SEGMENT_PATTERN.test(name) || referenced.has(name)) continue;
+      try { fs.unlinkSync(path.join(this.#dir, name)); } catch { /* best-effort */ }
     }
   }
 
@@ -259,13 +390,19 @@ export class DurableStore {
       });
     }
     this.#segments = (manifest?.segments ?? []).filter(name => typeof name === "string" && SEGMENT_PATTERN.test(name));
+    this.#diskBytes = 0;
+    for (const name of fs.readdirSync(this.#dir)) {
+      const match = SEGMENT_PATTERN.exec(name);
+      if (match) this.#nextSegmentIndex = Math.max(this.#nextSegmentIndex, Number(match[1]) + 1);
+    }
     for (let index = 0; index < this.#segments.length; index++) {
       const file = path.join(this.#dir, this.#segments[index]);
       let buffer;
       try { buffer = fs.readFileSync(file); }
       catch { throw new Error("durable store: missing segment " + this.#segments[index]); }
       const { records, torn, validBytes } = readRecords(buffer);
-      for (const record of records) {
+      this.#diskBytes += torn ? validBytes : buffer.length;
+      for (const { record, raw, bytes } of records) {
         if (!record || typeof record.session !== "string" || !Number.isSafeInteger(record.seq) || record.seq < 1 ||
             record.message === undefined || record.message === null) {
           throw new Error("durable store: invalid record");
@@ -276,7 +413,7 @@ export class DurableStore {
           this.#sessions.set(record.session, state);
         }
         state.entries.push({ seq: record.seq, at: Number.isFinite(record.at) ? record.at : 0,
-          message: record.message, bytes: envelopeBytes(record.message) });
+          message: record.message, raw, bytes });
         if (record.seq + 1 > state.nextSeq) { state.nextSeq = record.seq + 1; this.#status = "recovered"; }
       }
       if (torn) {
@@ -304,6 +441,7 @@ export class DurableStore {
       for (const entry of state.entries) this.#totalBytes += entry.bytes;
     }
     this.#enforceAll();
+    this.#cleanupOrphans();
     this.#writeManifest();
     if (this.#segments.length > 0) {
       this.#activeFile = this.#segments[this.#segments.length - 1];
@@ -318,7 +456,7 @@ export class DurableStore {
 
   #rollIfNeeded(bytes) {
     if (this.#activeFd === undefined) { this.#rollSegment(); return; }
-    if (this.#activeBytes > 0 && this.#activeBytes + RECORD_HEADER + bytes > SEGMENT_BYTES) this.#rollSegment();
+    if (this.#activeBytes > 0 && this.#activeBytes + bytes > SEGMENT_BYTES) this.#rollSegment();
   }
 
   #rollSegment() {
@@ -327,7 +465,7 @@ export class DurableStore {
       fs.closeSync(this.#activeFd);
       this.#activeFd = undefined;
     }
-    const name = "segment-" + String(this.#segments.length).padStart(6, "0") + ".log";
+    const name = this.#allocateSegmentName();
     const file = path.join(this.#dir, name);
     fs.writeFileSync(file, Buffer.alloc(0), { mode: 0o600 });
     this.#activeFd = fs.openSync(file, "a");
@@ -336,13 +474,11 @@ export class DurableStore {
     this.#segments.push(name);
   }
 
-  #appendRecord(session, entry) {
-    const payload = Buffer.from(JSON.stringify({ session, seq: entry.seq, at: entry.at, message: entry.message }), "utf8");
-    const header = Buffer.allocUnsafe(4);
-    header.writeUInt32BE(payload.length, 0);
-    const record = Buffer.concat([header, sha256(payload), payload]);
+  #appendRecord(entry) {
+    const record = encodeRecord(entry.raw);
     fs.writeSync(this.#activeFd, record);
     this.#activeBytes += record.length;
+    this.#diskBytes += record.length;
     this.#pending += 1;
   }
 
