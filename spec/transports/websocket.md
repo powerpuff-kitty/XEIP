@@ -33,10 +33,10 @@ An unknown `type`, a non-object frame, a non-URI selector or invalid JSON yields
 - Only text messages are supported. A binary frame closes with `1003`.
 - Client frames MUST be masked; an unmasked frame closes with `1002`.
 - Lengths MUST use the minimal encoding and the 64-bit form MUST clear its high bit; a malformed length closes with `1002`.
-- Fragmented text messages are reassembled; a message exceeding 128 KiB closes with `1009`. Each individual frame is also bounded to 128 KiB.
+- Fragmented text messages are reassembled; a message exceeding 128 KiB closes with `1009`. Each individual frame is also bounded to 128 KiB, and a message is bounded to 1024 fragments (exceeding either closes with `1009`).
 - A text message that is not valid UTF-8 closes with `1007`. Control frames must be final and at most 125 bytes, and reserved bits must be clear (`1002` otherwise).
 - A received close code outside the allowed set (`1000`–`1014` except `1004`/`1005`/`1006`, or `3000`–`4999`) closes with `1002`; a close reason that is not valid UTF-8 closes with `1007`.
-- The outbound queue per connection is bounded to 256 KiB. A write that would exceed it closes the connection with `1013` and does not block other subscribers.
+- The outbound queue per connection is bounded to 256 KiB. Every outbound frame — message, server ping and pong reply — is written through that bound, so a write that would exceed it closes the connection with `1013` and does not block other subscribers.
 - The server sends a protocol ping every 15 seconds. Two consecutive missed pongs close the connection with `1013`.
 - Close codes: `1000` normal, `1002` protocol error, `1003` unsupported data, `1007` invalid payload, `1008` policy violation, `1009` message too big, `1013` try again later.
 

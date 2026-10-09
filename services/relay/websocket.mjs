@@ -94,19 +94,26 @@ export function encodeFrame(opcode, payload, fin = true, maskKey = null) {
  * messages are reassembled across fragments and validated as UTF-8.
  */
 export class FrameParser {
-  #buffer = Buffer.alloc(0);
+  // Incoming bytes are held as a list of chunks with a read offset rather than a
+  // single re-concatenated buffer, so a large frame delivered in many tiny TCP
+  // segments costs O(frame) instead of O(frame^2) memcpy.
+  #chunks = [];
+  #offset = 0;
+  #length = 0;
   #fragmentOpcode = null;
   #fragments = [];
   #fragmentLength = 0;
+  #fragmentCount = 0;
 
-  constructor({ maxFrame, maxMessage, expectMask = true }) {
+  constructor({ maxFrame, maxMessage, maxFragments = 1024, expectMask = true }) {
     this.maxFrame = maxFrame;
     this.maxMessage = maxMessage;
+    this.maxFragments = maxFragments;
     this.expectMask = expectMask;
   }
 
   push(chunk) {
-    this.#buffer = this.#buffer.length === 0 ? chunk : Buffer.concat([this.#buffer, chunk]);
+    if (chunk.length > 0) { this.#chunks.push(chunk); this.#length += chunk.length; }
     const events = [];
     for (;;) {
       const frame = this.#readFrame();
@@ -116,27 +123,66 @@ export class FrameParser {
     return events;
   }
 
+  // Byte at a relative offset from the read cursor, or -1 when unavailable.
+  #peek(relative) {
+    if (relative < 0 || relative >= this.#length) return -1;
+    let remaining = relative;
+    for (let index = 0; index < this.#chunks.length; index++) {
+      const chunk = this.#chunks[index];
+      const start = index === 0 ? this.#offset : 0;
+      const available = chunk.length - start;
+      if (remaining < available) return chunk[start + remaining];
+      remaining -= available;
+    }
+    return -1;
+  }
+
+  // Consume exactly `count` bytes (already known available) in one pass.
+  #take(count) {
+    const out = Buffer.allocUnsafe(count);
+    let written = 0;
+    while (written < count) {
+      const chunk = this.#chunks[0];
+      const available = chunk.length - this.#offset;
+      const need = count - written;
+      if (need >= available) {
+        chunk.copy(out, written, this.#offset);
+        written += available;
+        this.#chunks.shift();
+        this.#offset = 0;
+      } else {
+        chunk.copy(out, written, this.#offset, this.#offset + need);
+        this.#offset += need;
+        written += need;
+      }
+    }
+    this.#length -= count;
+    return out;
+  }
+
   #readFrame() {
-    const buffer = this.#buffer;
-    if (buffer.length < 2) return null;
-    const fin = (buffer[0] & 0x80) !== 0;
-    const rsv = buffer[0] & 0x70;
-    const opcode = buffer[0] & 0x0f;
-    const masked = (buffer[1] & 0x80) !== 0;
-    let length = buffer[1] & 0x7f;
-    let offset = 2;
+    if (this.#length < 2) return null;
+    const first = this.#peek(0);
+    const second = this.#peek(1);
+    const fin = (first & 0x80) !== 0;
+    const rsv = first & 0x70;
+    const opcode = first & 0x0f;
+    const masked = (second & 0x80) !== 0;
+    let length = second & 0x7f;
+    let headerLength = 2;
     if (rsv !== 0) throw new WebSocketError(CLOSE.protocol, "reserved bits set");
     if (length === 126) {
-      if (buffer.length < offset + 2) return null;
-      length = buffer.readUInt16BE(offset);
-      offset += 2;
+      if (this.#length < 4) return null;
+      length = (this.#peek(2) << 8) | this.#peek(3);
+      headerLength = 4;
       if (length < 126) throw new WebSocketError(CLOSE.protocol, "non-minimal length encoding");
     } else if (length === 127) {
-      if (buffer.length < offset + 8) return null;
-      if ((buffer[offset] & 0x80) !== 0) throw new WebSocketError(CLOSE.protocol, "invalid 64-bit length");
-      const wide = buffer.readBigUInt64BE(offset);
+      if (this.#length < 10) return null;
+      if ((this.#peek(2) & 0x80) !== 0) throw new WebSocketError(CLOSE.protocol, "invalid 64-bit length");
+      let wide = 0n;
+      for (let index = 0; index < 8; index++) wide = (wide << 8n) | BigInt(this.#peek(2 + index));
       length = Number(wide);
-      offset += 8;
+      headerLength = 10;
       if (length <= 0xffff) throw new WebSocketError(CLOSE.protocol, "non-minimal length encoding");
       if (wide > BigInt(Number.MAX_SAFE_INTEGER)) throw new WebSocketError(CLOSE.tooBig, "frame exceeds supported size");
     }
@@ -144,17 +190,18 @@ export class FrameParser {
     if (isControl && (length > MAX_CONTROL_PAYLOAD || !fin)) throw new WebSocketError(CLOSE.protocol, "invalid control frame");
     if (!isControl && length > this.maxFrame) throw new WebSocketError(CLOSE.tooBig, "frame exceeds limit");
     if (masked !== this.expectMask) throw new WebSocketError(CLOSE.protocol, this.expectMask ? "client frames must be masked" : "server frames must not be masked");
-    const maskOffset = offset;
-    if (this.expectMask) offset += 4;
-    if (buffer.length < offset + length) return null;
-    const payload = Buffer.allocUnsafe(length);
+    const maskOffset = headerLength;
+    const payloadOffset = headerLength + (this.expectMask ? 4 : 0);
+    const total = payloadOffset + length;
+    if (this.#length < total) return null;
+    const frame = this.#take(total);
+    let payload = frame.subarray(payloadOffset);
     if (this.expectMask) {
-      const mask = buffer.subarray(maskOffset, maskOffset + 4);
-      for (let i = 0; i < length; i++) payload[i] = buffer[offset + i] ^ mask[i & 3];
-    } else {
-      buffer.copy(payload, 0, offset, offset + length);
+      const mask = frame.subarray(maskOffset, maskOffset + 4);
+      const unmasked = Buffer.allocUnsafe(length);
+      for (let index = 0; index < length; index++) unmasked[index] = payload[index] ^ mask[index & 3];
+      payload = unmasked;
     }
-    this.#buffer = buffer.subarray(offset + length);
     return { fin, opcode, payload };
   }
 
@@ -186,12 +233,16 @@ export class FrameParser {
     }
     this.#fragmentLength += payload.length;
     if (this.#fragmentLength > this.maxMessage) throw new WebSocketError(CLOSE.tooBig, "message exceeds limit");
+    // Bound the number of fragments too: zero-length continuations cost ~2 wire
+    // bytes each, so a count bound prevents unbounded allocation.
+    if (++this.#fragmentCount > this.maxFragments) throw new WebSocketError(CLOSE.tooBig, "too many fragments");
     this.#fragments.push(payload);
     if (!fin) return;
     const bytes = Buffer.concat(this.#fragments);
     this.#fragments = [];
     this.#fragmentOpcode = null;
     this.#fragmentLength = 0;
+    this.#fragmentCount = 0;
     let text;
     try {
       text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -230,19 +281,26 @@ export class WebSocketConnection extends EventEmitter {
 
   sendText(text) {
     if (!this.isOpen()) return false;
-    const frame = encodeFrame(OPCODES.text, Buffer.from(text, "utf8"));
+    // A false socket.write only means the bytes were queued, not that they
+    // failed, so count the frame as delivered once it is within the bound.
+    return this.#enqueue(encodeFrame(OPCODES.text, Buffer.from(text, "utf8")));
+  }
+
+  ping(payload = Buffer.alloc(0)) {
+    if (this.isOpen()) this.#enqueue(encodeFrame(OPCODES.ping, payload));
+  }
+
+  // Bounded outbound write for every frame except the final close frame. A peer
+  // that never reads must not be able to grow the socket buffer without limit
+  // (ping/pong/close included), so all data and heartbeat frames go through here.
+  #enqueue(frame) {
+    if (!this.isOpen()) return false;
     if (this.#socket.writableLength + frame.length > this.maxPending) {
       this.close(CLOSE.tryAgain, "outbound queue full");
       return false;
     }
-    // A false socket.write only means the bytes were queued, not that they
-    // failed, so count the frame as delivered once it is within the bound.
     this.#write(frame);
     return true;
-  }
-
-  ping(payload = Buffer.alloc(0)) {
-    if (this.isOpen()) this.#write(encodeFrame(OPCODES.ping, payload));
   }
 
   close(code = CLOSE.normal, reason = "") {
@@ -280,7 +338,7 @@ export class WebSocketConnection extends EventEmitter {
     for (const event of events) {
       if (this.#closed) return;
       if (event.type === "message") this.emit("message", event.text);
-      else if (event.type === "ping") this.#write(encodeFrame(OPCODES.pong, event.payload));
+      else if (event.type === "ping") this.#enqueue(encodeFrame(OPCODES.pong, event.payload));
       else if (event.type === "pong") this.emit("pong", event.payload);
       else if (event.type === "close") { this.close(event.code, event.reason); return; }
     }

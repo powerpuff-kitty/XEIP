@@ -261,7 +261,14 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     const { duplicate } = receiptLedger.record(principal, session, entry.seq, entry.message.id);
     return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
   };
-  const server = createServer(async (req, res) => {
+  const server = createServer((req, res) => {
+    // A store/disk failure must not become an unhandled rejection that kills the process.
+    routeRequest(req, res).catch(() => {
+      if (!res.headersSent) writeJson(res, 500, { error: "internal error" });
+      else res.destroy();
+    });
+  });
+  const routeRequest = async (req, res) => {
     // Reject non-loopback connections even if a consumer accidentally binds a public interface.
     if (!loopbackOnly(req)) return writeJson(res, 403, { error: "loopback-only development relay" });
     const origin = localOrigin(req);
@@ -429,7 +436,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
       return writeJson(res, outcome.status, outcome.body);
     }
     writeJson(res, 404, { error: "route not found" });
-  });
+  };
   const checkSubscriptions = () => {
     for (const [session, clients] of sessions) for (const client of clients) {
       if (!admission.canSubscribe(client.principal, session)) client.destroy();
@@ -480,6 +487,10 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     heartbeat.unref();
     connection.on("pong", () => { awaitingPong = 0; });
     connection.on("message", text => {
+      try { handleControl(text); }
+      catch { control({ type: "error", status: 500, error: "internal error" }); }
+    });
+    const handleControl = text => {
       let value;
       try { value = JSON.parse(text); }
       catch { return control({ type: "error", status: 400, error: "invalid or oversized JSON" }); }
@@ -563,7 +574,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         return control({ type: "acknowledged", session: outcome.body.session, seq: outcome.body.seq, duplicate: outcome.body.duplicate });
       }
       return control({ type: "error", status: 400, error: "unknown control type" });
-    });
+    };
     connection.on("close", () => {
       clearInterval(heartbeat);
       for (const [session, client] of ownSubscriptions) {

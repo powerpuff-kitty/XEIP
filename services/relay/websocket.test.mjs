@@ -316,6 +316,45 @@ test("bounds outbound buffering and closes a slow socket with 1013", () => {
   assert.equal(closeFrame.readUInt16BE(2), CLOSE.tryAgain);
 });
 
+test("bounds queued pong replies for a peer that never reads", () => {
+  const written = [];
+  const socket = new EventEmitter();
+  socket.writableLength = 0;
+  socket.destroyed = false;
+  socket.setNoDelay = () => {};
+  socket.write = buffer => { written.push(buffer); socket.writableLength += buffer.length; return false; };
+  socket.end = () => { socket.destroyed = true; };
+  socket.destroy = () => { socket.destroyed = true; };
+  const connection = new WebSocketConnection(socket, Buffer.alloc(0), { maxPending: 200 });
+  const ping = encodeFrame(OPCODES.ping, Buffer.alloc(125), true, randomBytes(4));
+  for (let i = 0; i < 10 && connection.isOpen(); i++) socket.emit("data", ping);
+  assert.equal(connection.isOpen(), false);
+  const closeFrame = written.find(buffer => (buffer[0] & 0x0f) === OPCODES.close);
+  assert.ok(closeFrame, "close frame written");
+  assert.equal(closeFrame.readUInt16BE(2), CLOSE.tryAgain);
+});
+
+test("bounds the number of fragments in a fragmented message", async t => {
+  await withRelay(t, { token: TOKEN }, async (base, open) => {
+    const client = await open({ token: TOKEN });
+    client.raw(encodeFrame(OPCODES.text, Buffer.from("a"), false, randomBytes(4)));
+    for (let i = 0; i < 1200; i++) client.raw(encodeFrame(OPCODES.continuation, Buffer.alloc(0), false, randomBytes(4)));
+    await client.waitFor(() => client.closeCode !== null, "fragment bound close");
+    assert.equal(client.closeCode, CLOSE.tooBig);
+  });
+});
+
+test("reassembles a large frame delivered one byte per chunk", () => {
+  const parser = new FrameParser({ maxFrame: 128 * 1024, maxMessage: 128 * 1024 });
+  const text = "a".repeat(60000);
+  const frame = encodeFrame(OPCODES.text, Buffer.from(text), true, randomBytes(4));
+  const events = [];
+  for (const byte of frame) events.push(...parser.push(Buffer.from([byte])));
+  const message = events.find(event => event.type === "message");
+  assert.ok(message, "message reassembled");
+  assert.equal(message.text, text);
+});
+
 test("resumes a WebSocket subscriber after a sequence cursor and reports gaps", async t => {
   await withRelay(t, { token: TOKEN, delivery: { maxPerSession: 1 } }, async (base, open) => {
     const sender = await open({ token: TOKEN });
