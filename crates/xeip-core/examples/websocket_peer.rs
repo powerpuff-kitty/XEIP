@@ -38,6 +38,12 @@ const CLOSE_UNSUPPORTED: u16 = 1003;
 const CLOSE_INVALID_PAYLOAD: u16 = 1007;
 const CLOSE_TOO_BIG: u16 = 1009;
 
+/// Close codes a peer may send: 1000-1014 except the reserved 1004/1005/1006,
+/// plus the registered/private 3000-4999 range.
+fn is_valid_close_code(code: u16) -> bool {
+    matches!(code, 1000..=1014) && !matches!(code, 1004..=1006) || matches!(code, 3000..=4999)
+}
+
 /// A protocol violation detected while parsing a server frame. The `code` is
 /// the RFC 6455 close code the client should echo back to the peer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,13 +157,22 @@ impl FrameDecoder {
                 self.buffer[offset + 1],
             ]));
             offset += 2;
+            if length < 126 {
+                return Err(WsError::protocol("non-minimal length encoding"));
+            }
         } else if length == 127 {
             if self.buffer.len() < offset + 8 {
                 return Ok(None);
             }
+            if self.buffer[offset] & 0x80 != 0 {
+                return Err(WsError::protocol("invalid 64-bit length"));
+            }
             let mut wide = [0u8; 8];
             wide.copy_from_slice(&self.buffer[offset..offset + 8]);
             let wide = u64::from_be_bytes(wide);
+            if wide <= 0xffff {
+                return Err(WsError::protocol("non-minimal length encoding"));
+            }
             if wide > MAX_FRAME as u64 {
                 return Err(WsError::too_big("frame exceeds limit"));
             }
@@ -209,6 +224,9 @@ impl FrameDecoder {
                 } else {
                     CLOSE_NORMAL
                 };
+                if frame.payload.len() >= 2 && !is_valid_close_code(code) {
+                    return Err(WsError::protocol("invalid close code"));
+                }
                 let reason = if frame.payload.len() >= 2 {
                     String::from_utf8(frame.payload[2..].to_vec())
                         .map_err(|_| WsError::invalid_payload("invalid close reason"))?
@@ -600,9 +618,14 @@ fn connect(host: &str, port: u16, path: &str, token: &str) -> io::Result<WebSock
     let key = base64_encode(&random_bytes());
     // An empty token deliberately sends no Authorization header so the same
     // reference client can exercise an unauthenticated upgrade rejection.
+    let authority = if host.contains(':') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    };
     let mut request = format!(
         "GET {path} HTTP/1.1\r\n\
-         Host: {host}:{port}\r\n\
+         Host: {authority}\r\n\
          Connection: Upgrade\r\n\
          Upgrade: websocket\r\n\
          Sec-WebSocket-Version: 13\r\n\
@@ -911,11 +934,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     if control_type(&subscribed) != "subscribed" {
         return Err(format!("expected subscribed, got {subscribed}").into());
     }
+    if subscribed.get("session").and_then(|value| value.as_str()) != Some(args.session.as_str()) {
+        return Err(format!("subscribed to an unexpected session: {subscribed}").into());
+    }
     println!("{{\"type\":\"ready\"}}");
     io::stdout().flush()?;
 
     drive(&mut websocket, &args)?;
-    websocket.close(CLOSE_NORMAL, "")?;
+    // A peer-initiated disconnect already closed the socket; a close-write
+    // failure there is not an error. On a clean end the close still runs.
+    let _ = websocket.close(CLOSE_NORMAL, "");
     println!("{{\"type\":\"done\"}}");
     io::stdout().flush()?;
     Ok(())

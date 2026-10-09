@@ -24,8 +24,9 @@ let executable;
 
 before(async () => {
   const run = promisify(execFile);
-  await run("cargo", ["build", "--example", "websocket_peer", "--locked", "--quiet"], { cwd: root, timeout: 120000 });
-  const { stdout } = await run("cargo", ["metadata", "--no-deps", "--format-version", "1", "--locked"], { cwd: root });
+  const bigBuffer = { maxBuffer: 16 * 1024 * 1024 };
+  await run("cargo", ["build", "--example", "websocket_peer", "--locked", "--quiet"], { cwd: root, timeout: 120000, ...bigBuffer });
+  const { stdout } = await run("cargo", ["metadata", "--no-deps", "--format-version", "1", "--locked"], { cwd: root, ...bigBuffer });
   executable = join(JSON.parse(stdout).target_directory, "debug", "examples", "websocket_peer" + (process.platform === "win32" ? ".exe" : ""));
 });
 
@@ -38,8 +39,9 @@ async function listen(t, server) {
     socket.once("close", () => sockets.delete(socket));
   });
   await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    const onError = reject;
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => { server.off("error", onError); resolve(); });
   });
   t.after(async () => {
     for (const socket of sockets) socket.destroy();
@@ -68,12 +70,21 @@ function wsPeer(t, port, options = {}) {
   if (options.file !== undefined) assign("--file", "XEIP_FILE", options.file);
 
   const child = spawn(executable, args, { cwd: root, env, stdio: ["pipe", "pipe", "pipe"] });
+  // Decode streams as UTF-8 so a read boundary inside a multi-byte codepoint
+  // cannot corrupt a JSON control line.
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
   const events = [];
   const waiters = [];
   let stdout = "", stderr = "", exited = null;
   let resolveReady, rejectReady;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-  const wake = () => { for (const waiter of waiters.splice(0)) waiter(); };
+  const wake = () => {
+    // Re-queue any waiter whose condition is still unmet so an unrelated event
+    // cannot permanently drop it.
+    const pending = waiters.splice(0);
+    for (const attempt of pending) if (!attempt()) waiters.push(attempt);
+  };
   child.stdout.on("data", chunk => {
     stdout += chunk;
     let newline;
@@ -110,7 +121,14 @@ function wsPeer(t, port, options = {}) {
   t.after(async () => {
     clearTimeout(watchdog);
     if (child.exitCode === null && child.signalCode === null) child.kill();
-    await done;
+    const kill9 = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, 2000);
+    kill9.unref();
+    child.stdin.destroy();
+    // Bound teardown so a wedged peer cannot hang the test runner.
+    await Promise.race([done, delay(6000)]);
+    clearTimeout(kill9);
   });
   const waitFor = (predicate, label, timeout = 5000) => new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(label ?? "condition not met")), timeout);
