@@ -1,6 +1,6 @@
 # Local delivery receipts profile — xeip.local-receipts/0.1
 
-Experimental, opt-in recipient-acknowledgment extension for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It lets an authenticated subscriber acknowledge a specific retained delivery, correlates that acknowledgment against the [local delivery](local-delivery.md) log, and remembers it in a **bounded, per-principal in-memory ledger**. It is not exactly-once execution, not proof of processing, not durable persistence and not a replacement for the application-level `receipt` kind. [ADR 0005](decisions/0005-local-receipts.md) records the design-only scope.
+Experimental, opt-in recipient-acknowledgment extension for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It lets an authenticated subscriber acknowledge a specific retained delivery, correlates that acknowledgment against the [local delivery](local-delivery.md) log, and remembers it in a **bounded, per-principal in-memory ledger**. It is not exactly-once execution, not proof of processing, not durable persistence and not a replacement for the application-level `receipt` kind. It is implemented as an opt-in local prototype in `services/relay/receipts.mjs`; [ADR 0005](decisions/0005-local-receipts.md) records the decision.
 
 ## Selection and limits
 
@@ -145,7 +145,7 @@ Adding the `receipts` option is additive and explicit. Without it, no `/receipts
 - **Per-sender ordering scopes** — acceptance order per session from the [delivery profile](local-delivery.md), explicitly not sender creation or completion order.
 - **Stable reconnect cursors** — `Last-Event-ID`/`after`/`subscribe.after` from the delivery profile; receipts do not change cursor stability.
 - **Offline/persistent delivery profile** — **not met**: receipts and deliveries are in-memory and restart-loses. The design records this as [open question](#open-questions) 7 and a non-goal.
-- **Conformance tests for disconnect/retry/duplicate/reordered frames** — not implemented here (design only). Proposed future vectors: ack a retained target, duplicate ack, ack an evicted/expired target, `seq`/`id` disagreement, ambiguous `id`, cross-principal denial, revoked credential, receipt without admission/delivery, and receipt-disabled regression.
+- **Conformance tests for disconnect/retry/duplicate/reordered frames** — implemented for the local prototype: ack a retained target, duplicate ack, `seq`/`id` disagreement (409), ambiguous `id` (409), unknown/evicted target (404), ineligible recipient (403), acknowledgement without admission/delivery (construction error), revoked credential, and receipt-disabled regression. See `services/relay/receipts.test.mjs` and `services/relay/receipts-http.test.mjs`.
 - **Exactly-once not falsely claimed** — the explicit [non-claims](#what-a-receipt-does-and-does-not-mean) and [non-goals](#explicit-non-goals).
 
-Issue 4 remains incomplete: this is a design, and durable/idempotent delivery, offline recovery and conformance tests are still required.
+Issue 4 remains incomplete: durable/idempotent delivery, offline recovery and a persistent/cross-relay receipt profile are still required.

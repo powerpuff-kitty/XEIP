@@ -1,6 +1,6 @@
 # ADR 0005: Authenticated recipient receipts over a bounded in-memory correlation ledger
 
-Status: Proposed (design only; not implemented). Date: 2026-10-09. This decision records a design direction for [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) and advances the receipt portion of its delivery/correlation scope. Nothing described here is implemented, and it does not approve durable delivery or exactly-once execution.
+Status: Accepted for the local prototype (implemented in `services/relay/receipts.mjs`). Date: 2026-10-09. This decision records the design for [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) and advances the receipt portion of its delivery/correlation scope. It remains an opt-in, in-memory local prototype and does not approve durable delivery or exactly-once execution.
 
 ## Context
 

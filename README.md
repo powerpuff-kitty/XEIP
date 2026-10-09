@@ -37,6 +37,8 @@ Run `npm run demo:replay` to additionally suppress identical retries within a bo
 
 Run `npm run demo:delivery` to assign a per-session sequence, resume a disconnected subscriber from a cursor, receive an explicit gap when older messages aged out, and reject an invalid cursor. [The local delivery profile](spec/local-delivery.md) is in-memory and bounded; a new process or an out-of-window cursor cannot recover the backlog.
 
+Run `npm run demo:receipts` to record an authenticated recipient acknowledgment against a retained delivery, see idempotent duplicate handling, and observe ineligible-recipient and unknown-target denials. [The local receipts profile](spec/local-receipts.md) requires admission and delivery, is bounded and in-memory, and is advisory — never proof of processing or exactly-once execution.
+
 ```bash
 node --test services/relay/*.test.mjs
 npm ci --ignore-scripts      # development tools only; the relay/demo need no install
@@ -68,7 +70,7 @@ human / AI agent / machine / service
 
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
-- **Receipts design (proposed, not implemented):** [spec/local-receipts.md](spec/local-receipts.md).
+- **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
@@ -99,6 +101,7 @@ human / AI agent / machine / service
 | Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
+| Bounded per-principal recipient receipts | Opt-in local receipts prototype; in-memory, advisory, not proof of processing |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |
