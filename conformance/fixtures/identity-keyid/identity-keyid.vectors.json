@@ -1,0 +1,44 @@
+[
+  {
+    "name": "all-zero ed25519 public key",
+    "publicKeyHex": "0000000000000000000000000000000000000000000000000000000000000000",
+    "keyId": "z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+    "entityUrn": "urn:xeip:entity:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+    "deviceUrn": "urn:xeip:device:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP"
+  },
+  {
+    "name": "all-0xff ed25519 public key",
+    "publicKeyHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "keyId": "z6MkwgaR63138bEEgad7uk993KMX54vBA6KTB4sFhCPnSB2e",
+    "entityUrn": "urn:xeip:entity:z6MkwgaR63138bEEgad7uk993KMX54vBA6KTB4sFhCPnSB2e",
+    "deviceUrn": "urn:xeip:device:z6MkwgaR63138bEEgad7uk993KMX54vBA6KTB4sFhCPnSB2e"
+  },
+  {
+    "name": "sequential bytes 00..1f",
+    "publicKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "keyId": "z6MkeTGwHmLmuCmgg4ABYhzWVh6ZX7hTwWt8gguAretUfc9c",
+    "entityUrn": "urn:xeip:entity:z6MkeTGwHmLmuCmgg4ABYhzWVh6ZX7hTwWt8gguAretUfc9c",
+    "deviceUrn": "urn:xeip:device:z6MkeTGwHmLmuCmgg4ABYhzWVh6ZX7hTwWt8gguAretUfc9c"
+  },
+  {
+    "name": "incremental bytes 01..20",
+    "publicKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "keyId": "z6MkeXCES4onVW4up9Qgz1KRnZsKmGufcaZxF6Zpv2w5QwUK",
+    "entityUrn": "urn:xeip:entity:z6MkeXCES4onVW4up9Qgz1KRnZsKmGufcaZxF6Zpv2w5QwUK",
+    "deviceUrn": "urn:xeip:device:z6MkeXCES4onVW4up9Qgz1KRnZsKmGufcaZxF6Zpv2w5QwUK"
+  },
+  {
+    "name": "RFC 8032 test vector 1 public key",
+    "publicKeyHex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "keyId": "z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+    "entityUrn": "urn:xeip:entity:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+    "deviceUrn": "urn:xeip:device:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"
+  },
+  {
+    "name": "W3C did:key z6MkhaXg example public key",
+    "publicKeyHex": "2e6fcce36701dc791488e0d0b1745cc1e33a4c1c9fcc41c63bd343dbbe0970e6",
+    "keyId": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    "entityUrn": "urn:xeip:entity:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    "deviceUrn": "urn:xeip:device:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+  }
+]
