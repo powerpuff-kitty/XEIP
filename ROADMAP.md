@@ -77,10 +77,12 @@ The live issue tracker is authoritative; completion requires passing acceptance 
 
 | Stage | Open follow-up work |
 | --- | --- |
-| v0.1 foundation hardening | [#2 core semantics](https://github.com/powerpuff-kitty/XEIP/issues/2), [#5 schema conformance](https://github.com/powerpuff-kitty/XEIP/issues/5), [#6 threat model](https://github.com/powerpuff-kitty/XEIP/issues/6), [#8 Rust validation](https://github.com/powerpuff-kitty/XEIP/issues/8), [#9 SSE hardening](https://github.com/powerpuff-kitty/XEIP/issues/9), [#10 reproducible CI](https://github.com/powerpuff-kitty/XEIP/issues/10) |
+| v0.1 foundation hardening | [#2 version/spec semantics](https://github.com/powerpuff-kitty/XEIP/issues/2), [#6 threat model and fuzzing](https://github.com/powerpuff-kitty/XEIP/issues/6) |
 | v0.2 trust and sessions | [#1 identities](https://github.com/powerpuff-kitty/XEIP/issues/1), [#3 session admission](https://github.com/powerpuff-kitty/XEIP/issues/3), [#4 delivery](https://github.com/powerpuff-kitty/XEIP/issues/4), [#7 WebSockets](https://github.com/powerpuff-kitty/XEIP/issues/7) |
 | v0.3 integrations | [#11 discovery](https://github.com/powerpuff-kitty/XEIP/issues/11), [#12 A2A](https://github.com/powerpuff-kitty/XEIP/issues/12), [#13 MCP](https://github.com/powerpuff-kitty/XEIP/issues/13), [#14 presence](https://github.com/powerpuff-kitty/XEIP/issues/14), [#15 Surface](https://github.com/powerpuff-kitty/XEIP/issues/15), [#16 Agent Room](https://github.com/powerpuff-kitty/XEIP/issues/16), [#17 telemetry](https://github.com/powerpuff-kitty/XEIP/issues/17), [#18 Swift](https://github.com/powerpuff-kitty/XEIP/issues/18) |
 | v0.4 and later | [#19 media](https://github.com/powerpuff-kitty/XEIP/issues/19), [#20 devices](https://github.com/powerpuff-kitty/XEIP/issues/20), [#21 durability](https://github.com/powerpuff-kitty/XEIP/issues/21), [#23 federation](https://github.com/powerpuff-kitty/XEIP/issues/23), [#24 stable releases](https://github.com/powerpuff-kitty/XEIP/issues/24) |
+
+Closed foundation issues (acceptance criteria met; see each issue's closing comment for evidence): [#5 JSON Schema conformance](https://github.com/powerpuff-kitty/XEIP/issues/5), [#8 Rust strict validation](https://github.com/powerpuff-kitty/XEIP/issues/8), [#9 TypeScript SSE hardening](https://github.com/powerpuff-kitty/XEIP/issues/9), [#10 reproducible CI](https://github.com/powerpuff-kitty/XEIP/issues/10).
 
 ## Issue conventions
 
