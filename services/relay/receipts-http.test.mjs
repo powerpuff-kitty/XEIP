@@ -187,13 +187,46 @@ test("returns 404 for a target evicted from the delivery log", async t => {
   assert.equal(evicted.status, 404); await evicted.body.cancel();
 });
 
-test("does not serve the receipt route when the option is omitted", async t => {
-  const { base, receipt } = await setup(t, { receipts: null });
+test("rejects a receipt with 400 when the profile is omitted, on both transports", async t => {
+  const { base, credentials, receipt } = await setup(t, { receipts: null });
   const response = await receipt(b, { session: room, seq: 1 });
-  assert.equal(response.status, 404); await response.body.cancel();
+  assert.equal(response.status, 400); await response.body.cancel();
   const health = await (await fetch(base + "/health")).json();
   assert.equal(health.receiptProfile, undefined);
   assert.equal(health.receipts, undefined);
+  const client = await openWebSocket(base, { token: credentials.get(b) });
+  client.send({ type: "receipt", session: room, seq: 1 });
+  await waitFor(() => client.messages.some(value => value.type === "error"), "websocket disabled receipt");
+  assert.equal(client.messages.find(value => value.type === "error").status, 400);
+  client.close();
+});
+
+test("an id-only receipt ignores entries the principal is not eligible for", async t => {
+  const { post, receipt } = await setup(t);
+  const id = "urn:uuid:" + randomUUID();
+  // a addresses the id to itself; b reuses the same id addressed to itself.
+  assert.equal((await post(a, message({ id, recipient: a }))).status, 202);
+  assert.equal((await post(b, message({ id, recipient: b, sender: b }))).status, 202);
+  // Without eligibility filtering this id-only receipt would be 409 ambiguous.
+  const ack = await receipt(b, { session: room, id });
+  assert.equal(ack.status, 202);
+  assert.equal((await ack.json()).acknowledged, true);
+});
+
+test("reports WebSocket receipt errors with the same statuses as HTTP", async t => {
+  const { base, credentials, post } = await setup(t);
+  const accepted = await post(a, message());
+  const { seq } = await accepted.json();
+  const sender = await openWebSocket(base, { token: credentials.get(a) });
+  sender.send({ type: "receipt", session: room, seq });
+  await waitFor(() => sender.messages.some(value => value.type === "error"), "ineligible WS receipt");
+  assert.equal(sender.messages.find(value => value.type === "error").status, 403);
+  sender.close();
+  const recipient = await openWebSocket(base, { token: credentials.get(b) });
+  recipient.send({ type: "receipt", session: room, seq: 9999 });
+  await waitFor(() => recipient.messages.some(value => value.type === "error"), "unknown WS receipt");
+  assert.equal(recipient.messages.find(value => value.type === "error").status, 404);
+  recipient.close();
 });
 
 test("never writes a receipt to an SSE stream", async t => {

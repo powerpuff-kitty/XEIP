@@ -99,7 +99,9 @@ export class DeliveryLog {
    * count as activity, so a receipt can never change retention or eviction order.
    */
   lookup(session, seq, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
+      throw new RangeError("invalid delivery elapsed time");
+    }
     const log = this.#sessions.get(session);
     if (!log) return null;
     const now = Math.max(this.#elapsed, elapsedMs);
@@ -118,7 +120,9 @@ export class DeliveryLog {
    * receipt needs this to reject more than one match as ambiguous.
    */
   lookupAllById(session, id, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
+      throw new RangeError("invalid delivery elapsed time");
+    }
     const log = this.#sessions.get(session);
     if (!log) return [];
     const now = Math.max(this.#elapsed, elapsedMs);

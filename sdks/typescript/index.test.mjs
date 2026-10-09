@@ -135,6 +135,23 @@ test("acknowledge rejects malformed selectors before fetch", async () => {
   }
 });
 
+test("acknowledge rejects a response that does not match the request", async () => {
+  for (const body of [
+    { acknowledged: true, session: "urn:xeip:session:other", seq: 42, duplicate: false },
+    { acknowledged: true, session: "urn:xeip:session:demo", seq: 41, duplicate: false }
+  ]) {
+    const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+      fetchImpl: async () => new Response(JSON.stringify(body), { status: 202 }) });
+    await assert.rejects(client.acknowledge("urn:xeip:session:demo", { seq: 42 }), /invalid relay response/);
+  }
+});
+
+test("acknowledge rejects a non-JSON 202 body as an invalid relay response", async () => {
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response("not json", { status: 202 }) });
+  await assert.rejects(client.acknowledge("urn:xeip:session:demo", { seq: 1 }), /invalid relay response/);
+});
+
 test("acknowledge rejects a non-202 response and cancels the body", async () => {
   let cancelled = false;
   const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",

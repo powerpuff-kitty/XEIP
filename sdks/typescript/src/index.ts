@@ -191,12 +191,20 @@ export class XeipHttpSseClient {
       await response.body?.cancel().catch(() => {});
       throw new Error("XEIP relay rejected receipt: HTTP " + response.status);
     }
-    const result: unknown = await response.json();
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      throw new TypeError("invalid relay response");
+    }
     const responseBody = requireRecord(result, "relay response");
     const duplicate = responseBody.duplicate;
     const seq = responseBody.seq;
     if (responseBody.acknowledged !== true || typeof responseBody.session !== "string" ||
         !Number.isSafeInteger(seq) || (seq as number) < 0 || typeof duplicate !== "boolean") {
+      throw new TypeError("invalid relay response");
+    }
+    if (responseBody.session !== session || (target.seq !== undefined && seq !== target.seq)) {
       throw new TypeError("invalid relay response");
     }
     return { acknowledged: true, session: responseBody.session, seq: seq as number, duplicate };

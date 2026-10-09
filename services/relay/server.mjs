@@ -229,19 +229,20 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
     if (hasId && !absoluteUri(id)) return { status: 400, error: "invalid id" };
     if (status !== undefined && status !== "received") return { status: 400, error: "invalid status" };
     if (!admission.canSubscribe(principal, session)) return { status: 403, error: "forbidden" };
+    // Recipient eligibility is applied BEFORE ambiguity resolution so another
+    // principal's messages can never make a valid id-only receipt ambiguous.
+    const eligible = candidate => candidate.message.recipient === undefined || candidate.message.recipient === principal.entity;
     let entry;
     if (hasSeq) {
       entry = deliveryLog.lookup(session, seq);
       if (entry === null) return { status: 404, error: "target not retained" };
       if (hasId && entry.message.id !== id) return { status: 409, error: "selector conflict" };
+      if (!eligible(entry)) return { status: 403, error: "forbidden" };
     } else {
-      const matches = deliveryLog.lookupAllById(session, id);
+      const matches = deliveryLog.lookupAllById(session, id).filter(eligible);
       if (matches.length === 0) return { status: 404, error: "target not retained" };
       if (matches.length > 1) return { status: 409, error: "ambiguous target" };
       entry = matches[0];
-    }
-    if (entry.message.recipient !== undefined && entry.message.recipient !== principal.entity) {
-      return { status: 403, error: "forbidden" };
     }
     const { duplicate } = receiptLedger.record(principal, session, entry.seq, entry.message.id);
     return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
@@ -370,7 +371,6 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
       return writeJson(res, outcome.status, outcome.body);
     }
     if (req.method === "POST" && url.pathname === "/receipts") {
-      if (!receiptLedger) return writeJson(res, 404, { error: "route not found" });
       if ((req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase() !== "application/json") {
         return writeJson(res, 415, { error: "application/json content type required" });
       }
@@ -487,6 +487,8 @@ export function createRelay({ token, admission, replay, delivery, receipts }) {
         // The `type` discriminator is transport framing, not part of the receipt.
         const document = { ...value };
         delete document.type;
+        try { requireBoundedJsonDepth(document); }
+        catch { return control({ type: "error", status: 413, error: "invalid or oversized JSON" }); }
         const outcome = routeReceipt(principal, document);
         if (outcome.status === 401) {
           control({ type: "error", status: 401, error: "unauthorized" });

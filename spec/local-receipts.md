@@ -28,7 +28,7 @@ The relay processes a receipt in this order:
 3. Require the `session` to be authorized for that principal.
 4. Resolve the target against the retained delivery log for that session. With `seq`, look up that entry; with both, the entry's `id` MUST equal the supplied `id` or the receipt is rejected. With `id` only, match retained entries by ID digest; zero matches is not retained, and more than one match is ambiguous and rejected.
 5. Verify the principal is an eligible recipient of that retained envelope under the same membership and recipient rules as live routing: an explicit `recipient` MUST equal the principal, and an omitted recipient admits a current authorized session member. This is an eligibility check, not proof that a write occurred.
-6. Record or refresh one receipt for the `(principal, session, seq)` key with a fresh monotonic expiry no later than `windowMs` from acceptance. Repeating the same receipt is idempotent and reports `duplicate: true` without adding a record.
+6. Record or refresh one receipt for the `(principal, session, seq)` key with a fresh monotonic expiry set to `now + windowMs`. A duplicate slides the window rather than adding a record, so repeated acknowledgment keeps that receipt alive; the receipt ledger is independent of the delivery log and may outlive an evicted target. A full bound never fails the request.
 7. Return the acknowledgment to the acknowledging connection only. The relay does not broadcast a receipt, does not attribute it to another principal, and does not change `delivered`, the stored envelope, the delivery sequence, resume behavior or retention.
 
 A receipt can be recorded even when the principal was offline at the original acceptance, because resume made the message available within retention. It therefore means "this authorized principal now asserts it holds this retained acceptance", not "the relay wrote these bytes to this principal".
@@ -93,7 +93,7 @@ Receipt processing reuses the existing loopback authority/origin gates and admis
 
 | Status | Condition |
 | --- | --- |
-| 400 | Malformed control document, missing/duplicate selectors, unknown field, invalid `status`, or a receipt sent when the receipts profile is not enabled |
+| 400 | Malformed control document, missing selector, unknown field, invalid `status`, or a receipt sent when the receipts profile is not enabled |
 | 401 | Missing, incorrect or revoked credential |
 | 403 | Authenticated principal is not an eligible recipient of the target, or its session authorization fails |
 | 404 | The target `seq`/`id` is unknown or is no longer retained |
@@ -112,7 +112,7 @@ The receipt ledger is bounded three ways: by `windowMs` on a process-monotonic c
 
 ## Migration and rollback
 
-Adding the `receipts` option is additive and explicit. Without it, no `/receipts` route or `receipt` control is served, health is unchanged, and all existing modes, schemas and fixtures behave as before. Selecting it requires admission and delivery, so a shared-token or delivery-only deployment is never silently upgraded. Removing the option restores the prior behavior and drops the in-memory ledger; no persistent data or migration is introduced. Rollback is not automatic after a validation or authorization error.
+Adding the `receipts` option is additive and explicit. Without it, `POST /receipts` and the WebSocket `receipt` control both return `400` (profile not enabled), health omits the receipt fields, and all existing modes, schemas and fixtures behave as before. Selecting it requires admission and delivery, so a shared-token or delivery-only deployment is never silently upgraded. Removing the option restores the prior behavior and drops the in-memory ledger; no persistent data or migration is introduced. Rollback is not automatic after a validation or authorization error.
 
 ## Explicit non-goals
 
