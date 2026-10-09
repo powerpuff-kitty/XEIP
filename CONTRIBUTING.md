@@ -24,4 +24,15 @@ Open a GitHub issue with: motivating use case, affected entity/message/schema fi
 - Do not mark v0.1 examples production-ready or present bearer-string sender IDs as verified identities.
 - Avoid committing secrets, tokens, personal information or real user transcripts.
 
+## Dependencies
+
+Cryptographic and canonicalization choices are recorded in [ADR 0007](spec/decisions/0007-crypto-dependencies.md). Until those libraries are added, the rules below govern every dependency PR.
+
+- **Audited and standards-based.** Prefer maintained, permissively licensed libraries with clear advisories and independent review. Implement only standards (Ed25519, JWS/JWK, RFC 8785 JCS, TLS); never hand-roll cryptographic primitives or bespoke signature/JOSE/JCS encoders.
+- **Pinned.** Add exact versions (`=` in Cargo, exact strings in npm) and re-verify the library's `rust-version` against the 1.81 MSRV. Do not float a new dependency on `^`.
+- **Minimal.** Add a dependency only when the standard library or an existing dependency cannot cover the need, and keep transitive native/build-script dependencies to a minimum.
+- **Per-ecosystem lockfile.** Update and commit the relevant `Cargo.lock` or `package-lock.json` in the same PR; CI runs `npm ci --ignore-scripts` and cargo with `--locked`.
+- **Core stays dependency-light.** `xeip-core` keeps `serde`/`serde_json` and gains no crypto, network or JOSE dependency; signing belongs in a dedicated identity layer or the SDK, not the wire models.
+- **Supply-chain checks.** Dependency PRs must state the crate/package, exact version, license, advisories cleared, native/build-script dependencies, and the maintenance/audit evidence. Expect `cargo-deny`, `cargo audit`, `npm audit` and SHA-pinned CI actions as these profiles are implemented.
+
 Code of conduct: be constructive and respectful. Security reports should be sent privately according to SECURITY.md.

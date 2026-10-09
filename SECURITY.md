@@ -13,3 +13,7 @@ Please use GitHub's private **Report a vulnerability** feature (Security tab →
 No stable releases are supported yet. Changes are made on main until a versioned release and maintenance policy are established.
 
 See [spec/security.md](spec/security.md) for production requirements and [spec/threat-model.md](spec/threat-model.md) for the reviewed local implementation, controls and remaining risks. A development token is **not** a replacement for identity binding, authorization, signed/verifiable discovery, session admission, secure transport and command validation.
+
+## Dependencies and supply chain
+
+Cryptographic and canonicalization dependencies for the proposed identity profile are selected in [ADR 0007](spec/decisions/0007-crypto-dependencies.md); [threat-model.md](spec/threat-model.md) T8 records the current dependency/build risk. In short: use audited, standards-only libraries and never custom crypto; pin exact versions and commit `Cargo.lock`/`package-lock.json`; keep `xeip-core` free of crypto, network and JOSE dependencies; and rely on locked installs (`npm ci --ignore-scripts`, cargo `--locked`) plus `cargo-deny`/`cargo audit`/`npm audit` and SHA-pinned CI actions as those profiles land. Lockfiles provide reproducibility, not provenance.

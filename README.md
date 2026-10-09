@@ -71,6 +71,7 @@ human / AI agent / machine / service
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
+- **Durable delivery design (proposed, not implemented):** [spec/local-durable.md](spec/local-durable.md).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
