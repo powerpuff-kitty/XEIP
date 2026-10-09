@@ -71,7 +71,7 @@ human / AI agent / machine / service
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
-- **Durable delivery design (proposed, not implemented):** [spec/local-durable.md](spec/local-durable.md).
+- **Durable delivery (first slice implemented):** [spec/local-durable.md](spec/local-durable.md).
 - **Local threat model and review:** [spec/threat-model.md](spec/threat-model.md).
 - **Transports:** [HTTP + SSE](spec/transports/http-sse.md) and [WebSocket](spec/transports/websocket.md) local profiles.
 - **Roadmap:** [ROADMAP.md](ROADMAP.md) and [GitHub issues](https://github.com/powerpuff-kitty/XEIP/issues).
@@ -103,6 +103,8 @@ human / AI agent / machine / service
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
 | Bounded per-principal recipient receipts | Opt-in local receipts prototype; in-memory, advisory, not proof of processing |
+| Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in first slice; checksummed append-only log with persisted sequence; no compaction/locking/encryption |
+| Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder (`tools/derive-keyid.mjs`) with vectors; signing/verification pending |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |

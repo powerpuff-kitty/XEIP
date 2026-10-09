@@ -1,6 +1,6 @@
 # ADR 0006: Bounded durable delivery store with restart-surviving cursors
 
-Status: Proposed (design only; not implemented). Date: 2026-10-09. This decision records a design direction for [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) and [issue 21](https://github.com/powerpuff-kitty/XEIP/issues/21). It does not approve production deployment, and nothing described here is implemented, tested or benchmarked.
+Status: Accepted for a first local prototype slice (implemented in `services/relay/durable.mjs`). Date: 2026-10-09. This decision records the design for [issue 4](https://github.com/powerpuff-kitty/XEIP/issues/4) and [issue 21](https://github.com/powerpuff-kitty/XEIP/issues/21). The first dependency-free slice is tested; compaction, multi-process locking, the SQLite backend, durable receipts and at-rest encryption remain unresolved, and it does not approve production deployment.
 
 ## Context
 

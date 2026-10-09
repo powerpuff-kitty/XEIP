@@ -1,0 +1,34 @@
+# cargo-deny configuration for XEIP (see spec/decisions/0007-crypto-dependencies.md).
+# Run with: cargo deny check
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licenses compatible with the Apache-2.0 codebase.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "BSL-1.0",
+  "Zlib",
+]
+
+[bans]
+version = 2
+multiple-versions = "warn"
+wildcards = "deny"
+# Crypto must come from audited libraries, never a hand-rolled or renamed crate.
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
