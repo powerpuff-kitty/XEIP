@@ -32,6 +32,21 @@ test("advertises the durable profile and rejects invalid configuration", t => {
   }
 });
 
+test("reaps empty sessions so the manifest and session map stay bounded", t => {
+  const dir = makeDir(t);
+  const store = new DurableStore({ dir, fsync: "never", maxSessions: 1, maxEntriesPerSession: 1 });
+  assert.equal(store.append(sessionA, message("a1"), T), 1);
+  assert.equal(store.append(sessionB, message("b1"), T + 1), 1); // evicts/reaps A
+  // A reaped session still reports a gap from its remembered high-water mark.
+  assert.equal(store.since(sessionA, 0, T + 2).gap, true);
+  // ...and continues its monotonic sequence when reused.
+  assert.equal(store.append(sessionA, message("a2"), T + 3), 2);
+  for (let i = 0; i < 50; i++) store.append("urn:xeip:session:bulk-" + i, message("m" + i), T + 4 + i);
+  const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  assert.ok(Object.keys(manifest.sessions).length <= 2, "empty sessions are reaped, not accumulated");
+  store.close();
+});
+
 test("persists monotonic per-session sequences and replays since/lookup", t => {
   const dir = makeDir(t);
   const store = new DurableStore({ dir, fsync: "always" });

@@ -70,6 +70,7 @@ export class DurableStore {
   #activeFd;
   #activeBytes = 0;
   #sessions = new Map(); // session -> { entries: [{seq, at, message, raw, bytes}], nextSeq, oldestSeq, lastAccess }
+  #known = new Map(); // session -> last assigned seq, retained after an empty session is reaped
   #totalBytes = 0;
   #diskBytes = 0;
   #nextSegmentIndex = 0;
@@ -154,8 +155,12 @@ export class DurableStore {
     const at = this.#tick(receivedAt);
     let state = this.#sessions.get(session);
     if (!state) {
-      state = { entries: [], nextSeq: 1, oldestSeq: 1, lastAccess: at };
+      // Restore the monotonic sequence if this session was reaped when empty.
+      const last = this.#known.get(session);
+      const nextSeq = last === undefined ? 1 : last + 1;
+      state = { entries: [], nextSeq, oldestSeq: nextSeq, lastAccess: at };
       this.#sessions.set(session, state);
+      this.#known.delete(session);
     }
     const seq = state.nextSeq++;
     const raw = Buffer.from(JSON.stringify({ session, seq, at, message }), "utf8");
@@ -185,9 +190,14 @@ export class DurableStore {
     const time = this.#tick(now);
     const state = this.#sessions.get(session);
     if (state) this.#retire(state, time);
-    if (!state || state.entries.length === 0) {
-      const last = state === undefined ? undefined : state.nextSeq - 1;
+    if (!state) {
+      const last = this.#known.get(session);
       if (last !== undefined && after < last) return { entries: [], gap: true, from: last + 1 };
+      return { entries: [], gap: false, from: after + 1 };
+    }
+    if (state.entries.length === 0) {
+      const last = state.nextSeq - 1;
+      if (after < last) return { entries: [], gap: true, from: last + 1 };
       return { entries: [], gap: false, from: after + 1 };
     }
     state.lastAccess = time;
@@ -226,6 +236,8 @@ export class DurableStore {
   close() {
     if (this.#closed) return;
     if (this.#deadBytes() > 0) this.#compactBestEffort();
+    // Persist the latest reservations on close even in "batch" mode.
+    try { this.#writeManifest(true); } catch { /* best-effort flush on close */ }
     this.#closed = true;
     if (this.#activeFd !== undefined) {
       try { this.#syncSegment(true); } catch { /* best-effort flush on close */ }
@@ -330,7 +342,7 @@ export class DurableStore {
     this.#activeBytes = outputs.length > 0 ? outputs[outputs.length - 1].length : 0;
     this.#diskBytes = this.#totalBytes;
     this.#refreshOldest();
-    this.#writeManifest();
+    this.#writeManifest(true);
 
     if (fault === "after-manifest") throw new Error("durable store: compaction interrupted");
 
@@ -442,7 +454,7 @@ export class DurableStore {
     }
     this.#enforceAll();
     this.#cleanupOrphans();
-    this.#writeManifest();
+    this.#writeManifest(true);
     if (this.#segments.length > 0) {
       this.#activeFile = this.#segments[this.#segments.length - 1];
       const file = path.join(this.#dir, this.#activeFile);
@@ -482,22 +494,26 @@ export class DurableStore {
     this.#pending += 1;
   }
 
-  #writeManifest() {
+  #writeManifest(forceFsync = false) {
     const sessions = {};
     for (const [session, state] of this.#sessions) {
       sessions[session] = { nextSeq: state.nextSeq, oldestSeq: state.oldestSeq, lastAccess: state.lastAccess };
     }
     const data = Buffer.from(JSON.stringify({ version: STORE_VERSION, segments: this.#segments, sessions }), "utf8");
     const tmp = this.#manifestPath + ".tmp";
+    // fsync:"always" fsyncs every manifest; "batch" only on compact/close
+    // (recovery reconstructs nextSeq from records); "never" never fsyncs.
+    const sync = this.#fsync === "always" || (forceFsync && this.#fsync !== "never");
     const fd = fs.openSync(tmp, "w", 0o600);
     try {
       fs.writeSync(fd, data);
-      if (this.#fsync !== "never") fs.fsyncSync(fd);
+      if (sync) fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
     }
     fs.renameSync(tmp, this.#manifestPath);
-    this.#syncDir();
+    // Only sync the directory when the rename is meant to be durable.
+    if (sync) this.#syncDir();
   }
 
   #syncSegment(force) {
@@ -537,11 +553,12 @@ export class DurableStore {
       const dropped = state.entries.shift();
       this.#totalBytes -= dropped.bytes;
     }
+    state.oldestSeq = state.entries.length > 0 ? state.entries[0].seq : state.nextSeq;
     this.#evictToBytes(protectedEntry);
     this.#evictSessions(state);
-    for (const candidate of this.#sessions.values()) {
-      candidate.oldestSeq = candidate.entries.length > 0 ? candidate.entries[0].seq : candidate.nextSeq;
-    }
+    // Deleting emptied sessions keeps the session map and the per-append
+    // manifest bounded; the monotonic sequence is retained in #known.
+    this.#reapEmpty(state);
   }
 
   // Post-load capacity enforcement: no entry is protected, retention is applied
@@ -558,6 +575,7 @@ export class DurableStore {
     for (const state of this.#sessions.values()) {
       state.oldestSeq = state.entries.length > 0 ? state.entries[0].seq : state.nextSeq;
     }
+    this.#reapEmpty(undefined);
   }
 
   #evictToBytes(protectedEntry) {
@@ -574,10 +592,13 @@ export class DurableStore {
       if (victim === undefined) break;
       victim.state.entries.shift();
       this.#totalBytes -= victim.entry.bytes;
+      victim.state.oldestSeq = victim.state.entries.length > 0 ? victim.state.entries[0].seq : victim.state.nextSeq;
     }
   }
 
   #evictSessions(protectedState) {
+    // Empty sessions are reaped, so this is O(1) while under the session cap.
+    if (this.#sessions.size <= this.#maxSessions) return;
     const retained = [...this.#sessions.values()].filter(state => state.entries.length > 0);
     if (retained.length <= this.#maxSessions) return;
     retained.sort((left, right) => left.lastAccess - right.lastAccess);
@@ -587,8 +608,23 @@ export class DurableStore {
       if (state === protectedState) continue;
       for (const entry of state.entries) this.#totalBytes -= entry.bytes;
       state.entries = [];
+      state.oldestSeq = state.nextSeq;
       count -= 1;
     }
+  }
+
+  #reapEmpty(protectedState) {
+    for (const [session, state] of this.#sessions) {
+      if (state === protectedState || state.entries.length > 0) continue;
+      this.#remember(session, state.nextSeq - 1);
+      this.#sessions.delete(session);
+    }
+  }
+
+  #remember(session, lastSeq) {
+    this.#known.delete(session);
+    this.#known.set(session, lastSeq);
+    while (this.#known.size > this.#maxSessions * 4) this.#known.delete(this.#known.keys().next().value);
   }
 }
 

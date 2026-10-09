@@ -176,7 +176,7 @@ async function wsThroughput(base, count) {
 }
 
 async function durableBench() {
-  for (const fsync of ["never", "always"]) {
+  for (const fsync of ["never", "batch", "always"]) {
     const dir = mkdtempSync(join(tmpdir(), "xeip-bench-"));
     try {
       const store = new DurableStore({ dir, backend: "segments", fsync, retentionMs: 3600000, maxEntriesPerSession: 1000000, maxSessions: 1024, maxBytes: 268435456 });
