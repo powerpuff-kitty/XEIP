@@ -20,7 +20,8 @@
     "demo:receipts": "node examples/local-relay/receipts-demo.mjs",
     "demo:durable": "node examples/local-relay/durable-demo.mjs",
     "demo:limits": "node examples/local-relay/limits-demo.mjs",
-    "bench": "node tools/bench.mjs"
+    "bench": "node tools/bench.mjs",
+    "check:js": "node tools/check-js.mjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",

@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit
-      - run: node --check examples/local-relay/console.js
+      - run: npm run check:js
       - run: npm run validate:fixtures
       - run: npm run typecheck
       - run: npm run build:ts
