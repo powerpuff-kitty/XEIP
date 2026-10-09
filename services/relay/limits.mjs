@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { advanceElapsed, boundedOption, BoundedMap, requireOptions } from "./primitives.mjs";
 
 export const LOCAL_LIMITS_PROFILE = "xeip.local-limits/0.1";
 // Bound on distinct rate-limit keys retained at once. This is a safety valve
@@ -17,32 +18,19 @@ export class LimitPolicy {
   #maxConnections;
   #maxSubscriptions;
   #keyBy;
-  #buckets = new Map(); // key -> { tokens, at }, insertion order is least-recently-used first
+  #buckets = new BoundedMap(MAX_TRACKED_KEYS); // key -> { tokens, at }, least-recently-used first
   #connections = 0;
   #subscriptions = 0;
   #elapsed = 0;
 
   constructor(configuration = {}) {
-    if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
-        Object.keys(configuration).some(key => !FIELDS.includes(key))) {
-      throw new TypeError("invalid limits configuration");
-    }
-    const requestsPerSecond = Object.hasOwn(configuration, "requestsPerSecond") ? configuration.requestsPerSecond : 50;
-    const burst = Object.hasOwn(configuration, "burst") ? configuration.burst : 100;
-    const maxConnections = Object.hasOwn(configuration, "maxConnections") ? configuration.maxConnections : 256;
-    const maxSubscriptions = Object.hasOwn(configuration, "maxSubscriptions") ? configuration.maxSubscriptions : 256;
+    requireOptions(configuration, FIELDS, "invalid limits configuration");
+    this.#requestsPerSecond = boundedOption(configuration, "requestsPerSecond", { default: 50, min: 1, max: MAX_VALUE, message: "invalid limits configuration" });
+    this.#burst = boundedOption(configuration, "burst", { default: 100, min: 1, max: MAX_VALUE, message: "invalid limits configuration" });
+    this.#maxConnections = boundedOption(configuration, "maxConnections", { default: 256, min: 1, max: MAX_VALUE, message: "invalid limits configuration" });
+    this.#maxSubscriptions = boundedOption(configuration, "maxSubscriptions", { default: 256, min: 1, max: MAX_VALUE, message: "invalid limits configuration" });
     const keyBy = Object.hasOwn(configuration, "keyBy") ? configuration.keyBy : "principal";
-    if (!Number.isInteger(requestsPerSecond) || requestsPerSecond < 1 || requestsPerSecond > MAX_VALUE ||
-        !Number.isInteger(burst) || burst < 1 || burst > MAX_VALUE ||
-        !Number.isInteger(maxConnections) || maxConnections < 1 || maxConnections > MAX_VALUE ||
-        !Number.isInteger(maxSubscriptions) || maxSubscriptions < 1 || maxSubscriptions > MAX_VALUE) {
-      throw new RangeError("invalid limits configuration");
-    }
     if (keyBy !== "principal" && keyBy !== "peer") throw new TypeError("limits keyBy must be principal or peer");
-    this.#requestsPerSecond = requestsPerSecond;
-    this.#burst = burst;
-    this.#maxConnections = maxConnections;
-    this.#maxSubscriptions = maxSubscriptions;
     this.#keyBy = keyBy;
   }
 
@@ -83,10 +71,7 @@ export class LimitPolicy {
    */
   take(key, elapsedMs = performance.now()) {
     if (typeof key !== "string" || key.length === 0) throw new TypeError("limit key must be a non-empty string");
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER) {
-      throw new RangeError("invalid limits elapsed time");
-    }
-    const now = Math.max(this.#elapsed, elapsedMs);
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { label: "limits" });
     this.#elapsed = now;
     let bucket = this.#buckets.get(key);
     if (bucket) {
@@ -94,12 +79,10 @@ export class LimitPolicy {
       bucket.tokens = Math.min(this.#burst, bucket.tokens + refill);
       bucket.at = now;
       // A denied take is still an access and refreshes the key's recency.
-      this.#buckets.delete(key);
-      this.#buckets.set(key, bucket);
+      this.#buckets.touch(key);
     } else {
       bucket = { tokens: this.#burst, at: now };
       this.#buckets.set(key, bucket);
-      while (this.#buckets.size > MAX_TRACKED_KEYS) this.#buckets.delete(this.#buckets.keys().next().value);
     }
     if (bucket.tokens >= 1) {
       bucket.tokens -= 1;

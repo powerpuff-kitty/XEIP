@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { advanceElapsed, boundedOption, digestHex, requireOptions } from "./primitives.mjs";
 
 export const LOCAL_REPLAY_PROFILE = "xeip.local-replay/0.1";
-const digest = value => createHash("sha256").update(value, "utf8").digest("hex");
+const FIELDS = ["windowMs", "maxEntries"];
 
 // Internal equality of validated parsed JSON, not a signing serialization standard.
 function orderedJson(value) {
@@ -18,28 +18,18 @@ export class ReplayWindow {
   #elapsed = 0;
 
   constructor(configuration = {}) {
-    if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
-        Object.keys(configuration).some(key => !["windowMs", "maxEntries"].includes(key))) {
-      throw new TypeError("invalid replay configuration");
-    }
-    const windowMs = Object.hasOwn(configuration, "windowMs") ? configuration.windowMs : 300000;
-    const maxEntries = Object.hasOwn(configuration, "maxEntries") ? configuration.maxEntries : 4096;
-    if (!Number.isInteger(windowMs) || windowMs < 1 || windowMs > 3600000 ||
-        !Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 4096) throw new RangeError("invalid replay limits");
-    this.#windowMs = windowMs;
-    this.#maxEntries = maxEntries;
+    requireOptions(configuration, FIELDS, "invalid replay configuration");
+    this.#windowMs = boundedOption(configuration, "windowMs", { default: 300000, min: 1, max: 3600000, message: "invalid replay limits" });
+    this.#maxEntries = boundedOption(configuration, "maxEntries", { default: 4096, min: 1, max: 4096, message: "invalid replay limits" });
   }
 
   get limits() { return { windowMs: this.#windowMs, maxEntries: this.#maxEntries }; }
 
   /** Caller supplies a validated, transport-bounded parsed JSON envelope after admission checks. */
   accept(message, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
-      throw new RangeError("invalid replay elapsed time");
-    }
-    const now = Math.max(this.#elapsed, elapsedMs);
-    const key = digest(JSON.stringify([message.session, message.sender, message.id]));
-    const content = digest(orderedJson(message));
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { windowMs: this.#windowMs, label: "replay" });
+    const key = digestHex(JSON.stringify([message.session, message.sender, message.id]));
+    const content = digestHex(orderedJson(message));
     this.#elapsed = now;
     // Fixed windows plus monotonic insertion keep expiry order stable. Hits never move records.
     for (const [scope, record] of this.#entries) {

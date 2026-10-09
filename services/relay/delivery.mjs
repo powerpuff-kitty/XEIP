@@ -1,6 +1,8 @@
 import { performance } from "node:perf_hooks";
+import { advanceElapsed, boundedOption, BoundedMap, requireOptions } from "./primitives.mjs";
 
 export const LOCAL_DELIVERY_PROFILE = "xeip.local-delivery/0.1";
+const FIELDS = ["windowMs", "maxPerSession", "maxSessions"];
 
 // Bounded, in-order per-session retention for reconnect resume. It is NOT a
 // durable queue: entries are in memory, expire by a fixed window and are
@@ -9,58 +11,42 @@ export class DeliveryLog {
   #windowMs;
   #maxPerSession;
   #maxSessions;
-  #sessions = new Map(); // session ID -> { entries: [{seq, at, message}], nextSeq }
-  #known = new Map(); // evicted session ID -> last assigned seq, for honest gap reporting
+  #sessions; // session ID -> { entries: [{seq, at, message}], nextSeq }, least-recently-used first
+  #known; // evicted session ID -> last assigned seq, for honest gap reporting
   #elapsed = 0;
 
   constructor(configuration = {}) {
-    if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
-        Object.keys(configuration).some(key => !["windowMs", "maxPerSession", "maxSessions"].includes(key))) {
-      throw new TypeError("invalid delivery configuration");
-    }
-    const windowMs = Object.hasOwn(configuration, "windowMs") ? configuration.windowMs : 300000;
-    const maxPerSession = Object.hasOwn(configuration, "maxPerSession") ? configuration.maxPerSession : 512;
-    const maxSessions = Object.hasOwn(configuration, "maxSessions") ? configuration.maxSessions : 256;
-    if (!Number.isInteger(windowMs) || windowMs < 1 || windowMs > 3600000 ||
-        !Number.isInteger(maxPerSession) || maxPerSession < 1 || maxPerSession > 4096 ||
-        !Number.isInteger(maxSessions) || maxSessions < 1 || maxSessions > 1024) {
-      throw new RangeError("invalid delivery limits");
-    }
-    this.#windowMs = windowMs;
-    this.#maxPerSession = maxPerSession;
-    this.#maxSessions = maxSessions;
+    requireOptions(configuration, FIELDS, "invalid delivery configuration");
+    this.#windowMs = boundedOption(configuration, "windowMs", { default: 300000, min: 1, max: 3600000, message: "invalid delivery limits" });
+    this.#maxPerSession = boundedOption(configuration, "maxPerSession", { default: 512, min: 1, max: 4096, message: "invalid delivery limits" });
+    this.#maxSessions = boundedOption(configuration, "maxSessions", { default: 256, min: 1, max: 1024, message: "invalid delivery limits" });
+    this.#sessions = new BoundedMap(this.#maxSessions, {
+      onEvict: (sessionId, log) => this.#remember(sessionId, log.nextSeq - 1)
+    });
+    this.#known = new BoundedMap(this.#maxSessions * 4);
   }
 
   get limits() { return { windowMs: this.#windowMs, maxPerSession: this.#maxPerSession, maxSessions: this.#maxSessions }; }
 
   /** Appends a validated, admitted envelope and returns its per-session sequence. */
   append(session, message, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
-      throw new RangeError("invalid delivery elapsed time");
-    }
-    const now = Math.max(this.#elapsed, elapsedMs);
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { windowMs: this.#windowMs, label: "delivery" });
     this.#elapsed = now;
     let log = this.#sessions.get(session);
     if (log) {
       // Move to the most-recently-used position for bounded session eviction.
-      this.#sessions.delete(session);
+      this.#sessions.touch(session);
     } else {
       // Restore monotonicity if this session was previously evicted.
       const last = this.#known.get(session);
       log = { entries: [], nextSeq: last === undefined ? 1 : last + 1 };
       this.#known.delete(session);
+      this.#sessions.set(session, log);
     }
-    this.#sessions.set(session, log);
     this.#expire(log, now);
     const seq = log.nextSeq++;
     log.entries.push({ seq, at: now, message });
     while (log.entries.length > this.#maxPerSession) log.entries.shift();
-    while (this.#sessions.size > this.#maxSessions) {
-      const oldestSession = this.#sessions.keys().next().value;
-      if (oldestSession === session) break;
-      this.#remember(oldestSession, this.#sessions.get(oldestSession).nextSeq - 1);
-      this.#sessions.delete(oldestSession);
-    }
     return seq;
   }
 
@@ -72,8 +58,7 @@ export class DeliveryLog {
    * whole session was evicted), so a client must not assume continuity.
    */
   since(session, after, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError("invalid delivery elapsed time");
-    const now = Math.max(this.#elapsed, elapsedMs);
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { max: Infinity, label: "delivery" });
     this.#elapsed = now;
     const log = this.#sessions.get(session);
     if (!log) {
@@ -83,8 +68,7 @@ export class DeliveryLog {
     }
     this.#expire(log, now);
     // Reading is activity: keep an actively resumed session from being evicted.
-    this.#sessions.delete(session);
-    this.#sessions.set(session, log);
+    this.#sessions.touch(session);
     const oldest = log.entries.length > 0 ? log.entries[0].seq : log.nextSeq;
     return {
       entries: log.entries.filter(entry => entry.seq > after),
@@ -99,12 +83,9 @@ export class DeliveryLog {
    * count as activity, so a receipt can never change retention or eviction order.
    */
   lookup(session, seq, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
-      throw new RangeError("invalid delivery elapsed time");
-    }
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { windowMs: this.#windowMs, label: "delivery" });
     const log = this.#sessions.get(session);
     if (!log) return null;
-    const now = Math.max(this.#elapsed, elapsedMs);
     this.#elapsed = now;
     this.#expire(log, now);
     return log.entries.find(entry => entry.seq === seq) ?? null;
@@ -120,21 +101,16 @@ export class DeliveryLog {
    * receipt needs this to reject more than one match as ambiguous.
    */
   lookupAllById(session, id, elapsedMs = performance.now()) {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > Number.MAX_SAFE_INTEGER - this.#windowMs) {
-      throw new RangeError("invalid delivery elapsed time");
-    }
+    const now = advanceElapsed(this.#elapsed, elapsedMs, { windowMs: this.#windowMs, label: "delivery" });
     const log = this.#sessions.get(session);
     if (!log) return [];
-    const now = Math.max(this.#elapsed, elapsedMs);
     this.#elapsed = now;
     this.#expire(log, now);
     return log.entries.filter(entry => entry.message.id === id);
   }
 
   #remember(session, lastSeq) {
-    this.#known.delete(session);
     this.#known.set(session, lastSeq);
-    while (this.#known.size > this.#maxSessions * 4) this.#known.delete(this.#known.keys().next().value);
   }
 
   #expire(log, now) {
