@@ -16,7 +16,7 @@ XEIP is **experimental and pre-release**. There is no published SDK or relay rel
 4. **Schema/spec drift:** `conformance/vectors.json` passes against JSON Schema, the Rust core and the TypeScript SDK; changed wire shape has updated schemas, fixtures, spec text and negative tests.
 5. **Security truth:** `spec/security.md` and `spec/threat-model.md` describe the exact implemented scope and residual risk; no example is marked production-ready.
 6. **Docs and links:** README, ROADMAP, `spec/**` and profile docs agree with the code; relative links resolve.
-7. **Permissions and actions:** workflow permissions are minimized and third-party actions are pinned by commit SHA (see threat-model T8).
+7. **Permissions, actions and advisories:** workflow permissions are minimized and third-party actions are pinned by commit SHA (see threat-model T8); CI now runs `cargo deny check` (advisories, licenses, sources, bans) against the committed `deny.toml` and `npm audit --audit-level=high`.
 8. **Release notes:** state the protocol/SDK version, wire-compatibility notes, security-relevant changes, and known gaps.
 
 ## Tagging
