@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test services/relay/*.test.mjs tools/*.test.mjs",
+    "coverage": "node --test --experimental-test-coverage services/relay/*.test.mjs tools/*.test.mjs",
     "test:ts": "node --test sdks/typescript/*.test.mjs",
     "test:interop": "npm run build:ts && node --test conformance/*.test.mjs",
     "validate:fixtures": "node tools/validate-fixtures.mjs",

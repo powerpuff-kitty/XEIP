@@ -12,6 +12,10 @@ Run `npm run typecheck`, `npm run build:ts`, `npm test`, `npm run test:ts`, `npm
 
 `conformance/vectors.json` applies top-level patches/removals to each schema's golden fixture and specifies the expected acceptance result. Add valid and invalid cases here when changing validation. The same cases run against JSON Schema, both SDKs, and the relay's message endpoint. Ajv independently checks structure, dates and lengths; its URI format uses the JavaScript reference syntax checker, while Rust implements URI checks independently. The fixture CLI also accepts `--fixtures-dir PATH` to validate another fixture directory.
 
+## Coverage
+
+Run `npm run coverage` to execute the relay and tools test suites with Node's built-in coverage (`node --test --experimental-test-coverage`). It prints a per-file and total summary. This report is informational only — there is no coverage threshold and the CI coverage step does not fail the build. It excludes the TypeScript SDK (`test:ts`) and the Rust-backed interop suite, which require a build.
+
 ## Protocol changes
 
 Open a GitHub issue with: motivating use case, affected entity/message/schema fields, backward compatibility, transport assumptions, security/privacy impact, test vectors, and proposed normative wording. Breaking changes require an explicit version bump. Profiles MAY be experimental and separately versioned.
