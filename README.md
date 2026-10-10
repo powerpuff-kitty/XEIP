@@ -73,9 +73,9 @@ human / AI agent / machine / service
 ```
 
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
-- **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
+- **Identity design:** [spec/identity.md](spec/identity.md).
 - **Signed envelopes (verification slice, reference):** [spec/local-signed-envelopes.md](spec/local-signed-envelopes.md).
-- **Identity key lifecycle (proposed, not implemented):** [spec/identity-keys.md](spec/identity-keys.md).
+- **Identity key lifecycle (partially implemented):** [spec/identity-keys.md](spec/identity-keys.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
 - **Durable delivery (first slice implemented):** [spec/local-durable.md](spec/local-durable.md).
 - **Rate/connection limits:** [spec/local-limits.md](spec/local-limits.md) (opt-in local prototype).
@@ -114,6 +114,9 @@ human / AI agent / machine / service
 | Opt-in request-rate and connection/subscription limits (`xeip.local-limits/0.1`) | Local prototype; per-principal token bucket with `Retry-After`, not production rate limiting |
 | Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder/decoder in JS and Rust (`tools/derive-keyid.mjs`, `crates/xeip-identity`) with shared vectors; signing/verification pending |
 | Detached Ed25519 signed envelopes | Sign/verify in JS, Rust and TypeScript over shared vectors; opt-in relay enforcement (`createRelay({ signatures: {} })`) rejects spoofed/unsigned |
+| Signed key documents + chain/rollback + trust anchors | `xeip.keydoc/0.1` in JS/Rust with shared vectors; fail-closed anchors; not yet wired into identity provisioning |
+| Signed revocation/status documents (`xeip.status/0.1`) | JS/Rust verify with monotonic serial + staleness; optional relay kid-revocation enforcement |
+| Signed device-rotation statements (`xeip.device-rotation/0.1`) | JS/Rust with bounded overlap; root-rotation rules and distribution pending |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |

@@ -1,13 +1,13 @@
 # Identity key lifecycle profile — xeip.identity-key-lifecycle/0.2 (design draft)
 
-**Status: design only; not implemented.** This document is a non-normative design
-draft for the key-distribution, trust-root, rotation, revocation and recovery work
-tracked by [issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1). It is the
-remaining blocker after the signed-envelope slice recorded in
-[ADR 0009](decisions/0009-local-signed-envelopes.md). None of the key-document,
-chain, rotation, status or recovery mechanisms described here exist in the
-repository. RFC 2119 / RFC 8174 keywords describe the **proposed** profile, not
-current behavior.
+**Status: partially implemented (reference slices); the full profile is design.** This document is a design draft for the key-distribution, trust-root, rotation, revocation and recovery work tracked by [issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1), building on the signed-envelope slice ([ADR 0009](decisions/0009-local-signed-envelopes.md)). RFC 2119 / RFC 8174 keywords describe the **proposed** profile; the following slices are implemented and tested in JS and Rust with shared conformance vectors (see the plan records under `spec/plans/`):
+
+- `xeip.keydoc/0.1` signed key documents, chain verification, rollback/fork/gap rejection, and fail-closed trust anchors with opt-in bounded TOFU (`tools/key-document.mjs`, `crates/xeip-identity`) — [plans/identity-keydoc.md](plans/identity-keydoc.md).
+- `xeip.status/0.1` signed revocation/status documents with monotonic `serial` and bounded staleness, plus a `StatusTracker` (`tools/identity-status.mjs`, `crates/xeip-identity`) — [plans/identity-status.md](plans/identity-status.md).
+- `xeip.device-rotation/0.1` root-endorsed device rotation with a bounded overlap and a `DeviceRotationTracker` (`tools/identity-device-rotation.mjs`, `crates/xeip-identity`) — [plans/identity-device-rotation.md](plans/identity-device-rotation.md).
+- The reference relay resolves a signed envelope's `kid` against trusted key documents and rejects revoked kids (`createRelay({ signatures, keyDocuments, statusDocuments })`).
+
+Still **design-only**: root-rotation signature rules and recovery, revocation/status distribution and live-stream termination, directory discovery, durable fork/equivocation evidence, and independent review.
 
 It builds on, and does not replace, three things that already exist:
 
