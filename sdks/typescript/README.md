@@ -1,6 +1,6 @@
 # @xeip/protocol — experimental TypeScript SDK
 
-A zero-runtime-dependency reference client and model validator for XEIP 0.1. Works with modern browser/Node fetch and Web Streams. **Not published or production-ready**; does not implement cryptographic identity or authorization.
+A zero-runtime-dependency reference client and model validator for XEIP 0.1. Works with modern browser/Node fetch and Web Streams. **Not published or production-ready**; authorization stays out of scope, and the optional cryptographic identity profiles are portable reference implementations, not an audited identity stack.
 
 From repository root:
 
@@ -63,4 +63,53 @@ const result = await verifySignedEnvelope(json); // { valid: true }
 **WebCrypto caveat.** Signing and verification require a runtime with Ed25519 in WebCrypto (`crypto.subtle`): Node.js ≥22 (as declared in the monorepo `engines`) and current evergreen browsers. Runtimes whose WebCrypto lacks Ed25519 reject `importKey`/`sign`/`verify`; the signing and key-id helpers remain usable, but the identity test will fail. A pre-parsed envelope object bypasses the strict pre-parse gate, so callers that require it must pass JSON text.
 
 The identity implementation also exposes `ed25519PrivateKeyFromSeed(seed)` for importing a seed as a non-extractable WebCrypto signing key.
+
+## Identity key lifecycle (`xeip.keydoc/0.1` and `xeip.status/0.1`)
+
+The SDK also ships a portable, dependency-free implementation of the signed key-document and identity-status profiles in [`src/keydoc.ts`](src/keydoc.ts), reproducing the grammar, verification order and stable reason strings of [`tools/key-document.mjs`](../../tools/key-document.mjs) and [`tools/identity-status.mjs`](../../tools/identity-status.mjs) over the shared vectors in [`conformance/fixtures/identity-keydoc/`](../../conformance/fixtures/identity-keydoc/keydoc.vectors.json) and [`identity-status/`](../../conformance/fixtures/identity-status/status.vectors.json). It reuses the `identity.ts` JCS canonicalization, key-id codec, strict pre-parse gate, weak-key blacklist and Ed25519 WebCrypto primitive; SHA-256 linking uses `crypto.subtle.digest`.
+
+```js
+import {
+  verifyKeyDocument,
+  verifyStatusDocument,
+  KeyDocumentChain,
+  KeyDocumentTrust,
+  StatusTracker,
+  entityUrn,
+} from "./sdks/typescript/dist/index.js";
+
+// Single signed key document (JSON text or a parsed object).
+await verifyKeyDocument(json); // { valid: true } | { valid: false, reason }
+
+// Generation linking, rollback/fork detection.
+const chain = new KeyDocumentChain();
+await chain.ingest(genesis); // { valid: true }
+await chain.ingest(rotation); // { valid: false, reason: "chain gap" }
+
+// Anchor resolution (pinned or bounded, unverified TOFU).
+const trust = new KeyDocumentTrust({
+  entity: entityUrn(genesisKid),
+  anchor: { genesisKid, genesisDigest },
+  maxGeneration: 3,
+});
+await trust.ingest(genesis); // { valid: true, trust: "pinned" }
+
+// Single signed status document against a trusted key document.
+await verifyStatusDocument(status, trustedKeydoc); // { valid: true } | { valid: false, reason }
+
+// Serial rollback and staleness.
+const tracker = new StatusTracker();
+await tracker.ingest(status, { trustedKeyDocument: trustedKeydoc, now, maxAgeSeconds: 604800 });
+tracker.isRevoked(entity, kid, generation);
+```
+
+- `verifyKeyDocument(doc)` — async, never throws; strict structural validation, `entity == entityUrn(genesis)`, non-weak root/device kids and at least one valid Ed25519 root signature. Reasons: `malformed document`, `unknown field`, `unsupported version`, `entity binding`, `weak key`, `unknown signer`, `signature mismatch`.
+- `signKeyDocument(doc, { privateKey, kid })` / `signStatusDocument(doc, { privateKey, kid })` — Ed25519-sign the document without its `signatures` member and append `{ kid, sig }`; `privateKey` is a 32-byte seed (`Uint8Array`/`ArrayBuffer`) or an Ed25519 private `CryptoKey`.
+- `KeyDocumentChain.ingest(doc)` — single-document verification first, then generation linking, `previous == keyDocumentChainDigest(predecessor)` and retiry authorization (a signature by a key in the predecessor's root set); adds `rollback`, `fork`, `chain gap`, `root rotation not dual-signed`. `clone()` copies the accepted per-entity state.
+- `KeyDocumentTrust` — `new KeyDocumentTrust({ entity, anchor?, maxGeneration?, tofu? })`; fails closed (`no anchor`), and adds `untrusted anchor` and `generation exceeds maximum`. A `{ valid: true, trust: "tofu" }` result is **not verified identity**.
+- `verifyStatusDocument(status, trustedKeyDoc, options?)` — async; the `entity` must equal the trusted key document's `entity`, and at least one signature must be by a current root. The optional `options` argument is reserved; stateless verification ignores it. Reasons: the shared structural set plus `unknown signer`.
+- `StatusTracker.ingest(status, { trustedKeyDocument, now?, maxAgeSeconds? })` — adds `serial rollback` (a serial at or below the accepted one) and `stale status` (older than `maxAgeSeconds`, when supplied). `isRevoked(entity, kid, generation)` applies a revoked entry to its generation and later; a missing status is reported as not revoked (unknown, never proof of life).
+- `keyDocumentSigningInput` / `statusSigningInput` (canonical string without `signatures`), `keyDocumentDigest` (SHA-256 of the signing input) and `keyDocumentChainDigest` (SHA-256 of the full signed document, the `previous` link), plus the `KEYDOC_REASONS` / `STATUS_REASONS` tables.
+
+**WebCrypto caveat.** Every operation that hashes or verifies is `async` because it uses `crypto.subtle`; the Node reference is synchronous. Ed25519 and SHA-256 are required (Node.js ≥22 and current evergreen browsers). Runtimes whose WebCrypto lacks Ed25519 reject key import/sign/verify; the key-id and canonicalization helpers still work, but the keydoc test will fail.
 

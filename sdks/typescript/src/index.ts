@@ -6,6 +6,7 @@ import { validateEnvelope, validateEntity, validateSession, validateCapability, 
 import { SseParser } from "./sse.js";
 
 export * from "./identity.js";
+export * from "./keydoc.js";
 
 export const XEIP_VERSION = XEIP_SUPPORTED_VERSIONS[0]!;
 
