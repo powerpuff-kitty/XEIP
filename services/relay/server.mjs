@@ -9,15 +9,16 @@ import { readFileSync } from "node:fs";
 import { createRelayCore } from "./relay-core.mjs";
 import {
   refuseUpgrade, writeJson, unauthorized, writeEvent, sseFrame, parseCursor,
-  absoluteUri, readLimitedBody, requireBoundedJsonDepth, loopbackOnly, localOrigin,
+  readLimitedBody, requireBoundedJsonDepth, loopbackOnly, localOrigin,
   MAX_FRAME, MAX_PENDING
 } from "./http-util.mjs";
+import { openSubscription } from "./subscription.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
 export function createRelay({ token, admission, replay, delivery, durable, receipts, limits }) {
   const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits });
-  const { store, limitPolicy, durableStore } = core;
+  const { limitPolicy, durableStore } = core;
   const limitDecision = (req, principal) => core.limitDecision(principal, req.socket.remoteAddress);
   const server = createServer((req, res) => {
     // A store/disk failure must not become an unhandled rejection that kills the process.
@@ -82,25 +83,27 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     if (req.method === "GET" && url.pathname === "/events") {
       const session = url.searchParams.get("session");
       const entity = url.searchParams.get("entity");
-      if (!absoluteUri(session) || !absoluteUri(entity)) return writeJson(res, 400, { error: "valid session and entity URIs required" });
       const cursorRaw = req.headers["last-event-id"] ?? url.searchParams.get("after") ?? undefined;
-      const cursor = parseCursor(cursorRaw);
-      if (cursor === null) return writeJson(res, 400, { error: "invalid resume cursor" });
-      if (cursor !== undefined && !store) return writeJson(res, 400, { error: "delivery resume profile not enabled" });
-      if (admission) {
-        if (entity !== principal.entity || !core.canSubscribe(principal, session)) return writeJson(res, 403, { error: "forbidden" });
-        const { total, entityStreams } = core.activeCounts(principal.entity);
-        if (total >= 256 || entityStreams >= 4) return writeJson(res, 429, { error: "subscription limit reached" });
-      }
-      // An SSE stream is a long-lived transport connection and one subscription.
-      if (limitPolicy) {
-        if (!limitPolicy.acquireConnection()) return writeJson(res, 429, { error: "connection limit exceeded" });
-        if (!limitPolicy.acquireSubscription()) {
-          limitPolicy.releaseConnection();
-          return writeJson(res, 429, { error: "subscription limit exceeded" });
-        }
-      }
-      // Only admission mode derives the stored identity from authenticated credentials.
+      const client = {
+        principal,
+        alive: () => !res.destroyed && !res.writableEnded,
+        write: frame => writeEvent(res, frame),
+        destroy: () => res.destroy()
+      };
+      const opened = openSubscription(core, {
+        principal, session, entity, client,
+        readAfter: () => {
+          const cursor = parseCursor(cursorRaw);
+          return cursor === null ? { error: { status: 400, error: "invalid resume cursor" } } : { after: cursor };
+        },
+        // An SSE stream is a long-lived transport connection and one subscription.
+        reserve: () => {
+          if (!limitPolicy) return null;
+          return limitPolicy.acquireConnection() ? null : { status: 429, error: "connection limit exceeded" };
+        },
+        release: () => { if (limitPolicy) limitPolicy.releaseConnection(); }
+      });
+      if (opened.error) return writeJson(res, opened.error.status, { error: opened.error.error });
       res.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
@@ -109,33 +112,19 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
         "X-Content-Type-Options": "nosniff"
       });
       writeEvent(res, ": connected\n\n");
-      if (cursor !== undefined) {
-        const { entries, gap, from } = store.since(session, cursor);
-        if (gap) writeEvent(res, "event: xeip.gap\ndata: " + JSON.stringify({ session, from }) + "\n\n");
-        for (const entry of entries) {
-          if (entry.message.recipient !== undefined && entry.message.recipient !== entity) continue;
+      if (opened.resume) {
+        if (opened.resume.gap) writeEvent(res, "event: xeip.gap\ndata: " + JSON.stringify({ session, from: opened.resume.from }) + "\n\n");
+        for (const entry of opened.resume.backlog) {
           if (!writeEvent(res, sseFrame(entry.message, entry.seq))) break;
         }
       }
-      const client = {
-        entity: admission ? principal.entity : entity,
-        principal,
-        alive: () => !res.destroyed && !res.writableEnded,
-        write: frame => writeEvent(res, frame),
-        destroy: () => res.destroy()
-      };
-      core.addClient(session, client);
       const heartbeat = setInterval(() => {
         writeEvent(res, ": heartbeat\n\n");
       }, 15000);
       heartbeat.unref();
       res.once("close", () => {
         clearInterval(heartbeat);
-        core.removeClient(session, client);
-        if (limitPolicy) {
-          limitPolicy.releaseConnection();
-          limitPolicy.releaseSubscription();
-        }
+        opened.close();
       });
       return;
     }
@@ -231,45 +220,32 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
       if (value.type === "subscribe") {
         if (!allowControl()) return;
         const { session, entity } = value;
-        if (!absoluteUri(session) || !absoluteUri(entity)) return control({ type: "error", status: 400, error: "valid session and entity URIs required" });
-        let after;
-        if (value.after !== undefined) {
-          if (!Number.isSafeInteger(value.after) || value.after < 0) return control({ type: "error", status: 400, error: "invalid resume cursor" });
-          after = value.after;
-        }
-        if (after !== undefined && !store) return control({ type: "error", status: 400, error: "delivery resume profile not enabled" });
-        if (admission && !core.isCurrent(principal)) {
-          control({ type: "error", status: 401, error: "unauthorized" });
-          return connection.close(CLOSE.policy, "revoked credential");
-        }
-        if (admission) {
-          if (entity !== principal.entity || !core.canSubscribe(principal, session)) return control({ type: "error", status: 403, error: "forbidden" });
-          const { total, entityStreams } = core.activeCounts(principal.entity);
-          if (total >= 256 || entityStreams >= 4) return control({ type: "error", status: 429, error: "subscription limit reached" });
-        }
-        const storedEntity = admission ? principal.entity : entity;
-        const previous = ownSubscriptions.get(session);
-        // Replacing an existing subscription keeps the same held slot; a brand
-        // new subscription must fit the shared subscription cap.
-        if (!previous && limitPolicy && !limitPolicy.acquireSubscription()) {
-          return control({ type: "error", status: 429, error: "subscription limit exceeded" });
-        }
-        if (previous) { core.removeClient(session, previous); ownSubscriptions.delete(session); }
         const client = {
-          entity: storedEntity,
           principal,
           alive: () => connection.isOpen(),
           write: (frame, raw, seq) => connection.sendText(JSON.stringify({ type: "message", ...(seq === undefined ? {} : { seq }), message: raw })),
           destroy: () => connection.close(CLOSE.policy, "authorization changed")
         };
-        core.addClient(session, client);
-        ownSubscriptions.set(session, client);
+        const opened = openSubscription(core, {
+          principal, session, entity, client,
+          previous: ownSubscriptions.get(session)?.client,
+          recheckCurrent: true,
+          readAfter: () => {
+            if (value.after === undefined) return { after: undefined };
+            if (!Number.isSafeInteger(value.after) || value.after < 0) return { error: { status: 400, error: "invalid resume cursor" } };
+            return { after: value.after };
+          }
+        });
+        if (opened.error) {
+          control({ type: "error", status: opened.error.status, error: opened.error.error });
+          if (opened.terminate) connection.close(CLOSE.policy, "revoked credential");
+          return;
+        }
+        ownSubscriptions.set(session, opened);
         control({ type: "subscribed", session });
-        if (after !== undefined) {
-          const { entries, gap, from } = store.since(session, after);
-          if (gap) control({ type: "gap", session, from });
-          for (const entry of entries) {
-            if (entry.message.recipient !== undefined && entry.message.recipient !== storedEntity) continue;
+        if (opened.resume) {
+          if (opened.resume.gap) control({ type: "gap", session, from: opened.resume.from });
+          for (const entry of opened.resume.backlog) {
             connection.sendText(JSON.stringify({ type: "message", seq: entry.seq, message: entry.message }));
           }
         }
@@ -308,10 +284,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     };
     connection.on("close", () => {
       clearInterval(heartbeat);
-      for (const [session, client] of ownSubscriptions) {
-        core.removeClient(session, client);
-        if (limitPolicy) limitPolicy.releaseSubscription();
-      }
+      for (const opened of ownSubscriptions.values()) opened.close();
       ownSubscriptions.clear();
       if (limitPolicy) limitPolicy.releaseConnection();
     });
