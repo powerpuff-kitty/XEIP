@@ -9,6 +9,12 @@ export * from "./identity.js";
 
 export const XEIP_VERSION = XEIP_SUPPORTED_VERSIONS[0]!;
 
+// Compile-time assertion that `XEIP_VERSION` is the literal `"0.1"` (and not a
+// widened `string`), so the `xeip` members below stay literal `"0.1"`. The
+// constraint fails the build if the supported-version tuple loses its literals.
+type AssertVersionLiteral<T extends "0.1"> = T;
+type _XEIPVersionIsLiteral = AssertVersionLiteral<typeof XEIP_VERSION>;
+
 /**
  * Wire versions this SDK can read. The relay advertises the same list from
  * `GET /health` as `protocolVersions`. See `spec/versioning.md`.

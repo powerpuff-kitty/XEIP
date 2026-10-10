@@ -3,6 +3,12 @@ import { advanceElapsed, boundedOption, BoundedMap, digestHex, requireOptions } 
 
 export const LOCAL_RECEIPTS_PROFILE = "xeip.local-receipts/0.1";
 const FIELDS = ["windowMs", "maxPerSession", "maxPerPrincipal"];
+// While the durable receipt log is saturated (its live set alone exceeds the
+// hard byte budget), a dropped append retries online compaction after this many
+// drops even if the live set has not visibly shrunk, so saturation is never a
+// permanent latch. A drop in the live entry count (expiry/eviction) retries
+// immediately.
+const COMPACT_RETRY = 64;
 
 // Bounded, per-principal ledger of recipient acknowledgments. It stores only
 // digests, the correlated delivery sequence and an expiry; the delivery log
@@ -25,6 +31,8 @@ export class ReceiptLedger {
   #principals = new Map(); // principal digest -> BoundedMap(record key -> record)
   #elapsed = 0;
   #backend;
+  #compactMarker = 0; // live entry count when the last online compaction ran
+  #saturatedDrops = 0; // appends dropped while the log is saturated since then
 
   constructor(configuration = {}, backend = null) {
     requireOptions(configuration, FIELDS, "invalid receipts configuration");
@@ -125,7 +133,12 @@ export class ReceiptLedger {
       records.push({ principal: record.principalKey, session: record.sessionKey, id: record.id, seq: record.seq,
         expiresAt: wallNow + (record.expiresAt - this.#elapsed) });
     }
-    try { this.#backend.compact(records); } catch { /* persistence is best-effort on reload */ }
+    try { this.#backend.compact(records); }
+    catch { return; /* best-effort: the prior log and in-memory records remain */ }
+    // Record the live size this rewrite captured, and clear the drop counter, so
+    // the next saturated append can detect when capacity has since freed.
+    this.#compactMarker = this.#entries.size;
+    this.#saturatedDrops = 0;
   }
 
   // Inserts a reloaded record with an already-computed monotonic expiry. It
@@ -158,10 +171,18 @@ export class ReceiptLedger {
     const full = outcome === "full";
     const saturated = typeof backend.saturated === "function" && backend.saturated();
     const due = typeof backend.shouldCompact === "function" && backend.shouldCompact();
-    // Rewrite the live set when the line budget is reached, or once when an
-    // append overflows the byte budget. If even the live set is over budget the
-    // write is simply dropped (the log is bounded by the bounded live set).
-    if ((full && !saturated) || due) this.#compactBackend();
+    // Rewrite the live set when the appended-line trigger is due, or once when an
+    // append overflows the byte budget before saturation. Once saturated, retry
+    // compaction (throttled) when the live set has shrunk below the size recorded
+    // at the last compaction — records expired or were evicted, so capacity may
+    // have freed — or after COMPACT_RETRY dropped appends. This keeps saturation
+    // from being a permanent latch that drops every later receipt until restart.
+    let retry = false;
+    if (full && saturated) {
+      this.#saturatedDrops += 1;
+      retry = this.#entries.size < this.#compactMarker || this.#saturatedDrops >= COMPACT_RETRY;
+    }
+    if ((full && !saturated) || due || retry) this.#compactBackend();
   }
 
   #bucket(map, key, max) {

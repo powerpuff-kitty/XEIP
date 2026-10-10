@@ -382,8 +382,11 @@ export class DurableStore {
    */
   openReceiptLog() {
     if (this.#receiptLog) return this.#receiptLog;
-    // The receipt log's hard byte budget is derived from (and smaller than) the
-    // delivery budget, so advisory receipts cannot consume the whole store.
+    // The receipt log's hard byte budget is derived from the delivery budget by
+    // clamping a fraction of it: min(8 MiB, max(64 KiB, maxBytes / 16)). It is
+    // therefore usually far below the delivery budget, but a tiny delivery
+    // budget still gets the 64 KiB floor, so it is a clamp rather than a strict
+    // fraction, and advisory receipts cannot consume the whole store.
     const maxBytes = Math.min(RECEIPT_BUDGET_MAX,
       Math.max(RECEIPT_BUDGET_MIN, Math.floor(this.#maxBytes / RECEIPT_BUDGET_FRACTION)));
     const log = new ReceiptLog({ dir: this.#dir, fsync: this.#fsync, maxBytes, compactAfter: RECEIPT_COMPACT_LINES });

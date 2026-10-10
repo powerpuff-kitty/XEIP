@@ -1,10 +1,13 @@
 /** Dependency-free wire validation shared by the SDK, browser console and local relay. */
 /**
  * Wire versions this implementation can read. Advertising and negotiation are
- * defined by `spec/versioning.md`; the base schema pins `xeip` to `"0.1"`.
- * @type {readonly string[]}
+ * defined by `spec/versioning.md`; the base schema pins `xeip` to `"0.1"`. The
+ * tuple is a `const` assertion so `XEIP_SUPPORTED_VERSIONS[0]` keeps the literal
+ * type `"0.1"` (and therefore so does `XEIP_VERSION`) rather than widening to
+ * `string`.
+ * @type {readonly ["0.1"]}
  */
-export const XEIP_SUPPORTED_VERSIONS = Object.freeze(["0.1"]);
+export const XEIP_SUPPORTED_VERSIONS = Object.freeze(/** @type {const} */ (["0.1"]));
 const kinds = ["human", "agent", "machine", "service"];
 const transports = ["http-sse", "http", "websocket", "local", "webrtc", "a2a", "mcp"];
 /** @param {unknown} value @param {string} label @returns {Record<string, unknown>} */
@@ -31,7 +34,7 @@ const versionPattern = /^\d+\.\d+$/;
 function version(value) {
   if (typeof value !== "string") throw new TypeError("xeip must be a string");
   if (!versionPattern.test(value)) throw new TypeError("malformed xeip version");
-  if (!XEIP_SUPPORTED_VERSIONS.includes(value)) throw new TypeError("unsupported version");
+  if (!XEIP_SUPPORTED_VERSIONS.some(supported => supported === value)) throw new TypeError("unsupported version");
 }
 /** @param {unknown} value @param {readonly string[]} allowed @param {string} label */
 function member(value, allowed, label) {

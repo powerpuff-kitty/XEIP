@@ -161,6 +161,35 @@ test("repeated re-acks keep the on-disk receipt log bounded", t => {
   reopened.close();
 });
 
+test("a saturated receipt log compacts again once records expire", t => {
+  const dir = makeDir(t);
+  const log = new ReceiptLog({ dir, fsync: "never", maxBytes: 2048, compactAfter: 1_000_000 });
+  const ledger = new ReceiptLedger({ windowMs: 60000, maxPerSession: 1000, maxPerPrincipal: 1000 }, log);
+  // Fill distinct receipts until the live set alone exceeds the byte budget, so
+  // the log saturates and every later append is dropped from disk.
+  for (let seq = 0; seq < 100; seq++) {
+    ledger.record(principal(a), room, seq, "urn:xeip:message:" + seq, 0);
+  }
+  assert.equal(log.saturated(), true, "the live set exceeds the hard byte budget");
+
+  // Advance past the window so every filled receipt expires, then record one new
+  // receipt. Capacity has freed, so the ledger must compact again and persist it
+  // rather than latch saturated and drop it until restart.
+  const fresh = 12345;
+  // A backend-constructed ledger anchors its monotonic clock to `performance.now()`,
+  // so advance well past that plus the window.
+  assert.deepEqual(ledger.record(principal(a), room, fresh, "urn:xeip:message:fresh", 1_000_000), { duplicate: false });
+  assert.equal(log.saturated(), false, "saturation clears once the live set fits");
+  log.close();
+
+  const reopened = new ReceiptLog({ dir });
+  assert.equal(reopened.status, "ok");
+  assert.deepEqual(reopened.load().map(entry => entry.seq), [fresh], "the post-expiry receipt was persisted, not dropped");
+  const reloaded = new ReceiptLedger({ windowMs: 60000 }, reopened);
+  assert.deepEqual(reloaded.record(principal(a), room, fresh, "urn:xeip:message:fresh", 0), { duplicate: true });
+  reopened.close();
+});
+
 test("a ledger reloaded from a backend reports an idempotent duplicate", () => {
   const backend = new FakeBackend();
   const first = new ReceiptLedger({}, backend);
