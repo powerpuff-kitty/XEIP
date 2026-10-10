@@ -84,9 +84,9 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
  * Structural reasons a key document can be rejected. The `reason` strings are
  * the stable cross-language contract shared with `crates/xeip-identity`.
  *
- * The first seven reasons are single-document reasons. `ROLLBACK`, `FORK` and
- * `CHAIN_GAP` are produced only by chain verification
- * ({@link KeyDocumentChain}); `NO_ANCHOR`, `UNTRUSTED_ANCHOR` and
+ * The first seven reasons are single-document reasons. `ROLLBACK`, `FORK`,
+ * `CHAIN_GAP` and `ROOT_ROTATION_NOT_DUAL_SIGNED` are produced only by chain
+ * verification ({@link KeyDocumentChain}); `NO_ANCHOR`, `UNTRUSTED_ANCHOR` and
  * `GENERATION_EXCEEDS_MAX` are produced only by trust-store resolution
  * ({@link KeyDocumentTrust}). Every document must first pass single-document
  * verification and chain linking, so a chain or trust reason is only ever
@@ -103,6 +103,7 @@ export const KEYDOC_REASONS = Object.freeze({
   ROLLBACK: "rollback",
   FORK: "fork",
   CHAIN_GAP: "chain gap",
+  ROOT_ROTATION_NOT_DUAL_SIGNED: "root rotation not dual-signed",
   NO_ANCHOR: "no anchor",
   UNTRUSTED_ANCHOR: "untrusted anchor",
   GENERATION_EXCEEDS_MAX: "generation exceeds maximum",
@@ -211,6 +212,33 @@ function decodeKidOrReason(kid) {
   }
   if (isWeakEd25519PublicKey(raw)) return { reason: KEYDOC_REASONS.WEAK_KEY };
   return { raw };
+}
+
+// Whether any key in `kids` has a signature entry that verifies over the
+// document's canonical signing input. Chain verification uses this to require a
+// signature by a key drawn from the *predecessor's* root set (the retiry
+// authorization); it deliberately re-checks the bytes rather than trusting the
+// single-document result, which only records that *some* current root signed.
+//
+// The single-document check runs first and guarantees every entry is
+// well-formed and non-weak, but each step stays defensive so a malformed entry
+// simply does not count.
+function signsWithAnyKid(document, kids) {
+  if (kids.size === 0) return false;
+  const input = Buffer.from(keyDocumentSigningInput(document), "utf8");
+  for (const entry of document.signatures) {
+    if (!kids.has(entry.kid)) continue;
+    let raw;
+    try {
+      raw = decodeKeyId(entry.kid);
+    } catch {
+      continue;
+    }
+    const signature = base64UrlToBytes(entry.sig);
+    if (signature === null || signature.length !== ED25519_SIGNATURE_LENGTH) continue;
+    if (verify(null, input, ed25519PublicKeyFromRaw(raw), signature)) return true;
+  }
+  return false;
 }
 
 /**
@@ -333,6 +361,12 @@ export function verifyKeyDocument(document) {
  * - a genesis document (`generation == 1`, no `previous`) starts the chain;
  * - a successor must have `generation == prev.generation + 1` and
  *   `previous == keyDocumentChainDigest(prev)` (the full signed predecessor);
+ * - a successor must additionally carry a valid signature by at least one key
+ *   in `prev.roots` (the **retiry authorization**) — the *successor* root is
+ *   already required by single-document verification, and the pre-endorsed case
+ *   (a successor already listed in `prev.roots`) is satisfied by that same
+ *   retiring-root signature; a successor with no old-root signature is
+ *   `root rotation not dual-signed`;
  * - a candidate whose `generation <=` the accepted generation is `rollback`,
  *   except that a *distinct* document at the accepted generation is `fork`
  *   (equivocation);
@@ -390,6 +424,14 @@ export class KeyDocumentChain {
     if (value.previous !== accepted.digest) {
       return { valid: false, reason: KEYDOC_REASONS.CHAIN_GAP };
     }
+    // Root-rotation authorization: the successor is already known to carry a
+    // valid signature by one of its own roots (single-document verification);
+    // the chain adds the retiry requirement that a key from the predecessor's
+    // root set also signed. A pre-endorsed successor root is itself in that old
+    // set, so its signature satisfies both at once (retiry-only case).
+    if (!signsWithAnyKid(value, new Set(accepted.roots))) {
+      return { valid: false, reason: KEYDOC_REASONS.ROOT_ROTATION_NOT_DUAL_SIGNED };
+    }
     this.#accept(value);
     return { valid: true };
   }
@@ -398,6 +440,7 @@ export class KeyDocumentChain {
     this.#accepted.set(value.entity, {
       generation: value.generation,
       digest: keyDocumentChainDigest(value),
+      roots: [...value.roots],
     });
   }
 

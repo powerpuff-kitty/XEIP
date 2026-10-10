@@ -1094,6 +1094,12 @@ pub enum KeyDocumentError {
     /// Chain only: a generation jump (`generation > prev + 1`) or a `previous`
     /// that does not match the accepted document's digest.
     ChainGap,
+    /// Chain only: a successor document carries no valid signature by any key in
+    /// the predecessor's `roots` set (the retiry authorization). The successor
+    /// root signature is already required by single-document verification; the
+    /// pre-endorsed case (a successor already listed in the predecessor's roots)
+    /// is satisfied by its own retiring-root signature.
+    RootRotationNotDualSigned,
     /// Trust only: no anchor is configured for the entity (and TOFU is off), so
     /// the verifier fails closed instead of trusting on first use.
     NoAnchor,
@@ -1117,6 +1123,7 @@ impl fmt::Display for KeyDocumentError {
             Self::Rollback => "rollback",
             Self::Fork => "fork",
             Self::ChainGap => "chain gap",
+            Self::RootRotationNotDualSigned => "root rotation not dual-signed",
             Self::NoAnchor => "no anchor",
             Self::UntrustedAnchor => "untrusted anchor",
             Self::GenerationExceedsMaximum => "generation exceeds maximum",
@@ -1198,6 +1205,67 @@ fn decode_keydoc_kid(kid: &str) -> Result<[u8; ED25519_PUBLIC_KEY_LENGTH], KeyDo
         return Err(KeyDocumentError::WeakKey);
     }
     Ok(raw)
+}
+
+/// Whether any key in `kids` has a signature entry that verifies over
+/// `document`'s canonical signing input. Chain verification uses this to require
+/// a signature by a key drawn from the *predecessor's* root set (the retiry
+/// authorization); it re-checks the bytes rather than trusting the
+/// single-document result, which only records that *some* current root signed.
+///
+/// The single-document check runs first and guarantees every entry is
+/// well-formed and non-weak, but each step stays defensive so a malformed entry
+/// simply does not count.
+fn keydoc_signs_with_any_kid(document: &Value, kids: &[String]) -> bool {
+    if kids.is_empty() {
+        return false;
+    }
+    let signatures = match document
+        .as_object()
+        .and_then(|object| object.get("signatures"))
+        .and_then(Value::as_array)
+    {
+        Some(signatures) => signatures,
+        None => return false,
+    };
+    let message = keydoc_signing_input(document);
+    for entry in signatures {
+        let Some(entry) = entry.as_object() else {
+            continue;
+        };
+        let Some(kid) = entry.get("kid").and_then(Value::as_str) else {
+            continue;
+        };
+        if !kids.iter().any(|candidate| candidate == kid) {
+            continue;
+        }
+        let Ok(public_key) = decode_key_id(kid) else {
+            continue;
+        };
+        let Some(signature_bytes) = entry
+            .get("sig")
+            .and_then(Value::as_str)
+            .and_then(base64url_decode)
+        else {
+            continue;
+        };
+        if signature_bytes.len() != ED25519_SIGNATURE_LENGTH {
+            continue;
+        }
+        let Ok(verifying_key) = VerifyingKey::from_bytes(&public_key) else {
+            continue;
+        };
+        let Ok(signature) = Signature::from_slice(&signature_bytes) else {
+            continue;
+        };
+        if verifying_key
+            .verify_strict(message.as_bytes(), &signature)
+            .is_ok()
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Sign a key document: canonicalize the document with `signatures` removed
@@ -1410,11 +1478,14 @@ fn hex_lower(bytes: &[u8]) -> String {
 }
 
 /// The highest key document accepted for an entity, kept only as the state a
-/// [`KeyDocumentChain`] needs to enforce the next link.
+/// [`KeyDocumentChain`] needs to enforce the next link: its `generation`, its
+/// full-document digest and its `roots` (the signer set the next successor must
+/// draw its retiry authorization from).
 #[derive(Debug, Clone)]
 struct AcceptedKeyDocument {
     generation: i64,
     digest: String,
+    roots: Vec<String>,
 }
 
 /// Stateful, per-`entity` chain verifier for `xeip.keydoc/0.1`.
@@ -1428,6 +1499,11 @@ struct AcceptedKeyDocument {
 /// - a successor must have `generation == prev.generation + 1` and
 ///   `previous == key_document_chain_digest(prev)` (the full signed
 ///   predecessor);
+/// - a successor must additionally carry a valid signature by at least one key
+///   in `prev.roots` (the **retiry authorization**); the successor root is
+///   already required by single-document verification, and the pre-endorsed case
+///   (a successor already listed in `prev.roots`) is satisfied by that same
+///   retiring-root signature, otherwise [`KeyDocumentError::RootRotationNotDualSigned`];
 /// - a candidate whose `generation <=` the accepted generation is
 ///   [`KeyDocumentError::Rollback`], except that a *distinct* document at the
 ///   accepted generation is [`KeyDocumentError::Fork`] (equivocation);
@@ -1495,6 +1571,15 @@ impl KeyDocumentChain {
                 if previous != Some(accepted.digest.as_str()) {
                     return Err(KeyDocumentError::ChainGap);
                 }
+                // Root-rotation authorization: the successor is already known to
+                // carry a valid signature by one of its own roots (single-document
+                // verification); the chain adds the retiry requirement that a key
+                // from the predecessor's root set also signed. A pre-endorsed
+                // successor root is itself in that old set, so its signature
+                // satisfies both at once (retiry-only case).
+                if !keydoc_signs_with_any_kid(document, &accepted.roots) {
+                    return Err(KeyDocumentError::RootRotationNotDualSigned);
+                }
                 self.accept(entity, document, generation);
                 Ok(())
             }
@@ -1510,8 +1595,25 @@ impl KeyDocumentChain {
 
     fn accept(&mut self, entity: String, document: &Value, generation: i64) {
         let digest = key_document_chain_digest(document);
-        self.entities
-            .insert(entity, AcceptedKeyDocument { generation, digest });
+        let roots = document
+            .get("roots")
+            .and_then(Value::as_array)
+            .map(|roots| {
+                roots
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.entities.insert(
+            entity,
+            AcceptedKeyDocument {
+                generation,
+                digest,
+                roots,
+            },
+        );
     }
 }
 

@@ -5,7 +5,8 @@ design in [../identity-keys.md](../identity-keys.md) and
 [ADR 0010](../decisions/0010-identity-key-lifecycle.md) in JavaScript and Rust,
 with shared vectors. This covers *single-document verification*, *per-entity
 chain verification* (genesis anchoring, `generation`/`previous` linking, rollback
-rejection, fork/equivocation detection and gap detection) and *trust-store anchor
+rejection, fork/equivocation detection, gap detection and the §5.2
+root-rotation retiry/successor signature rule) and *trust-store anchor
 resolution* (a pinned genesis anchor plus bounded, opt-in TOFU). Revocation/status
 documents, bounded `overlapUntil`, directory discovery and durable fork evidence
 are still deferred (see below). It reuses the implemented key-ID codec
@@ -106,6 +107,7 @@ reason before any chain reason. It never throws and returns `{ valid: true }` /
 | Genesis | no accepted document for the entity and `generation == 1`, no `previous` | *accepted* |
 | No genesis | no accepted document and (`generation != 1` or `previous` present) | `chain gap` |
 | Successor | `generation == prev.generation + 1` and `previous == digest(prev)` | *accepted* |
+| Root rotation | successor passes generation/digest but carries no valid signature by any key in `prev.roots` | `root rotation not dual-signed` |
 | Rollback | `generation <` the accepted generation | `rollback` |
 | Rollback | `generation ==` the accepted generation and the same digest | `rollback` |
 | Fork | `generation ==` the accepted generation and a different digest | `fork` |
@@ -121,6 +123,39 @@ document at the accepted generation, not a fork the verifier has never seen.
 `KeyDocumentChain` stays anchor-less — the caller decides which genesis to start
 from — while trust-store anchor resolution is layered on top by
 `KeyDocumentTrust` below; a durable conflict store remains out of scope.
+
+## Root-rotation signature rules (`spec/identity-keys.md` §5.2)
+
+A genesis document is self-certifying and its single-root signature rule is
+unchanged. For a successor `D` at generation `g`, accepted against the
+predecessor `P` at generation `g - 1`, the chain derives the required signer set
+from `P`, never from `D`:
+
+- Let `oldRoots = P.roots` and `newRoots = D.roots`.
+- **Retiry authorization.** `D` MUST carry a valid signature by at least one key
+  in `oldRoots`. This is the requirement the chain adds; it is re-verified over
+  the exact canonical signing input rather than inferred from the
+  single-document result (which only records that *some* current root signed).
+  A successor with no old-root signature is rejected as
+  `root rotation not dual-signed`.
+- **Successor authorization.** `D` MUST carry a valid signature by at least one
+  key in `newRoots`. This is already enforced by single-document verification
+  ("at least one valid signature by a key listed in `roots`") and is therefore
+  not duplicated as a separate chain reason.
+- **Pre-endorsed successor.** When the successor root was already listed in
+  `oldRoots` (for example `P.roots = [A, B]` → `D.roots = [B]`), its own
+  signature is simultaneously a retiry signature and a successor signature, so
+  a retiry-only document is accepted. No extra successor signature is required.
+
+The generation+1, digest-linkage, rollback, fork and gap rules run first and are
+unchanged, so a rollback/fork/gap candidate reports its existing reason and only
+a structurally valid successor can reach the new `root rotation not dual-signed`
+rejection. `KeyDocumentChain` keeps the accepted document's `roots` so the next
+successor's retiry check can be evaluated; `clone()` copies that state.
+
+This slice implements the signature rule only. Bounded `overlapUntil`,
+post-overlap rejection, `issuedAt` monotonicity and durable fork evidence remain
+deferred.
 
 ## Trust-store anchor resolution
 
@@ -229,6 +264,30 @@ Both tests also assert that an anchor-rejected genesis leaves the committed
 chain untouched (JS `KeyDocumentChain.clone`; Rust `#[derive(Clone)]`), and that
 single-document and chain reasons are reported before trust reasons.
 
+Root-rotation vectors live in
+`conformance/fixtures/identity-keydoc/keydoc-root-rotation.vectors.json`,
+generated deterministically from the same pinned seed plus the successor/device
+seeds and carrying the same `documents` registry and ordered `chains` shape as
+the chain file. Both `tools/key-document.test.mjs` and
+`crates/xeip-identity/tests/keydoc_vectors.rs` consume it and re-sign the
+dual-signed rotation from the reference seeds to prove byte-identical signing
+input:
+
+- `root-rotation.dual-signed` — `genesis.gen1` (roots `[A]`) → a generation-2
+  document with roots `[B]` signed by both the retiring `A` and the successor
+  `B`; accepted;
+- `root-rotation.successor-preendorsed` — a genesis with roots `[A, B]` → a
+  generation-2 document with roots `[B]` signed only by the pre-endorsed `B`;
+  accepted (retiry-only);
+- `root-rotation.successor-only` — a generation-2 document with roots `[B]`
+  signed only by `B`, with an old root `A` on the predecessor: rejected as
+  `root rotation not dual-signed`;
+- `root-rotation.no-old-root` — signed by the new root `B` and a non-root `C`,
+  with no old-root signature: rejected as `root rotation not dual-signed`;
+- `root-rotation.added-without-old-root` — the successor adds root `B` to
+  `[A, B]` but only `B` signs (no old-root signature): rejected as
+  `root rotation not dual-signed`.
+
 The existing single-document `keydoc.vectors.json` is unchanged and still carries
 its own positive and negative cases.
 
@@ -241,9 +300,8 @@ its own positive and negative cases.
 - Resolving an arbitrary envelope `kid` to a trusted document and binding it to
   an entity at generation time (`spec/identity-keys.md` §8); this slice verifies
   documents and their anchoring, not envelope `kid` → document resolution.
-- Rotation semantics beyond generation/digest linking: the retiring/successor
-  signature rules of `spec/identity-keys.md` §5.2, pre-endorsed successors,
-  bounded `overlapUntil`, post-overlap rejection and `issuedAt` monotonicity.
+- Rotation semantics beyond the retired/successor signature rule: bounded
+  `overlapUntil`, post-overlap rejection and `issuedAt` monotonicity.
 - Revocation/status documents, serial rollback, staleness, live-stream effects.
 - Device rotation statements and device validity windows (`notBefore`/
   `notAfter`); endorsed devices are validated structurally only.
@@ -255,9 +313,9 @@ its own positive and negative cases.
 
 ## Verification (all passing)
 
-- `node --test tools/key-document.test.mjs` — 25 tests (11 single-document, 6
-  chain, 8 trust).
+- `node --test tools/key-document.test.mjs` — 28 tests (11 single-document, 6
+  chain, 3 root-rotation, 8 trust).
 - `npm run validate:fixtures` — key-document vectors included.
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
-  `cargo test --workspace --all-targets --locked` — 7 `keydoc_vectors` tests.
+  `cargo test --workspace --all-targets --locked` — 9 `keydoc_vectors` tests.
 - `npm run check:js`.

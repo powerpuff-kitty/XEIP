@@ -47,6 +47,12 @@ const TRUST_VECTORS_URL = new URL(
 );
 const trustVectors = JSON.parse(readFileSync(TRUST_VECTORS_URL, "utf8"));
 
+const ROOT_ROTATION_VECTORS_URL = new URL(
+  "../conformance/fixtures/identity-keydoc/keydoc-root-rotation.vectors.json",
+  import.meta.url,
+);
+const rootRotationVectors = JSON.parse(readFileSync(ROOT_ROTATION_VECTORS_URL, "utf8"));
+
 const byName = (name) => {
   const vector = vectors.find((candidate) => candidate.name === name);
   assert.ok(vector, `missing vector ${name}`);
@@ -372,6 +378,92 @@ test("CLI verify reports the structured result and exits by validity", () => {
   const missing = spawnSync(process.execPath, [cli, "verify"], { encoding: "utf8" });
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /usage:/);
+});
+
+// ---------------------------------------------------------------------------
+// Root rotation: retiry authorization in the chain
+// ---------------------------------------------------------------------------
+
+test("every root-rotation vector yields its documented per-step result", () => {
+  assert.ok(rootRotationVectors.documents, "the root-rotation file carries a documents registry");
+  assert.ok(Array.isArray(rootRotationVectors.chains), "the root-rotation file carries chains");
+  assert.ok(rootRotationVectors.chains.length >= 4, "at least four root-rotation chains are required");
+
+  const names = new Set();
+  const reasons = new Set();
+  let validSteps = 0;
+  for (const chain of rootRotationVectors.chains) {
+    assert.ok(!names.has(chain.name), `duplicate chain name: ${chain.name}`);
+    names.add(chain.name);
+    const verifier = new KeyDocumentChain();
+    for (const step of chain.steps) {
+      assert.ok(
+        Object.hasOwn(rootRotationVectors.documents, step.document),
+        `${chain.name}/${step.name}: unknown document ${step.document}`,
+      );
+      const document = rootRotationVectors.documents[step.document];
+      const result = verifier.ingest(document);
+      if (step.valid === true) {
+        assert.deepEqual(result, { valid: true }, `${chain.name}/${step.name}`);
+        validSteps += 1;
+      } else {
+        assert.equal(result.valid, false, `${chain.name}/${step.name}`);
+        assert.equal(result.reason, step.reason, `${chain.name}/${step.name}`);
+        reasons.add(result.reason);
+      }
+    }
+  }
+
+  assert.ok(validSteps >= 2, "a dual-signed and a pre-endorsed rotation must be accepted");
+  assert.ok(
+    reasons.has("root rotation not dual-signed"),
+    "a root-rotation vector with reason `root rotation not dual-signed` is required",
+  );
+  assert.ok(
+    rootRotationVectors.chains.some(
+      (chain) =>
+        chain.name === "root-rotation.successor-preendorsed" &&
+        chain.steps.every((step) => step.valid === true),
+    ),
+    "the pre-endorsed successor vector must be accepted",
+  );
+});
+
+test("root-rotation dual-signed document is reproducible from the reference seeds", () => {
+  const genesis = rootRotationVectors.documents["genesis.gen1"];
+  const rotation = rootRotationVectors.documents["rotation.dual-signed.gen2"];
+  assert.equal(rotation.previous, keyDocumentChainDigest(genesis));
+
+  const unsigned = structuredClone(rotation);
+  delete unsigned.signatures;
+  const signed = signKeyDocument(
+    signKeyDocument(unsigned, { privateKey: hexBytes(SEED_A), kid: kidA }),
+    { privateKey: hexBytes(SEED_B), kid: kidB },
+  );
+  assert.deepEqual(signed, rotation);
+});
+
+test("a successor must be authorized by the predecessor's root set", () => {
+  // The pre-endorsed successor root B was already listed by the predecessor, so
+  // a single signature by B satisfies both the retiry and successor checks.
+  const verifier = new KeyDocumentChain();
+  assert.deepEqual(verifier.ingest(rootRotationVectors.documents["genesis.preendorsed.gen1"]), {
+    valid: true,
+  });
+  assert.deepEqual(verifier.ingest(rootRotationVectors.documents["rotation.preendorsed.gen2"]), {
+    valid: true,
+  });
+
+  // A rotation signed only by the new root, with no old-root signature, is
+  // rejected with the new stable reason.
+  const rejected = new KeyDocumentChain();
+  assert.deepEqual(rejected.ingest(rootRotationVectors.documents["genesis.gen1"]), {
+    valid: true,
+  });
+  assert.deepEqual(
+    rejected.ingest(rootRotationVectors.documents["rotation.successor-only.gen2"]),
+    { valid: false, reason: KEYDOC_REASONS.ROOT_ROTATION_NOT_DUAL_SIGNED },
+  );
 });
 
 // ---------------------------------------------------------------------------

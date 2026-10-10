@@ -58,6 +58,11 @@ fn trust_vectors_path() -> PathBuf {
         .join("../../conformance/fixtures/identity-keydoc/keydoc-trust.vectors.json")
 }
 
+fn root_rotation_vectors_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/fixtures/identity-keydoc/keydoc-root-rotation.vectors.json")
+}
+
 fn load_vectors() -> Vec<Vector> {
     let raw = std::fs::read_to_string(vectors_path()).expect("read key-document vectors");
     serde_json::from_str(&raw).expect("parse key-document vectors")
@@ -238,6 +243,12 @@ fn load_chain_file() -> ChainFile {
     serde_json::from_str(&raw).expect("parse chain vectors")
 }
 
+fn load_root_rotation_file() -> ChainFile {
+    let raw =
+        std::fs::read_to_string(root_rotation_vectors_path()).expect("read root-rotation vectors");
+    serde_json::from_str(&raw).expect("parse root-rotation vectors")
+}
+
 #[test]
 fn chain_digest_commits_to_the_signed_predecessor() {
     let file = load_chain_file();
@@ -323,6 +334,106 @@ fn every_chain_vector_yields_its_documented_per_step_result() {
     for reason in ["rollback", "fork", "chain gap"] {
         assert!(reasons.contains(reason), "missing chain reason: {reason}");
     }
+}
+
+/// Root-rotation vectors: the same chain-file shape, covering the retiry
+/// authorization a successor owes to the predecessor's root set.
+#[test]
+fn every_root_rotation_vector_yields_its_documented_per_step_result() {
+    let file = load_root_rotation_file();
+    assert!(
+        file.chains.len() >= 4,
+        "at least four root-rotation chains are required"
+    );
+
+    let mut names = HashSet::new();
+    let mut reasons = HashSet::new();
+    let mut valid_steps = 0usize;
+
+    for chain in &file.chains {
+        assert!(
+            names.insert(chain.name.clone()),
+            "duplicate chain name: {}",
+            chain.name
+        );
+        let mut verifier = KeyDocumentChain::new();
+        for step in &chain.steps {
+            let document = file
+                .documents
+                .get(&step.document)
+                .unwrap_or_else(|| panic!("{}/{}: unknown document", chain.name, step.name));
+            let result = verifier.ingest(document);
+            if step.valid {
+                assert_eq!(
+                    result,
+                    Ok(()),
+                    "step must verify: {}/{}",
+                    chain.name,
+                    step.name
+                );
+                valid_steps += 1;
+            } else {
+                let expected = step
+                    .reason
+                    .as_deref()
+                    .expect("a negative step carries a reason");
+                let error = result.expect_err("a negative step must be rejected");
+                assert_eq!(
+                    error.to_string(),
+                    expected,
+                    "reason mismatch: {}/{}",
+                    chain.name,
+                    step.name
+                );
+                reasons.insert(expected.to_string());
+            }
+        }
+    }
+
+    assert!(
+        valid_steps >= 2,
+        "a dual-signed and a pre-endorsed rotation must be accepted"
+    );
+    assert!(
+        reasons.contains("root rotation not dual-signed"),
+        "missing root-rotation reason: root rotation not dual-signed"
+    );
+    let preendorsed = file
+        .chains
+        .iter()
+        .find(|chain| chain.name == "root-rotation.successor-preendorsed")
+        .expect("the pre-endorsed chain is required");
+    assert!(
+        preendorsed.steps.iter().all(|step| step.valid),
+        "the pre-endorsed successor vector must be accepted"
+    );
+}
+
+/// Re-signing the dual-signed root-rotation document from the reference seeds
+/// reproduces the committed signatures byte for byte (Ed25519 is deterministic),
+/// proving the JavaScript and Rust signing inputs agree on the rotation frame.
+#[test]
+fn root_rotation_reproduces_the_dual_signed_document() {
+    let file = load_root_rotation_file();
+    let genesis = &file.documents["genesis.gen1"];
+    let rotation = &file.documents["rotation.dual-signed.gen2"];
+
+    assert_eq!(
+        rotation["previous"].as_str().expect("previous"),
+        key_document_chain_digest(genesis),
+        "`previous` is the chain digest of the predecessor genesis"
+    );
+
+    let kid_a = genesis["genesis"].as_str().expect("genesis kid");
+    let kid_b = rotation["roots"][0].as_str().expect("successor root kid");
+
+    let re_signed = sign_key_document(&unsigned(rotation), &seed(SEED_A_HEX), kid_a)
+        .and_then(|once| sign_key_document(&once, &seed(SEED_B_HEX), kid_b))
+        .expect("dual-sign rotation");
+    assert_eq!(
+        re_signed, *rotation,
+        "dual-signing must reproduce the committed root-rotation document"
+    );
 }
 
 /// A trust-vector file: a shared registry of documents plus trust stores, each

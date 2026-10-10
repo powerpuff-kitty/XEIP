@@ -1,0 +1,218 @@
+{
+  "documents": {
+    "genesis.gen1": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "21nNGVHbXaijTuRe984UQZyfO1LxQSIkxmYLU2Cp_9nnTSY4SNFc0RAy6pdDF4uEF2XMprv6phdzuqaQaY_WCQ"
+        }
+      ]
+    },
+    "genesis.preendorsed.gen1": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "fODTifEfaAaTFkbzMmAeNlldLBgEN0OlCCDf-LEAgYtv1TxqroNrIIo2V60lfCmFcWPw_kiEtIoFbTe2orvlDA"
+        }
+      ]
+    },
+    "rotation.dual-signed.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "previous": "2abca381824c43260f2508d656ae1eefbbf30e4cb7bd876fae175b58a08ac238",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "9ZPXx4ycF0WyoyyhhLPHpN4wVUHwlwHICU0nNoeUk7AdqW6r27G_fzm_GGRPb89FSSU7iM0Zpq21DX7FQG1dAQ"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "hBoOgzagI1gyovtpSKfzSyHJ7mzX2g78M-csWkvXfuEhX3CyhSva3QeTu5GrQYQkC_DmI7qC-8bZdyHNeWc3CQ"
+        }
+      ]
+    },
+    "rotation.preendorsed.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "previous": "db03815c8a4f846dafa79e307c8a56d3656978b9211b7c8b2d0401a4f65a0034",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "rtIG0pSPupkWwvzFO5ghoch5oEM6VR21kCPrYB8NBe1-CcxSaSq8EufjlY-IdhYIKzuVCJaTbZEIa-HdwTcxCg"
+        }
+      ]
+    },
+    "rotation.successor-only.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "previous": "2abca381824c43260f2508d656ae1eefbbf30e4cb7bd876fae175b58a08ac238",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "hBoOgzagI1gyovtpSKfzSyHJ7mzX2g78M-csWkvXfuEhX3CyhSva3QeTu5GrQYQkC_DmI7qC-8bZdyHNeWc3CQ"
+        }
+      ]
+    },
+    "rotation.no-old-root.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "previous": "2abca381824c43260f2508d656ae1eefbbf30e4cb7bd876fae175b58a08ac238",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "hBoOgzagI1gyovtpSKfzSyHJ7mzX2g78M-csWkvXfuEhX3CyhSva3QeTu5GrQYQkC_DmI7qC-8bZdyHNeWc3CQ"
+        },
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "sig": "A_yHnr0yinJGBuQVt3NEREm_ipf3koJ6eyLmHKNbn5bi4KnUVUSUf3zF2m6HClf37mxzHWiRtkUXh3--IAlWBw"
+        }
+      ]
+    },
+    "rotation.added-without-old-root.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "previous": "2abca381824c43260f2508d656ae1eefbbf30e4cb7bd876fae175b58a08ac238",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "ulvyUURP07XVRdm9bNbUfkhOsvtJHgf9jsk7NQZLM52p3XF3-DebQHK9dCe0TpCJi7Yfbv-TYOcdd7ohOdYmDQ"
+        }
+      ]
+    }
+  },
+  "chains": [
+    {
+      "name": "root-rotation.dual-signed",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.dual-signed.gen2",
+          "document": "rotation.dual-signed.gen2",
+          "valid": true
+        }
+      ]
+    },
+    {
+      "name": "root-rotation.successor-preendorsed",
+      "steps": [
+        {
+          "name": "genesis.preendorsed.gen1",
+          "document": "genesis.preendorsed.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.preendorsed.gen2",
+          "document": "rotation.preendorsed.gen2",
+          "valid": true
+        }
+      ]
+    },
+    {
+      "name": "root-rotation.successor-only",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.successor-only.gen2",
+          "document": "rotation.successor-only.gen2",
+          "valid": false,
+          "reason": "root rotation not dual-signed"
+        }
+      ]
+    },
+    {
+      "name": "root-rotation.no-old-root",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.no-old-root.gen2",
+          "document": "rotation.no-old-root.gen2",
+          "valid": false,
+          "reason": "root rotation not dual-signed"
+        }
+      ]
+    },
+    {
+      "name": "root-rotation.added-without-old-root",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.added-without-old-root.gen2",
+          "document": "rotation.added-without-old-root.gen2",
+          "valid": false,
+          "reason": "root rotation not dual-signed"
+        }
+      ]
+    }
+  ]
+}
