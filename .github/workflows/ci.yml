@@ -23,8 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build:ts
       - run: npm test
-      - name: Coverage (informational)
-        continue-on-error: true
+      - name: Coverage (gated)
         run: npm run coverage
       - run: npm run test:ts
       - run: npm run demo:admission

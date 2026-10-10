@@ -14,7 +14,7 @@ Run `npm run typecheck`, `npm run build:ts`, `npm test`, `npm run test:ts`, `npm
 
 ## Coverage
 
-Run `npm run coverage` to execute the relay and tools test suites with Node's built-in coverage (`node --test --experimental-test-coverage`). It prints a per-file and total summary. This report is informational only — there is no coverage threshold and the CI coverage step does not fail the build. It excludes the TypeScript SDK (`test:ts`) and the Rust-backed interop suite, which require a build.
+Run `npm run coverage` to execute the relay and tools test suites with Node's built-in coverage (`node --test --experimental-test-coverage`). It prints a per-file and total summary. Coverage is **gated**: the script sets floor thresholds of 90% lines, 82% branches and 88% functions (`--test-coverage-lines`, `--test-coverage-branches`, `--test-coverage-functions`), and `node --test` exits non-zero when the totals fall below them, so the CI coverage step fails the build on a regression. The thresholds sit several points below current totals to avoid flaky failures. It excludes the TypeScript SDK (`test:ts`) and the Rust-backed interop suite, which require a build.
 
 ## Protocol changes
 
