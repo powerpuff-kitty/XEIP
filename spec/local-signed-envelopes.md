@@ -35,7 +35,8 @@ rejecting unknown first-class fields:
 }
 ```
 
-- `v` is the carrier version (`"0.1"`).
+- `v` MUST be exactly `"0.1"`. A missing, `null` or other version MUST be
+  rejected as `malformed signature` before any key is imported or verified.
 - `alg` MUST be exactly `"EdDSA"`; `alg: "none"`, algorithm substitution and any
   other value MUST be rejected before verification.
 - `kid` is the canonical key-id of §2 of [identity.md](identity.md) — the
@@ -45,6 +46,15 @@ rejecting unknown first-class fields:
   trusted.
 - `sig` is canonical, unpadded base64url of exactly 64 bytes. Padding, invalid
   characters and non-canonical spellings are rejected.
+
+The public key decoded from `kid` MUST NOT be a small-order (weak) Ed25519
+point. A verifier MUST reject the eight canonical small-order encodings — the
+identity `01 00…00`, the all-zero encoding and the order-2/4/8 points — with
+reason `weak key` **before** handing the key to any platform verifier. For the
+identity key, the signature `R = [S]B` with `S = 1` verifies for *every*
+message under a non-strict verifier, so accepting one is a total forgery. The
+check MUST be a fixed byte blacklist so browsers, Node and Rust cannot diverge,
+and verification MUST use strict Ed25519 (rejecting a small-order `R` as well).
 
 ## Signing input
 
@@ -79,10 +89,36 @@ MUST be parsed with rules stricter than `JSON.parse`, rejecting:
 - integers outside the interoperable ±(2^53-1) range.
 
 No Unicode normalization is performed. A verifier MUST NOT sign or verify
-"whatever a parser happened to produce". `tools/signed-envelope.mjs` exposes
-`strictParse` for exactly this gate; `verifySignedEnvelope` applies it whenever
-it is given JSON text. Passing an already-parsed object skips the gate, so
-callers that care about the gate must hand the verifier bytes, not objects.
+"whatever a parser happened to produce". The strict parse MUST run **before**
+canonicalization (and therefore before verification): a relay that consumes wire
+bytes MUST route them through the strict entry point. `tools/signed-envelope.mjs`
+exposes `strictParse` for exactly this gate; `verifySignedEnvelope` applies it
+whenever it is given JSON text, and the Rust crate exposes
+`verify_signed_envelope_text` for the same purpose. Passing an already-parsed
+object skips the gate, so callers that care about the gate must hand the
+verifier bytes, not objects.
+
+A duplicate-key case cannot be expressed as a parsed object (a parser silently
+keeps the last value), which is why the strict gate must see the raw text.
+
+## Strict verification
+
+Beyond the pre-parse gate, verification MUST be strict:
+
+- the carrier `v` MUST be `"0.1"` (a mismatch is `malformed signature`);
+- `alg` MUST be `"EdDSA"`;
+- the key decoded from `kid` MUST be a canonical curve point and MUST NOT be
+  small-order; small-order/identity keys are rejected as `weak key`;
+- the signature MUST be verified with Ed25519 *strict* checking, which rejects
+  a non-canonical or small-order `R` in addition to the base
+  [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) verification equation; Rust
+  uses `verifying_key.verify_strict`, and the JS/TS ports pin the canonical
+  small-order key encodings and reject them before import.
+
+`extensions` — including `extensions["xeip.sig"]` itself — remain outside the
+signed bytes and are **unauthenticated**. Only the `kid`/`sender` binding is
+checked; no other extension is trusted, and changing `extensions` never changes
+the validity result except through the carrier fields above.
 
 ## Sender binding
 
@@ -126,6 +162,7 @@ ledgers. Failures map to stable transport responses:
 | `missing signature` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
 | `malformed signature` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
 | `unsupported algorithm` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `weak key` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
 | `malformed envelope` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
 | `signature mismatch` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
 | `sender binding` | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
@@ -153,8 +190,9 @@ each failure maps to a stable reason:
 | --- | --- |
 | `malformed envelope` | Not a JSON object, invalid JSON, or a duplicate key / surrogate / unsafe number under the strict gate |
 | `missing signature` | No `extensions["xeip.sig"]` carrier |
-| `malformed signature` | Carrier is not an object, `kid`/`sig` missing or wrong type, or `sig` is not canonical 64-byte base64url |
+| `malformed signature` | Carrier is not an object, `v` is not `0.1`, `kid`/`sig` missing or wrong type, or `sig` is not canonical 64-byte base64url |
 | `unsupported algorithm` | `alg` is not `EdDSA` |
+| `weak key` | The key decoded from `kid` is a small-order/identity Ed25519 point (a total forgery risk) |
 | `sender binding` | `kid` is not a canonical key-id, or `entityUrn(kid) !== sender` |
 | `signature mismatch` | Canonical bytes do not verify under the key in `kid` |
 
@@ -209,7 +247,9 @@ This profile deliberately does not define or claim:
 
 Deterministic vectors live in
 [`conformance/fixtures/identity-signed/signed.vectors.json`](../conformance/fixtures/identity-signed/signed.vectors.json)
-(one positive and five negative cases). They are checked by
+(one positive and sixteen negative cases, including eight small-order/identity
+`weak key` cases and three strict-pre-parse `text` cases). A vector carries
+either a parsed `envelope` or raw JSON `text`; both are checked by
 `node --test tools/signed-envelope.test.mjs` and by `npm run validate:fixtures`.
 
 ```sh

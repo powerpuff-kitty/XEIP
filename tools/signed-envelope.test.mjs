@@ -15,6 +15,7 @@ import {
   ed25519PublicKeyFromRaw,
   bytesToBase64Url,
   base64UrlToBytes,
+  isWeakEd25519PublicKey,
 } from "./signed-envelope.mjs";
 
 const hexBytes = (text) => Uint8Array.from(Buffer.from(text, "hex"));
@@ -212,11 +213,12 @@ test("ed25519PublicKeyFromRaw enforces a 32-byte key", () => {
 });
 
 test("conformance fixture: every vector yields its documented result", () => {
-  assert.equal(vectors.length, 6, "one positive and five negative vectors are required");
+  assert.equal(vectors.length, 17, "one positive and sixteen negative vectors are required");
   const names = new Set();
   for (const vector of vectors) {
     names.add(vector.name);
-    const result = verifySignedEnvelope(vector.envelope);
+    const input = vector.text !== undefined ? vector.text : vector.envelope;
+    const result = verifySignedEnvelope(input);
     if (vector.valid === true) {
       assert.deepEqual(result, { valid: true }, vector.name);
     } else {
@@ -234,6 +236,49 @@ test("conformance fixture: every vector yields its documented result", () => {
     vectors.some((vector) => vector.reason === "signature mismatch"),
     "a signature-mismatch vector is required",
   );
+  assert.ok(vectors.some((vector) => vector.reason === "weak key"), "a weak-key vector is required");
+  assert.ok(
+    vectors.some((vector) => vector.reason === "malformed envelope" && vector.text !== undefined),
+    "a strict-parse text vector is required",
+  );
+});
+
+test("verifySignedEnvelope rejects weak (small-order) keys independently of the platform", () => {
+  // The identity key with R = [S]B, S = 1 forges a signature valid for every
+  // message under a non-strict verifier. It must be rejected as a weak key.
+  const identityKid = encodeKeyId(
+    hexBytes("0100000000000000000000000000000000000000000000000000000000000000"),
+  );
+  const forgedSig = "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const envelope = {
+    ...unsignedEnvelope(),
+    sender: `urn:xeip:entity:${identityKid}`,
+    extensions: {
+      "xeip.sig": { v: "0.1", alg: "EdDSA", kid: identityKid, sig: forgedSig },
+    },
+  };
+  assert.deepEqual(verifySignedEnvelope(envelope), { valid: false, reason: "weak key" });
+  assert.equal(isWeakEd25519PublicKey(hexBytes("0100000000000000000000000000000000000000000000000000000000000000")), true);
+  assert.equal(isWeakEd25519PublicKey(hexBytes(EXPECTED_PUBLIC_KEY_HEX)), false);
+});
+
+test("verifySignedEnvelope validates the carrier version", () => {
+  const { kid, sig } = positive.envelope.extensions["xeip.sig"];
+  const versioned = (v) => ({
+    ...unsignedEnvelope(),
+    extensions: { "xeip.sig": { v, alg: "EdDSA", kid, sig } },
+  });
+  assert.deepEqual(verifySignedEnvelope(versioned("0.1")), { valid: true });
+  assert.deepEqual(verifySignedEnvelope(versioned("0.2")), {
+    valid: false,
+    reason: "malformed signature",
+  });
+  const noVersion = unsignedEnvelope();
+  noVersion.extensions = { "xeip.sig": { alg: "EdDSA", kid, sig } };
+  assert.deepEqual(verifySignedEnvelope(noVersion), {
+    valid: false,
+    reason: "malformed signature",
+  });
 });
 
 test("CLI verify reports the structured result and exits by validity", () => {

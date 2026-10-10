@@ -33,7 +33,7 @@
 
 use std::fmt;
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde_json::{json, Map, Value};
 
 /// Multicodec code `0xed01` (`ed25519-pub`) written as an unsigned LEB128
@@ -243,6 +243,75 @@ pub const ED25519_SEED_LENGTH: usize = 32;
 /// Ed25519 signatures are exactly 64 bytes (RFC 8032 §5.1.6).
 pub const ED25519_SIGNATURE_LENGTH: usize = 64;
 
+/// Largest integer that round-trips through an IEEE-754 double exactly. The
+/// strict pre-parse gate rejects any integer outside `±(2^53 - 1)`.
+pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+
+/// The eight canonical encodings of the small-order (torsion) points of the
+/// Ed25519 curve, including the identity `01 00…00` and the all-zero encoding.
+///
+/// A verifying key that decompresses to one of these points is a *weak key*: a
+/// small-order key can be used to forge a signature that verifies for almost
+/// every message (for the identity key, `R = [S]B` with `S = 1` verifies for
+/// *every* message). [`VerifyingKey::is_weak`] detects them, but the JavaScript
+/// and TypeScript ports must reject them independently of the platform's
+/// WebCrypto implementation, so the encodings are pinned here too.
+pub const ED25519_SMALL_ORDER_POINTS: [[u8; ED25519_PUBLIC_KEY_LENGTH]; 8] = [
+    // 0x01 followed by 31 zero bytes: the identity point (order 1).
+    [
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00,
+    ],
+    // All-zero encoding.
+    [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00,
+    ],
+    // y = 0 with the sign bit set.
+    [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x80,
+    ],
+    // y = 1 with the sign bit set.
+    [
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x80,
+    ],
+    // y = -1 (0xec ff…7f) and its sign-bit variant.
+    [
+        0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0x7f,
+    ],
+    [
+        0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff,
+    ],
+    // The two order-8 encodings (0xed ff…7f and 0xed ff…ff).
+    [
+        0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0x7f,
+    ],
+    [
+        0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff,
+    ],
+];
+
+/// Whether `key` is one of the eight canonical small-order (torsion) points,
+/// i.e. a weak key that MUST be rejected. This is a byte-level blacklist that
+/// does not depend on any curve library, for platform-independent rejection.
+pub fn is_weak_ed25519_public_key(key: &[u8; ED25519_PUBLIC_KEY_LENGTH]) -> bool {
+    ED25519_SMALL_ORDER_POINTS.contains(key)
+}
+
 /// Reasons a signed envelope can be rejected by [`verify_signed_envelope`].
 ///
 /// The [`fmt::Display`] spelling of each variant matches the stable `reason`
@@ -259,6 +328,8 @@ pub enum SignedEnvelopeError {
     MalformedSignature,
     /// `alg` is not exactly `EdDSA`.
     UnsupportedAlgorithm,
+    /// The key in `kid` decodes to a small-order (weak) Ed25519 point.
+    WeakKey,
     /// `kid` is not a canonical key-id, or `entity_urn(kid) != sender`.
     SenderBinding,
     /// The canonical bytes do not verify under the key in `kid`.
@@ -272,6 +343,7 @@ impl fmt::Display for SignedEnvelopeError {
             Self::MissingSignature => "missing signature",
             Self::MalformedSignature => "malformed signature",
             Self::UnsupportedAlgorithm => "unsupported algorithm",
+            Self::WeakKey => "weak key",
             Self::SenderBinding => "sender binding",
             Self::SignatureMismatch => "signature mismatch",
         };
@@ -448,6 +520,332 @@ fn base64url_decode(text: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// Reason a JSON document was rejected by [`strict_parse`].
+///
+/// The message is intended for diagnostics only; the signed-envelope entry
+/// points collapse every strict-parse failure to
+/// [`SignedEnvelopeError::MalformedEnvelope`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrictParseError {
+    message: String,
+}
+
+impl StrictParseError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for StrictParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for StrictParseError {}
+
+/// Strict JSON parser, the Rust twin of `strictParse` in
+/// `tools/signed-envelope.mjs`. Before canonicalization it rejects the
+/// ambiguity that would let two different wire byte sequences share one
+/// signature:
+///
+/// - duplicate object member names,
+/// - lone surrogate escapes (`\uD800`, `\uDC00` and an unpaired high surrogate
+///   followed by a non-low escape),
+/// - numbers that are non-finite (`1e999`),
+/// - integer values outside `±(2^53-1)`.
+///
+/// What `serde_json` already enforces: its parser rejects lone surrogate
+/// escapes (`unexpected end of hex escape` / `lone leading surrogate in hex
+/// escape`) and non-finite numbers (`number out of range`), and a raw lone
+/// surrogate is impossible in a Rust `&str` (UTF-8 invariant). What `serde_json`
+/// cannot express: deserializing into [`Value`] silently keeps the *last* value
+/// for a duplicate key, so duplicate detection is implemented here by hand.
+///
+/// Integers are parsed as IEEE-754 doubles, matching the JavaScript reference
+/// (which applies `Number.isInteger` to the parsed double), so `1e15` is
+/// accepted while `9007199254740992` is rejected.
+pub fn strict_parse(text: &str) -> Result<Value, StrictParseError> {
+    let mut parser = StrictJsonParser::new(text);
+    let value = parser.parse_value()?;
+    parser.skip_whitespace();
+    if !parser.at_end() {
+        return Err(parser.error("unexpected trailing content"));
+    }
+    Ok(value)
+}
+
+struct StrictJsonParser<'a> {
+    text: &'a str,
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> StrictJsonParser<'a> {
+    fn new(text: &'a str) -> Self {
+        Self {
+            text,
+            bytes: text.as_bytes(),
+            pos: 0,
+        }
+    }
+
+    fn error(&self, message: &str) -> StrictParseError {
+        StrictParseError::new(format!("{message} at position {}", self.pos))
+    }
+
+    fn at_end(&self) -> bool {
+        self.pos >= self.bytes.len()
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.bytes.get(self.pos).copied()
+    }
+
+    fn skip_whitespace(&mut self) {
+        while let Some(byte) = self.peek() {
+            if matches!(byte, b' ' | b'\t' | b'\n' | b'\r') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn expect(&mut self, byte: u8) -> Result<(), StrictParseError> {
+        if self.peek() != Some(byte) {
+            return Err(self.error(&format!("expected {}", byte as char)));
+        }
+        self.pos += 1;
+        Ok(())
+    }
+
+    fn parse_value(&mut self) -> Result<Value, StrictParseError> {
+        self.skip_whitespace();
+        match self.peek() {
+            None => Err(self.error("unexpected end of input")),
+            Some(b'{') => self.parse_object(),
+            Some(b'[') => self.parse_array(),
+            Some(b'"') => Ok(Value::String(self.parse_string()?)),
+            Some(b'-') | Some(b'0'..=b'9') => self.parse_number(),
+            Some(b't') => self.parse_literal("true", Value::Bool(true)),
+            Some(b'f') => self.parse_literal("false", Value::Bool(false)),
+            Some(b'n') => self.parse_literal("null", Value::Null),
+            Some(byte) => Err(self.error(&format!("unexpected character {}", char::from(byte)))),
+        }
+    }
+
+    fn parse_literal(&mut self, literal: &str, value: Value) -> Result<Value, StrictParseError> {
+        if self.text[self.pos..].starts_with(literal) {
+            self.pos += literal.len();
+            Ok(value)
+        } else {
+            Err(self.error("invalid literal"))
+        }
+    }
+
+    fn parse_object(&mut self) -> Result<Value, StrictParseError> {
+        self.expect(b'{')?;
+        self.skip_whitespace();
+        let mut object = Map::new();
+        if self.peek() == Some(b'}') {
+            self.pos += 1;
+            return Ok(Value::Object(object));
+        }
+        loop {
+            self.skip_whitespace();
+            if self.peek() != Some(b'"') {
+                return Err(self.error("expected a string object key"));
+            }
+            let key = self.parse_string()?;
+            if object.contains_key(&key) {
+                return Err(self.error("duplicate object member name"));
+            }
+            self.skip_whitespace();
+            self.expect(b':')?;
+            let value = self.parse_value()?;
+            object.insert(key, value);
+            self.skip_whitespace();
+            match self.peek() {
+                Some(b',') => self.pos += 1,
+                Some(b'}') => {
+                    self.pos += 1;
+                    return Ok(Value::Object(object));
+                }
+                _ => return Err(self.error("expected ',' or '}'")),
+            }
+        }
+    }
+
+    fn parse_array(&mut self) -> Result<Value, StrictParseError> {
+        self.expect(b'[')?;
+        self.skip_whitespace();
+        let mut array = Vec::new();
+        if self.peek() == Some(b']') {
+            self.pos += 1;
+            return Ok(Value::Array(array));
+        }
+        loop {
+            array.push(self.parse_value()?);
+            self.skip_whitespace();
+            match self.peek() {
+                Some(b',') => self.pos += 1,
+                Some(b']') => {
+                    self.pos += 1;
+                    return Ok(Value::Array(array));
+                }
+                _ => return Err(self.error("expected ',' or ']'")),
+            }
+        }
+    }
+
+    fn parse_string(&mut self) -> Result<String, StrictParseError> {
+        self.expect(b'"')?;
+        let mut out = String::new();
+        loop {
+            let byte = match self.peek() {
+                Some(byte) => byte,
+                None => return Err(self.error("unterminated string")),
+            };
+            if byte == b'"' {
+                self.pos += 1;
+                return Ok(out);
+            }
+            if byte == b'\\' {
+                self.pos += 1;
+                let escape = self
+                    .peek()
+                    .ok_or_else(|| self.error("unterminated escape"))?;
+                self.pos += 1;
+                match escape {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{0008}'),
+                    b'f' => out.push('\u{000c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => self.parse_unicode_escape(&mut out)?,
+                    _ => return Err(self.error("invalid escape")),
+                }
+                continue;
+            }
+            if byte < 0x20 {
+                return Err(self.error("unescaped control character in string"));
+            }
+            // `self.pos` is always on a UTF-8 boundary here, so this is valid.
+            let ch = self.text[self.pos..]
+                .chars()
+                .next()
+                .expect("non-empty remaining string");
+            out.push(ch);
+            self.pos += ch.len_utf8();
+        }
+    }
+
+    fn parse_unicode_escape(&mut self, out: &mut String) -> Result<(), StrictParseError> {
+        let first = self.read_hex4()?;
+        if (0xd800..=0xdbff).contains(&first) {
+            // A high surrogate must be immediately followed by a low escape.
+            if self.bytes.get(self.pos) != Some(&b'\\')
+                || self.bytes.get(self.pos + 1) != Some(&b'u')
+            {
+                return Err(self.error("string contains a lone high surrogate"));
+            }
+            self.pos += 2;
+            let second = self.read_hex4()?;
+            if !(0xdc00..=0xdfff).contains(&second) {
+                return Err(self.error("string contains a lone high surrogate"));
+            }
+            let scalar = 0x10000 + ((first - 0xd800) << 10) + (second - 0xdc00);
+            out.push(char::from_u32(scalar).expect("a valid surrogate pair is a scalar value"));
+        } else if (0xdc00..=0xdfff).contains(&first) {
+            return Err(self.error("string contains a lone low surrogate"));
+        } else {
+            out.push(char::from_u32(first).expect("a non-surrogate code unit is a scalar value"));
+        }
+        Ok(())
+    }
+
+    fn read_hex4(&mut self) -> Result<u32, StrictParseError> {
+        let end = self.pos + 4;
+        if end > self.bytes.len() {
+            return Err(self.error("invalid \\u escape"));
+        }
+        let digits = &self.bytes[self.pos..end];
+        if !digits.iter().all(u8::is_ascii_hexdigit) {
+            return Err(self.error("invalid \\u escape"));
+        }
+        let value = u32::from_str_radix(&self.text[self.pos..end], 16)
+            .map_err(|_| self.error("invalid \\u escape"))?;
+        self.pos = end;
+        Ok(value)
+    }
+
+    fn parse_number(&mut self) -> Result<Value, StrictParseError> {
+        let start = self.pos;
+        if self.peek() == Some(b'-') {
+            self.pos += 1;
+        }
+        match self.peek() {
+            Some(b'0') => self.pos += 1,
+            Some(byte) if byte.is_ascii_digit() => {
+                while matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
+                    self.pos += 1;
+                }
+            }
+            _ => return Err(self.error("invalid number")),
+        }
+        if self.peek() == Some(b'.') {
+            self.pos += 1;
+            if !matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
+                return Err(self.error("invalid number"));
+            }
+            while matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
+                self.pos += 1;
+            }
+        }
+        if matches!(self.peek(), Some(b'e' | b'E')) {
+            self.pos += 1;
+            if matches!(self.peek(), Some(b'+' | b'-')) {
+                self.pos += 1;
+            }
+            if !matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
+                return Err(self.error("invalid number"));
+            }
+            while matches!(self.peek(), Some(byte) if byte.is_ascii_digit()) {
+                self.pos += 1;
+            }
+        }
+        let token = &self.text[start..self.pos];
+        let value: f64 = token.parse().map_err(|_| self.error("invalid number"))?;
+        if !value.is_finite() {
+            return Err(self.error("non-finite number"));
+        }
+        if value.fract() == 0.0 && value.abs() > MAX_SAFE_INTEGER as f64 {
+            return Err(self.error("integer outside the safe range"));
+        }
+        // Preserve the integer spelling when the token is a pure integer, so
+        // the parsed value mirrors `serde_json`'s own representation.
+        let number = if !token.contains(['.', 'e', 'E']) {
+            match token.parse::<i64>() {
+                Ok(value) => serde_json::Number::from(value),
+                Err(_) => match token.parse::<u64>() {
+                    Ok(value) => serde_json::Number::from(value),
+                    Err(_) => serde_json::Number::from_f64(value)
+                        .ok_or_else(|| self.error("non-finite number"))?,
+                },
+            }
+        } else {
+            serde_json::Number::from_f64(value).ok_or_else(|| self.error("non-finite number"))?
+        };
+        Ok(Value::Number(number))
+    }
+}
+
 /// The RFC 8785 signing input: the envelope with `extensions` removed in its
 /// entirety, canonicalized and encoded as UTF-8 when the caller needs bytes.
 fn canonical_signing_input(envelope: &Value) -> String {
@@ -505,8 +903,12 @@ pub fn sign_envelope(
 /// call.
 ///
 /// The checks run in the same order as `tools/signed-envelope.mjs`: carrier
-/// presence and shape, `alg`, key-id decoding, sender binding, signature
-/// decoding, then canonical-bytes verification.
+/// presence and shape, `alg`, carrier `v`, key-id decoding, weak-key rejection,
+/// sender binding, signature decoding, then strict canonical-bytes
+/// verification.
+///
+/// This accepts a pre-parsed value and therefore skips the strict pre-parse
+/// gate; use [`verify_signed_envelope_text`] for wire bytes.
 pub fn verify_signed_envelope(envelope: &Value) -> Result<(), SignedEnvelopeError> {
     let object = envelope
         .as_object()
@@ -532,10 +934,18 @@ pub fn verify_signed_envelope(envelope: &Value) -> Result<(), SignedEnvelopeErro
     if carrier.get("alg").and_then(Value::as_str) != Some(SIG_ALG) {
         return Err(SignedEnvelopeError::UnsupportedAlgorithm);
     }
+    if carrier.get("v").and_then(Value::as_str) != Some(SIG_VERSION) {
+        return Err(SignedEnvelopeError::MalformedSignature);
+    }
 
     let public_key = decode_key_id(kid).map_err(|_| SignedEnvelopeError::SenderBinding)?;
     let verifying_key =
         VerifyingKey::from_bytes(&public_key).map_err(|_| SignedEnvelopeError::SenderBinding)?;
+    // Reject small-order/identity keys with a stable, platform-independent
+    // reason *before* sender binding, so no curve backend can diverge.
+    if verifying_key.is_weak() || is_weak_ed25519_public_key(&public_key) {
+        return Err(SignedEnvelopeError::WeakKey);
+    }
     let sender = object
         .get("sender")
         .and_then(Value::as_str)
@@ -553,9 +963,20 @@ pub fn verify_signed_envelope(envelope: &Value) -> Result<(), SignedEnvelopeErro
         .map_err(|_| SignedEnvelopeError::MalformedSignature)?;
 
     let message = canonical_signing_input(envelope);
+    // `verify_strict` (not `verify`) additionally rejects non-canonical `R`
+    // values, matching the ported JS/TS small-order gate.
     verifying_key
-        .verify(message.as_bytes(), &signature)
+        .verify_strict(message.as_bytes(), &signature)
         .map_err(|_| SignedEnvelopeError::SignatureMismatch)
+}
+
+/// Verify signed envelope *JSON text*: strict-parse (rejecting duplicate keys,
+/// lone surrogates and out-of-range integers) and then run
+/// [`verify_signed_envelope`]. This is the entry point a relay that consumes
+/// wire bytes must use so the strict pre-parse gate is always applied.
+pub fn verify_signed_envelope_text(text: &str) -> Result<(), SignedEnvelopeError> {
+    let envelope = strict_parse(text).map_err(|_| SignedEnvelopeError::MalformedEnvelope)?;
+    verify_signed_envelope(&envelope)
 }
 
 #[cfg(test)]
@@ -706,6 +1127,74 @@ mod tests {
         assert_eq!(
             signing_key.verifying_key().to_bytes(),
             hex_decode("03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8")
+        );
+    }
+
+    #[test]
+    fn strict_parse_rejects_duplicate_object_members() {
+        assert!(strict_parse(r#"{"a":1,"a":2}"#).is_err());
+        assert!(strict_parse(r#"{"a":1,"b":2,"a":3}"#).is_err());
+        // Nested duplicates are rejected too.
+        assert!(strict_parse(r#"{"a":{"b":1,"b":2}}"#).is_err());
+        assert_eq!(
+            strict_parse(r#"{"a":1,"b":2}"#),
+            Ok(json!({"a": 1, "b": 2}))
+        );
+    }
+
+    #[test]
+    fn strict_parse_rejects_lone_surrogates_and_nonfinite_and_big_integers() {
+        assert!(strict_parse(r#""\uD800""#).is_err());
+        assert!(strict_parse(r#""\uDC00""#).is_err());
+        assert!(strict_parse(r#""a\uD800b""#).is_err());
+        // A correctly paired surrogate is one scalar value.
+        assert_eq!(strict_parse(r#""\uD83D\uDE00""#), Ok(json!("\u{1f600}")));
+        // Non-finite and out-of-range integers.
+        assert!(strict_parse("1e999").is_err());
+        assert!(strict_parse("9007199254740992").is_err());
+        assert!(strict_parse("-9007199254740992").is_err());
+        assert_eq!(
+            strict_parse("9007199254740991"),
+            Ok(json!(9007199254740991i64))
+        );
+        assert_eq!(strict_parse("-0").unwrap().as_f64(), Some(0.0));
+        assert!(strict_parse("01").is_err());
+        assert!(strict_parse(r#"{"a":1}x"#).is_err());
+    }
+
+    #[test]
+    fn weak_keys_are_rejected_before_verification() {
+        for point in ED25519_SMALL_ORDER_POINTS {
+            assert!(is_weak_ed25519_public_key(&point));
+            assert!(VerifyingKey::from_bytes(&point).unwrap().is_weak());
+        }
+        // A real key is not flagged.
+        let real = hex_decode("03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8");
+        assert!(!is_weak_ed25519_public_key(&real));
+    }
+
+    #[test]
+    fn identity_key_forgery_is_rejected() {
+        // A genuine forgery of the old non-strict verifier: the identity key
+        // `01` + 31 zero bytes with `R = [S]B`, `S = 1` verifies for *every*
+        // message under `verify` (non-strict). It must now fail with "weak key".
+        let envelope = json!({
+            "xeip": "0.1",
+            "id": "urn:xeip:message:forged",
+            "kind": "message",
+            "sender": "urn:xeip:entity:z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+            "recipient": "urn:xeip:entity:recipient-01",
+            "body": {"contentType": "text/plain", "data": "forged"},
+            "extensions": {"xeip.sig": {
+                "v": "0.1",
+                "alg": "EdDSA",
+                "kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+                "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }}
+        });
+        assert_eq!(
+            verify_signed_envelope(&envelope).unwrap_err().to_string(),
+            "weak key"
         );
     }
 

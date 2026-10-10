@@ -22,6 +22,7 @@ import {
   ed25519PrivateKeyFromSeed,
   signEnvelope,
   verifySignedEnvelope,
+  isWeakEd25519PublicKey,
   SIG_EXTENSION,
   SIG_VERSION,
   SIG_ALG,
@@ -52,11 +53,12 @@ function unsignedEnvelope() {
 }
 
 test("conformance fixture: every vector yields its documented result", async () => {
-  assert.equal(vectors.length, 6, "one positive and five negative vectors are required");
+  assert.equal(vectors.length, 17, "one positive and sixteen negative vectors are required");
   const names = new Set();
   for (const vector of vectors) {
     names.add(vector.name);
-    const result = await verifySignedEnvelope(vector.envelope);
+    const input = vector.text !== undefined ? vector.text : vector.envelope;
+    const result = await verifySignedEnvelope(input);
     if (vector.valid === true) {
       assert.deepEqual(result, { valid: true }, vector.name);
     } else {
@@ -65,6 +67,46 @@ test("conformance fixture: every vector yields its documented result", async () 
     }
   }
   assert.equal(names.size, vectors.length, "vector names must be unique");
+  assert.ok(vectors.some((vector) => vector.reason === "weak key"), "a weak-key vector is required");
+});
+
+test("weak (small-order) keys are rejected independently of WebCrypto", async () => {
+  const identityKid = encodeKeyId(
+    hexBytes("0100000000000000000000000000000000000000000000000000000000000000"),
+  );
+  const envelope = {
+    ...unsignedEnvelope(),
+    sender: "urn:xeip:entity:" + identityKid,
+    extensions: {
+      [SIG_EXTENSION]: {
+        v: SIG_VERSION,
+        alg: SIG_ALG,
+        kid: identityKid,
+        sig: "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      },
+    },
+  };
+  assert.deepEqual(await verifySignedEnvelope(envelope), { valid: false, reason: "weak key" });
+  assert.equal(
+    isWeakEd25519PublicKey(
+      hexBytes("0100000000000000000000000000000000000000000000000000000000000000"),
+    ),
+    true,
+  );
+  assert.equal(isWeakEd25519PublicKey(hexBytes(EXPECTED_PUBLIC_KEY_HEX)), false);
+});
+
+test("the carrier version is validated", async () => {
+  const { kid, sig } = positive.envelope.extensions[SIG_EXTENSION];
+  const versioned = (v) => ({
+    ...unsignedEnvelope(),
+    extensions: { [SIG_EXTENSION]: { v, alg: SIG_ALG, kid, sig } },
+  });
+  assert.deepEqual(await verifySignedEnvelope(versioned(SIG_VERSION)), { valid: true });
+  assert.deepEqual(await verifySignedEnvelope(versioned("0.2")), {
+    valid: false,
+    reason: "malformed signature",
+  });
 });
 
 test("the positive vector verifies from JSON text through the strict gate", async () => {

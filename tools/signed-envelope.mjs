@@ -52,6 +52,37 @@ export const MAX_SAFE_INTEGER = 9007199254740991;
 /** Ed25519 signatures are exactly 64 bytes (RFC 8032 §5.1.6). */
 export const ED25519_SIGNATURE_LENGTH = 64;
 
+// The eight canonical encodings of the small-order (torsion) points of the
+// Ed25519 curve, including the identity `01 00…00` and the all-zero encoding.
+// A verifying key that is small-order is a *weak key*: for the identity key,
+// `R = [S]B` with `S = 1` forges a signature that verifies for *every* message.
+// Node's OpenSSL-backed verifier happens to reject most of these, but WebCrypto
+// implementations differ, so the encodings are pinned here and checked before
+// any platform import. Source: the canonical small-order point blacklist.
+export const ED25519_SMALL_ORDER_POINTS = Object.freeze([
+  "0100000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000080",
+  "0100000000000000000000000000000000000000000000000000000000000080",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+]);
+
+const ED25519_SMALL_ORDER_POINT_SET = new Set(ED25519_SMALL_ORDER_POINTS);
+
+/**
+ * Whether 32 raw Ed25519 public-key bytes are one of the canonical small-order
+ * (weak) points. Independent of `node:crypto`/WebCrypto so every runtime
+ * rejects the same keys with reason `"weak key"`.
+ */
+export function isWeakEd25519PublicKey(raw) {
+  const bytes = raw instanceof Uint8Array ? raw : Uint8Array.from(raw);
+  if (bytes.length !== 32) return false;
+  return ED25519_SMALL_ORDER_POINT_SET.has(Buffer.from(bytes).toString("hex"));
+}
+
 // DER prefixes for the two `node:crypto` key forms we convert to and from raw
 // bytes. These are fixed ASN.1 wrappers around the raw key, not a primitive.
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -447,11 +478,12 @@ export function signEnvelope(envelope, { privateKey, kid } = {}) {
  *
  *   { valid: true } | { valid: false, reason, error? }
  *
- * Steps: strict-parse (when given text) → check the carrier → sender binding
+ * Steps: strict-parse (when given text) → check the carrier (including the
+ * `v` version) → reject small-order/identity keys ("weak key") → sender binding
  * (`entityUrn(kid) === sender`) → canonicalize the envelope without
  * `extensions` → Ed25519 verify. Reasons: "malformed envelope",
  * "missing signature", "malformed signature", "unsupported algorithm",
- * "sender binding", "signature mismatch".
+ * "weak key", "sender binding", "signature mismatch".
  *
  * NOTE: passing a pre-parsed object skips the strict-parse gate; only a JSON
  * string is protected against duplicate keys and out-of-range numbers.
@@ -483,10 +515,17 @@ export function verifySignedEnvelope(envelope) {
   if (alg !== SIG_ALG) {
     return { valid: false, reason: "unsupported algorithm" };
   }
+  if (carrier.v !== SIG_VERSION) {
+    return { valid: false, reason: "malformed signature" };
+  }
 
   let publicKey;
   try {
-    publicKey = ed25519PublicKeyFromRaw(decodeKeyId(kid));
+    const raw = decodeKeyId(kid);
+    if (isWeakEd25519PublicKey(raw)) {
+      return { valid: false, reason: "weak key" };
+    }
+    publicKey = ed25519PublicKeyFromRaw(raw);
     if (entityUrn(kid) !== value.sender) {
       return { valid: false, reason: "sender binding" };
     }

@@ -36,6 +36,43 @@ export const ED25519_SIGNATURE_LENGTH = 64;
 /** Raw Ed25519 public keys are exactly 32 bytes (RFC 8032 §5.1.3). */
 export const ED25519_PUBLIC_KEY_LENGTH = 32;
 
+// The eight canonical encodings of the small-order (torsion) points of the
+// Ed25519 curve, including the identity `01 00…00` and the all-zero encoding.
+// A small-order key is a *weak key*: for the identity key, `R = [S]B` with
+// `S = 1` forges a signature that verifies for *every* message. Some WebCrypto
+// runtimes accept these imports, so the encodings are pinned here and checked
+// before any platform import; browsers and Node cannot diverge.
+export const ED25519_SMALL_ORDER_POINTS: readonly string[] = Object.freeze([
+  "0100000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000080",
+  "0100000000000000000000000000000000000000000000000000000000000080",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+]);
+
+const ED25519_SMALL_ORDER_POINT_SET = new Set(ED25519_SMALL_ORDER_POINTS);
+
+function bytesToHex(bytes: Uint8Array): string {
+  let out = "";
+  for (const byte of bytes) {
+    out += byte.toString(16).padStart(2, "0");
+  }
+  return out;
+}
+
+/**
+ * Whether 32 raw Ed25519 public-key bytes are one of the canonical small-order
+ * (weak) points. Platform-independent, so every WebCrypto runtime rejects the
+ * same keys with reason `"weak key"`.
+ */
+export function isWeakEd25519PublicKey(bytes: Uint8Array): boolean {
+  if (bytes.length !== ED25519_PUBLIC_KEY_LENGTH) return false;
+  return ED25519_SMALL_ORDER_POINT_SET.has(bytesToHex(bytes));
+}
+
 /** Multicodec code 0xed01 (`ed25519-pub`) as an unsigned LEB128 varint. */
 export const ED25519_MULTICODEC = [0xed, 0x01] as const;
 
@@ -59,6 +96,7 @@ export type VerifyFailureReason =
   | "missing signature"
   | "malformed signature"
   | "unsupported algorithm"
+  | "weak key"
   | "sender binding"
   | "signature mismatch";
 
@@ -644,10 +682,11 @@ export async function signEnvelope(
  *
  *   `{ valid: true } | { valid: false, reason, error? }`
  *
- * Steps: strict-parse (when given text) → carrier → sender binding → canonical
- * bytes without `extensions` → Ed25519 verify. The reason strings match the JS
- * reference: `malformed envelope`, `missing signature`, `malformed signature`,
- * `unsupported algorithm`, `sender binding`, `signature mismatch`.
+ * Steps: strict-parse (when given text) → carrier (including the `v` version)
+ * → reject small-order/identity keys → sender binding → canonical bytes without
+ * `extensions` → Ed25519 verify. The reason strings match the JS reference:
+ * `malformed envelope`, `missing signature`, `malformed signature`,
+ * `unsupported algorithm`, `weak key`, `sender binding`, `signature mismatch`.
  */
 export async function verifySignedEnvelope(envelope: unknown): Promise<VerifyResult> {
   let value: unknown = envelope;
@@ -677,10 +716,16 @@ export async function verifySignedEnvelope(envelope: unknown): Promise<VerifyRes
   if (alg !== SIG_ALG) {
     return { valid: false, reason: "unsupported algorithm" };
   }
+  if (carrier.v !== SIG_VERSION) {
+    return { valid: false, reason: "malformed signature" };
+  }
 
   let publicKey: CryptoKey;
   try {
     const raw = decodeKeyId(kid);
+    if (isWeakEd25519PublicKey(raw)) {
+      return { valid: false, reason: "weak key" };
+    }
     publicKey = await crypto.subtle.importKey(
       "raw",
       toBufferSource(raw),

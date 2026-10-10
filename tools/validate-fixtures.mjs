@@ -67,7 +67,12 @@ for (const vector of keyidVectors) {
 }
 const signedVectors = readJson(new URL("../conformance/fixtures/identity-signed/signed.vectors.json", import.meta.url));
 for (const vector of signedVectors) {
-  const result = verifySignedEnvelope(vector.envelope);
+  // A vector carries either a parsed `envelope` or raw JSON `text` (which only
+  // reaches the verifier through the strict pre-parse gate).
+  if ((vector.envelope === undefined) === (vector.text === undefined)) {
+    throw new Error("signed-envelope vector " + vector.name + ": exactly one of `envelope` or `text` is required");
+  }
+  const result = verifySignedEnvelope(vector.text !== undefined ? vector.text : vector.envelope);
   if (vector.valid === true) {
     if (result.valid !== true) throw new Error("signed-envelope vector " + vector.name + ": expected a valid signature");
   } else if (result.valid !== false || result.reason !== vector.reason) {

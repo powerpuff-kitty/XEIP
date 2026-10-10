@@ -90,7 +90,7 @@
   },
   {
     "name": "negative: wrong kid claim",
-    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "publicKeyHex": "e734ea6c2b6257de72355e472aa05a4c487e6b463c029ed306df2f01b5636b58",
     "valid": false,
     "reason": "sender binding",
     "envelope": {
@@ -112,7 +112,7 @@
         "xeip.sig": {
           "v": "0.1",
           "alg": "EdDSA",
-          "kid": "z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+          "kid": "z6Mkv1o2GEgtXjFdEMfLtupcKhGRydM8V7VHzii7Uh4aHoqH",
           "sig": "jmyQltLit2mUoxI8zbPLrFnIm4LAdyqJl1Dh3uwPFGUZvf1vQ6FHJ3IXEQuf1nR3pO97vVZOUFF7BGUEG1u7Dg"
         }
       }
@@ -169,5 +169,242 @@
         }
       }
     }
+  },
+  {
+    "name": "negative: identity-key forgery (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key all-zero (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key y=0, sign bit set (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDpb",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDpb",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key y=1, sign bit set (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Uw",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Uw",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key order-8 0xec...7f (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkvQQfodDS9hpfvSLcFA5f2iCB9tBXk3PE5b1P8VVsjtRt",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkvQQfodDS9hpfvSLcFA5f2iCB9tBXk3PE5b1P8VVsjtRt",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key order-8 0xec...ff (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkvQQfodDS9hpfvSLcFA5f2iCB9tBXk3PE5b1P8VVsjtU6",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkvQQfodDS9hpfvSLcFA5f2iCB9tBXk3PE5b1P8VVsjtU6",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key order-8 0xed...7f (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkvUK5T7wX3YKPL8TakfM6vdwQQtkJSzV8fTKGdgosTh6E",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkvUK5T7wX3YKPL8TakfM6vdwQQtkJSzV8fTKGdgosTh6E",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: small-order key order-8 0xed...ff (weak key)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "weak key",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:forged",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkvUK5T7wX3YKPL8TakfM6vdwQQtkJSzV8fTKGdgosTh8S",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "text/plain",
+        "data": "forged"
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkvUK5T7wX3YKPL8TakfM6vdwQQtkJSzV8fTKGdgosTh8S",
+          "sig": "WGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: duplicate object member (text)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "malformed envelope",
+    "text": "{\"xeip\":\"0.1\",\"id\":\"urn:xeip:message:dup\",\"kind\":\"message\",\"sender\":\"urn:xeip:entity:a\",\"body\":{\"contentType\":\"text/plain\",\"data\":\"hi\"},\"sender\":\"urn:xeip:entity:b\"}"
+  },
+  {
+    "name": "negative: integer above 2^53 (text)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "malformed envelope",
+    "text": "{\"xeip\":\"0.1\",\"id\":\"urn:xeip:message:big\",\"kind\":\"message\",\"sender\":\"urn:xeip:entity:a\",\"body\":{\"contentType\":\"text/plain\",\"data\":{\"n\":9007199254740993}}}"
+  },
+  {
+    "name": "negative: lone surrogate escape (text)",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "malformed envelope",
+    "text": "{\"xeip\":\"0.1\",\"id\":\"urn:xeip:message:surrogate\",\"kind\":\"message\",\"sender\":\"\\uD800\"}"
   }
 ]
