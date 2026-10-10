@@ -426,18 +426,14 @@ fn format_ecmascript_number(value: f64) -> String {
         return out;
     }
 
-    // Rust's `{:e}` yields the shortest round-tripping decimal mantissa,
-    // normalised to one leading digit. Split it into digits and a decimal
-    // exponent, then apply the ECMAScript fixed/exponential decision.
-    let scientific = format!("{value:e}");
-    let (mantissa, exponent) = scientific
-        .split_once('e')
-        .expect("LowerExp output always contains 'e'");
-    let exponent: i32 = exponent.parse().expect("LowerExp exponent is an integer");
-    let digits: String = mantissa.chars().filter(|&c| c != '.').collect();
+    // Get the shortest correctly-rounded significant digits, then apply the
+    // ECMAScript fixed/exponential decision. Rust's own `{:e}`/`{}` formatting
+    // tie-breaks an exact decimal midpoint away from zero (for example
+    // `2084516549501568.25`), which disagrees with the ECMAScript/RFC 8785 rule
+    // of choosing the even final digit; `serde_json`'s float formatter follows
+    // the required shortest-round-trip rule, so the digits are taken from it.
+    let (digits, point) = shortest_significant_digits(value);
     let digit_count = digits.len() as i32;
-    // Position of the decimal point relative to the digits.
-    let point = exponent + 1;
 
     if digit_count <= point && point <= 21 {
         let mut out = digits;
@@ -459,6 +455,49 @@ fn format_ecmascript_number(value: f64) -> String {
             format!("{first}.{rest}e{sign}{}", exponent.abs())
         }
     }
+}
+
+/// The shortest significant decimal digits of a positive, finite `f64` and the
+/// position of the decimal point relative to those digits, such that the value
+/// is `digits * 10^(point - digits.len())`.
+///
+/// RFC 8785 §3.2.2.3 (and ECMAScript `Number::toString`) require the shortest
+/// digit string that round-trips, breaking an exact midpoint toward the even
+/// final digit. `serde_json`'s float formatter implements that rule; parsing
+/// its output normalises away its own fixed/exponential style so the digits can
+/// be re-rendered with the ECMAScript thresholds in
+/// [`format_ecmascript_number`].
+fn shortest_significant_digits(value: f64) -> (String, i32) {
+    let text = serde_json::Number::from_f64(value)
+        .expect("a finite number is representable")
+        .to_string();
+    let (mantissa, exponent) = match text.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) => (
+            mantissa,
+            exponent
+                .parse::<i32>()
+                .expect("a serde_json exponent is an integer"),
+        ),
+        None => (text.as_str(), 0),
+    };
+    let (integer, fraction) = match mantissa.split_once('.') {
+        Some((integer, fraction)) => (integer, fraction),
+        None => (mantissa, ""),
+    };
+
+    let mut digits: Vec<u8> = integer.bytes().chain(fraction.bytes()).collect();
+    let mut point = integer.len() as i32 + exponent;
+    let leading = digits.iter().take_while(|&&byte| byte == b'0').count();
+    digits.drain(..leading);
+    point -= leading as i32;
+    while digits.last() == Some(&b'0') {
+        digits.pop();
+    }
+
+    (
+        String::from_utf8(digits).expect("decimal digits are ASCII"),
+        point,
+    )
 }
 
 /// The URL-safe base64 alphabet (RFC 4648 §5) without padding.
@@ -1195,6 +1234,40 @@ mod tests {
         assert_eq!(
             verify_signed_envelope(&envelope).unwrap_err().to_string(),
             "weak key"
+        );
+    }
+
+    #[test]
+    fn verify_strict_rejects_a_small_order_r_that_loose_verify_accepts() {
+        // CTC/CCTV ed25519vectors #5: a signature over "ed25519vectors 3" whose
+        // R is the all-zero (small-order) encoding, under a canonical, non-weak
+        // public key. The cofactored, non-strict `verify` accepts it, but
+        // `verify_strict` rejects the small-order R. [`verify_signed_envelope`]
+        // uses `verify_strict`, so a wire signature with a small-order R is
+        // rejected by the Rust port even when the key itself is fine.
+        use ed25519_dalek::Verifier;
+
+        let public = VerifyingKey::from_bytes(&hex_decode(
+            "10eb7c3acfb2bed3e0d6ab89bf5a3d6afddd1176ce4812e38d9fd485058fdb1f",
+        ))
+        .expect("a canonical, non-weak public key");
+        assert!(!public.is_weak(), "the key must not be small-order");
+
+        // R = 00…00 (small-order), S from the reference vector.
+        let mut signature_bytes = [0u8; ED25519_SIGNATURE_LENGTH];
+        signature_bytes[ED25519_PUBLIC_KEY_LENGTH..].copy_from_slice(&hex_decode(
+            "9472a69cd9a701a50d130ed52189e2455b23767db52cacb8716fb896ffeeac09",
+        ));
+        let signature = Signature::from_bytes(&signature_bytes);
+
+        let message = b"ed25519vectors 3";
+        assert!(
+            public.verify(message, &signature).is_ok(),
+            "non-strict verify accepts the small-order-R vector"
+        );
+        assert!(
+            public.verify_strict(message, &signature).is_err(),
+            "verify_strict must reject the small-order R"
         );
     }
 

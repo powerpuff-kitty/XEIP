@@ -1,0 +1,142 @@
+[
+  {
+    "name": "object keys sort by UTF-16 code units",
+    "json": "{\"b\":1,\"a\":2,\"A\":3}",
+    "canonical": "{\"A\":3,\"a\":2,\"b\":1}"
+  },
+  {
+    "name": "empty string key sorts before all others",
+    "json": "{\"a\":1,\"\":0,\"b\":2}",
+    "canonical": "{\"\":0,\"a\":1,\"b\":2}"
+  },
+  {
+    "name": "BMP, non-ASCII and astral keys order by UTF-16 code unit",
+    "json": "{\"é\":1,\"z\":2,\"Ω\":3,\"😀\":4,\"\":5}",
+    "canonical": "{\"\":5,\"z\":2,\"é\":1,\"Ω\":3,\"😀\":4}"
+  },
+  {
+    "name": "astral key sorts before U+E000 and U+FFFF",
+    "json": "{\"￿\":1,\"\":2,\"😀\":3}",
+    "canonical": "{\"😀\":3,\"\":2,\"￿\":1}"
+  },
+  {
+    "name": "nested objects sort recursively",
+    "json": "{\"a\":{\"z\":1,\"a\":[{\"b\":2,\"A\":1}]}}",
+    "canonical": "{\"a\":{\"a\":[{\"A\":1,\"b\":2}],\"z\":1}}"
+  },
+  {
+    "name": "booleans and null keep JSON spelling",
+    "json": "{\"z\":null,\"a\":true,\"b\":false}",
+    "canonical": "{\"a\":true,\"b\":false,\"z\":null}"
+  },
+  {
+    "name": "negative zero maps to zero",
+    "json": "-0",
+    "canonical": "0"
+  },
+  {
+    "name": "100.0 canonicalizes to the integer 100",
+    "json": "100.0",
+    "canonical": "100"
+  },
+  {
+    "name": "1e21 crosses into exponential notation",
+    "json": "1e21",
+    "canonical": "1e+21"
+  },
+  {
+    "name": "1e-7 crosses into exponential notation",
+    "json": "1e-7",
+    "canonical": "1e-7"
+  },
+  {
+    "name": "smallest subnormal double 5e-324",
+    "json": "5e-324",
+    "canonical": "5e-324"
+  },
+  {
+    "name": "max safe integer 9007199254740991",
+    "json": "9007199254740991",
+    "canonical": "9007199254740991"
+  },
+  {
+    "name": "simple decimal 0.1",
+    "json": "0.1",
+    "canonical": "0.1"
+  },
+  {
+    "name": "exact decimal midpoint rounds to an even final digit",
+    "json": "-2084516549501568.25",
+    "canonical": "-2084516549501568.2"
+  },
+  {
+    "name": "exact decimal midpoint .625 rounds down to even",
+    "json": "180262843918156.625",
+    "canonical": "180262843918156.62"
+  },
+  {
+    "name": "exact decimal midpoint .8125 rounds down to even",
+    "json": "25581986840405.8125",
+    "canonical": "25581986840405.812"
+  },
+  {
+    "name": "numbers in an object use canonical spelling",
+    "json": "{\"a\":-0,\"b\":1e21,\"c\":1e-7,\"d\":5e-324,\"e\":0.1,\"f\":100}",
+    "canonical": "{\"a\":0,\"b\":1e+21,\"c\":1e-7,\"d\":5e-324,\"e\":0.1,\"f\":100}"
+  },
+  {
+    "name": "C0 control characters use short or \\u escapes",
+    "json": "\"\\u0000\\u001f\"",
+    "canonical": "\"\\u0000\\u001f\""
+  },
+  {
+    "name": "tab, newline and carriage return use short escapes",
+    "json": "\"\\t\\n\\r\"",
+    "canonical": "\"\\t\\n\\r\""
+  },
+  {
+    "name": "U+2028 and U+2029 are literal, never escaped",
+    "json": "\"\\u2028\\u2029\"",
+    "canonical": "\"  \""
+  },
+  {
+    "name": "astral code point is literal UTF-8",
+    "json": "\"\\ud83d\\ude00\"",
+    "canonical": "\"😀\""
+  },
+  {
+    "name": "DEL U+007F is literal",
+    "json": "\"\\u007f\"",
+    "canonical": "\"\""
+  },
+  {
+    "name": "solidus is not escaped and quote/backslash are",
+    "json": "\"a\\/b\\\"c\\\\d\"",
+    "canonical": "\"a/b\\\"c\\\\d\""
+  },
+  {
+    "name": "empty object and empty array",
+    "json": "[[],{},[{}],[]]",
+    "canonical": "[[],{},[{}],[]]"
+  },
+  {
+    "name": "nested empty containers inside an object",
+    "json": "{\"a\":{},\"b\":[],\"c\":{\"d\":[]}}",
+    "canonical": "{\"a\":{},\"b\":[],\"c\":{\"d\":[]}}"
+  },
+  {
+    "name": "arrays keep order, nested objects are sorted",
+    "json": "[3,1,2,{\"y\":1,\"x\":2},[],{}]",
+    "canonical": "[3,1,2,{\"x\":2,\"y\":1},[],{}]"
+  },
+  {
+    "name": "top-level empty object",
+    "json": "{}",
+    "canonical": "{}"
+  },
+  {
+    "name": "top-level empty array",
+    "json": "[]",
+    "canonical": "[]"
+  }
+]

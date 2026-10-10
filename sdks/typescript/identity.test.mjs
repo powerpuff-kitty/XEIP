@@ -36,6 +36,12 @@ const vectors = JSON.parse(readFileSync(VECTORS_URL, "utf8"));
 const positive = vectors.find((vector) => vector.valid === true);
 const positiveSignature = positive.envelope.extensions[SIG_EXTENSION].sig;
 
+const CANONICAL_VECTORS_URL = new URL(
+  "../../conformance/fixtures/identity-canonical/canonical.vectors.json",
+  import.meta.url,
+);
+const canonicalVectors = JSON.parse(readFileSync(CANONICAL_VECTORS_URL, "utf8"));
+
 // Standard Ed25519 keypair for seed 000102…1f, pinned independently of this
 // implementation so a wrong seed conversion fails loudly.
 const SEED_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -236,6 +242,23 @@ test("a tampered body under a valid signature is rejected", async () => {
     valid: false,
     reason: "signature mismatch",
   });
+});
+
+test("canonicalize matches the shared RFC 8785 known-answer vectors", () => {
+  assert.ok(
+    canonicalVectors.length >= 20,
+    "at least twenty canonicalization vectors are required",
+  );
+  const names = new Set();
+  for (const vector of canonicalVectors) {
+    assert.ok(!names.has(vector.name), `duplicate vector name: ${vector.name}`);
+    names.add(vector.name);
+    assert.equal(
+      canonicalize(JSON.parse(vector.json)),
+      vector.canonical,
+      `canonicalization mismatch: ${vector.name}`,
+    );
+  }
 });
 
 test("canonicalize matches RFC 8785 and the reference vectors", () => {

@@ -34,6 +34,12 @@ const vectors = JSON.parse(readFileSync(VECTORS_URL, "utf8"));
 const positive = vectors.find((vector) => vector.valid === true);
 const positiveSignature = positive.envelope.extensions["xeip.sig"].sig;
 
+const CANONICAL_VECTORS_URL = new URL(
+  "../conformance/fixtures/identity-canonical/canonical.vectors.json",
+  import.meta.url,
+);
+const canonicalVectors = JSON.parse(readFileSync(CANONICAL_VECTORS_URL, "utf8"));
+
 // A copy of the positive envelope with the signature carrier removed; this is
 // the exact object that gets signed.
 function unsignedEnvelope() {
@@ -71,6 +77,23 @@ test("canonicalize escapes strings as JSON without over-escaping", () => {
   // U+2028/U+2029 and other non-ASCII are literal, per JCS.
   assert.equal(canonicalize({ a: "\u2028\u2029" }), '{"a":"\u2028\u2029"}');
   assert.equal(canonicalize({ a: "\u00e9" }), '{"a":"\u00e9"}');
+});
+
+test("canonicalize matches the shared RFC 8785 known-answer vectors", () => {
+  assert.ok(
+    canonicalVectors.length >= 20,
+    "at least twenty canonicalization vectors are required",
+  );
+  const names = new Set();
+  for (const vector of canonicalVectors) {
+    assert.ok(!names.has(vector.name), `duplicate vector name: ${vector.name}`);
+    names.add(vector.name);
+    assert.equal(
+      canonicalize(JSON.parse(vector.json)),
+      vector.canonical,
+      `canonicalization mismatch: ${vector.name}`,
+    );
+  }
 });
 
 test("canonicalize rejects values with no canonical JSON form", () => {

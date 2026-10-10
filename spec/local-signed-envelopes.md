@@ -72,10 +72,37 @@ Concretely:
 2. Canonicalize the remaining value with RFC 8785 (JSON Canonicalization
    Scheme): object keys sorted by UTF-16 code units, no insignificant
    whitespace, ECMAScript number formatting, strings escaped as JSON, arrays in
-   order.
+   order. This step is pinned by the known-answer vectors of
+   [Canonicalization known-answer vectors](#canonicalization-known-answer-vectors).
 3. Encode the result as UTF-8 and sign those bytes with Ed25519 (RFC 8032).
 
 The signature is therefore deterministic for a given key and envelope.
+
+### Canonicalization known-answer vectors
+
+RFC 8785 canonicalization is pinned by shared known-answer vectors in
+[`conformance/fixtures/identity-canonical/canonical.vectors.json`](../conformance/fixtures/identity-canonical/canonical.vectors.json).
+Each vector carries the raw JSON `json` input and the exact RFC 8785 `canonical`
+output, and every implementation MUST reproduce the same output:
+
+- [`tools/signed-envelope.mjs`](../tools/signed-envelope.mjs) (`canonicalize`)
+  via `node --test tools/signed-envelope.test.mjs` and `npm run validate:fixtures`;
+- `crates/xeip-identity` (`canonicalize_json`) via its `canonical_vectors` test;
+- `sdks/typescript` (`canonicalize`) via `npm run test:ts`.
+
+The vectors cover object-key ordering by UTF-16 code units (including the empty
+key, non-ASCII keys and astral keys), ECMAScript number formatting (`-0` → `0`,
+`1e21`, `1e-7`, `5e-324`, `9007199254740991`, `0.1`, `100` and exact decimal
+midpoints), JCS string escaping (C0 controls, `\u2028`/`\u2029`, DEL, astral
+code points, `/`, `"` and `\`) and nested empty objects/arrays.
+
+Because RFC 8785 §3.2.2.3 defers to ECMAScript `Number::toString`, an exact
+decimal midpoint MUST round to the *even* final digit. Rust's core float
+formatting instead rounds an exact midpoint away from zero, so the Rust
+canonicalizer takes its shortest significant digits from `serde_json`'s float
+formatter; the vector `-2084516549501568.25` (canonical `-2084516549501568.2`)
+pins this. A canonicalizer that reproduces `-2084516549501568.3` is wrong and
+will produce different signing bytes than the JavaScript reference.
 
 ## Strict pre-parse gate
 
@@ -109,11 +136,17 @@ Beyond the pre-parse gate, verification MUST be strict:
 - `alg` MUST be `"EdDSA"`;
 - the key decoded from `kid` MUST be a canonical curve point and MUST NOT be
   small-order; small-order/identity keys are rejected as `weak key`;
-- the signature MUST be verified with Ed25519 *strict* checking, which rejects
-  a non-canonical or small-order `R` in addition to the base
-  [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) verification equation; Rust
-  uses `verifying_key.verify_strict`, and the JS/TS ports pin the canonical
-  small-order key encodings and reject them before import.
+- the signature MUST be verified with Ed25519 *strict* checking, which rejects a
+  small-order `R` in addition to the base
+  [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032) verification equation. Rust
+  uses `verifying_key.verify_strict`, pinned by the
+  `verify_strict_rejects_a_small_order_r_that_loose_verify_accepts` test against
+  CTC/CCTV `ed25519vectors` #5 (a signature whose `R` is the all-zero
+  small-order encoding that the non-strict verifier would accept). The JS/TS
+  ports have no hand-written `R` check: they reject a small-order identity *key*
+  with the pinned blacklist, then rely on the platform verifier (OpenSSL in
+  Node, WebCrypto in browsers) to reject a small-order `R`. This is a remaining
+  edge to revisit should a platform verifier ever be lax about `R`.
 
 `extensions` — including `extensions["xeip.sig"]` itself — remain outside the
 signed bytes and are **unauthenticated**. Only the `kid`/`sender` binding is
@@ -251,6 +284,12 @@ Deterministic vectors live in
 `weak key` cases and three strict-pre-parse `text` cases). A vector carries
 either a parsed `envelope` or raw JSON `text`; both are checked by
 `node --test tools/signed-envelope.test.mjs` and by `npm run validate:fixtures`.
+
+RFC 8785 canonicalization is separately pinned by
+[`conformance/fixtures/identity-canonical/canonical.vectors.json`](../conformance/fixtures/identity-canonical/canonical.vectors.json)
+(raw `json` input and expected `canonical` output), shared by the JS, Rust and
+TypeScript known-answer tests described in
+[Canonicalization known-answer vectors](#canonicalization-known-answer-vectors).
 
 ```sh
 node tools/signed-envelope.mjs verify envelope.json   # -> {"valid":true} or {"valid":false,"reason":"..."}

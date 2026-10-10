@@ -5,7 +5,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { requireUri } from "../sdks/typescript/src/validation.js";
 import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
-import { verifySignedEnvelope } from "./signed-envelope.mjs";
+import { canonicalize, verifySignedEnvelope } from "./signed-envelope.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -80,6 +80,15 @@ for (const vector of signedVectors) {
       JSON.stringify(vector.reason) + " but received " + JSON.stringify(result));
   }
 }
+const canonicalVectors = readJson(new URL("../conformance/fixtures/identity-canonical/canonical.vectors.json", import.meta.url));
+for (const vector of canonicalVectors) {
+  const actual = canonicalize(JSON.parse(vector.json));
+  if (actual !== vector.canonical) {
+    throw new Error("canonicalization vector " + vector.name + ": expected " +
+      JSON.stringify(vector.canonical) + " but received " + JSON.stringify(actual));
+  }
+}
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
-  " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors and " +
-  signedVectors.length + " signed-envelope vectors passed");
+  " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors, " +
+  signedVectors.length + " signed-envelope vectors and " + canonicalVectors.length +
+  " canonicalization vectors passed");
