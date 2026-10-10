@@ -335,7 +335,50 @@ mod tests {
             "../../../conformance/fixtures/message.invalid-version.json"
         ))
         .unwrap();
-        assert_eq!(msg.validate().unwrap_err().field, "xeip");
+        let error = msg.validate().unwrap_err();
+        assert_eq!(error.field, "xeip");
+        assert_eq!(error.reason, "unsupported version");
+    }
+
+    #[test]
+    fn rejects_malformed_version_distinctly() {
+        let malformed: Envelope = serde_json::from_str(include_str!(
+            "../../../conformance/fixtures/message.invalid-malformed-version.json"
+        ))
+        .unwrap();
+        let error = malformed.validate().unwrap_err();
+        assert_eq!(error.field, "xeip");
+        assert_eq!(error.reason, "malformed xeip version");
+
+        let mut raw: Value = serde_json::from_str(include_str!(
+            "../../../conformance/fixtures/message.valid.json"
+        ))
+        .unwrap();
+        raw["xeip"] = Value::String(String::new());
+        let empty: Envelope = serde_json::from_value(raw).unwrap();
+        assert_eq!(
+            empty.validate().unwrap_err().reason,
+            "malformed xeip version"
+        );
+    }
+
+    #[test]
+    fn accepts_inert_extensions_fixture() {
+        let msg: Envelope = serde_json::from_str(include_str!(
+            "../../../conformance/fixtures/extensions/message.valid.json"
+        ))
+        .unwrap();
+        assert_eq!(msg.extensions.len(), 2);
+        msg.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_unknown_top_level_field_fixture() {
+        let raw: Value = serde_json::from_str(include_str!(
+            "../../../conformance/fixtures/message.invalid-unknown-field.json"
+        ))
+        .unwrap();
+        assert!(serde_json::from_value::<Envelope>(raw).is_err());
     }
 
     #[test]

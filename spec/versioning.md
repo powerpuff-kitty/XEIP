@@ -21,11 +21,11 @@ An advertisement is informative. A client MUST NOT treat it as an authorization,
 
 ## 3. Additive versus breaking changes
 
-A change to a wire version is **additive** when an existing reader of that version can still parse and interpret every message it previously could, without changing the meaning of existing fields. A change is **breaking** when it removes or renames a required field, changes a field's meaning or wire type, tightens validation on valid data, or otherwise requires an existing reader to change behavior to stay correct.
+A change to a wire version is **additive** when an existing reader of that version can still parse and interpret every message it previously could, without changing the meaning of existing fields. A change is **breaking** when it removes or renames a required field, changes a field's meaning or wire type, adds a new top-level member, tightens validation on valid data, or otherwise requires an existing reader to change behavior to stay correct.
 
-- Additive changes SHOULD advance the `MINOR` component; breaking changes MUST advance the `MAJOR` component.
-- The base `"0.1"` schema is **closed**: unknown top-level members are rejected. A new envelope field is therefore breaking for `"0.1"` unless it is carried inside `extensions` or is introduced together with a new version that defines it.
-- A breaking change MUST NOT be applied silently to an existing version. It requires a new `xeip` value; readers of the old version reject the envelope as unsupported rather than reinterpreting it.
+- Because the base `"0.1"` schema is **closed** (unknown top-level members are rejected), an additive change within `"0.1"` is confined to the `extensions` object. Any new top-level member, or any other extension of the base schema, is breaking for `"0.1"` and must instead be introduced by a new version that defines it.
+- A breaking change MUST NOT be applied silently to an existing version. It requires a new `xeip` value that defines a new, self-contained schema; readers of the old version reject the envelope as unsupported rather than reinterpreting it.
+- The `MAJOR` and `MINOR` components are labels, not an ordering (section 1). A new version is selected by its exact `xeip` string; compatibility is never inferred from numeric precedence, so an additive change to a future version is expressed there, not by advancing a digit.
 - This draft defines no version other than `"0.1"`; any later version must ship its own schema, fixtures and compatibility statement.
 
 ## 4. Unknown fields and extensions

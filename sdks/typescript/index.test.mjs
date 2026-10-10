@@ -31,6 +31,24 @@ test("send requires HTTP 202 rather than any successful status", async () => {
   assert.equal(cancelled, true);
 });
 
+test("send surfaces the relay 422 error body", async () => {
+  for (const error of ["unsupported version", "malformed xeip version"]) {
+    const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+      fetchImpl: async () => new Response(JSON.stringify({ error }), {
+        status: 422, headers: { "Content-Type": "application/json" }
+      })
+    });
+    await assert.rejects(client.send(fixture("message.valid.json")), new RegExp(error));
+  }
+});
+
+test("send falls back to the status when a 422 body is not JSON", async () => {
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response("not json", { status: 422 })
+  });
+  await assert.rejects(client.send(fixture("message.valid.json")), /HTTP 422/);
+});
+
 test("send accepts zero active stream writes without claiming recipient delivery", async () => {
   const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
     fetchImpl: async () => new Response(JSON.stringify({ accepted: true, delivered: 0 }), { status: 202 })
@@ -210,8 +228,17 @@ test("events requires HTTP 200 and cancels an unexpected successful response", a
 
 test("valid golden fixtures and rejects bad versions", () => {
   assertEnvelope(fixture("message.valid.json"));
+  assertEnvelope(fixture("extensions/message.valid.json"));
   assertEntity(fixture("entity.valid.json"));
   assert.throws(() => assertEnvelope(fixture("message.invalid-version.json")), /version/);
+  assert.throws(() => assertEnvelope(fixture("message.invalid-malformed-version.json")), /malformed/);
+  assert.throws(() => assertEnvelope(fixture("message.invalid-unknown-field.json")), /unexpected/);
+});
+
+test("message schema xeip const matches the first supported version", () => {
+  const schema = JSON.parse(readFileSync(new URL("../../schemas/message.schema.json", import.meta.url)));
+  assert.equal(schema.properties.xeip.const, sdk.XEIP_SUPPORTED_VERSIONS[0]);
+  assert.equal(sdk.XEIP_VERSION, sdk.XEIP_SUPPORTED_VERSIONS[0]);
 });
 
 test("advertises supported versions and distinguishes unsupported from malformed xeip", () => {

@@ -194,11 +194,12 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
   };
   const health = () => {
+    const protocol = "xeip/" + XEIP_SUPPORTED_VERSIONS[0];
     const base = admission
-      ? { status: "ok", protocol: "xeip/0.1", mode: "local-admission", profile: LOCAL_ADMISSION_PROFILE,
+      ? { status: "ok", protocol, mode: "local-admission", profile: LOCAL_ADMISSION_PROFILE,
         transports: ["http-sse", "websocket"],
         ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
-      : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] };
+      : { status: "ok", protocol, mode: "development-only", transports: ["http-sse", "websocket"] };
     base.protocolVersions = XEIP_SUPPORTED_VERSIONS;
     if (store) {
       base.resumeProfile = LOCAL_DELIVERY_PROFILE;

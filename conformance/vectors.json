@@ -781,5 +781,15 @@
   { "name": "message correlation does not require a known original", "schema": "message", "valid": true, "patch": { "replyTo": "urn:xeip:message:unknown" } },
   { "name": "message event kind", "schema": "message", "valid": true, "patch": { "kind": "event" } },
   { "name": "message command kind", "schema": "message", "valid": true, "patch": { "kind": "command" } },
-  { "name": "message receipt kind", "schema": "message", "valid": true, "patch": { "kind": "receipt" } }
+  { "name": "message receipt kind", "schema": "message", "valid": true, "patch": { "kind": "receipt" } },
+  { "name": "message malformed version 0.1.0", "schema": "message", "valid": false, "patch": { "xeip": "0.1.0" } },
+  { "name": "message malformed version empty", "schema": "message", "valid": false, "patch": { "xeip": "" } },
+  { "name": "message unsupported version 0.2", "schema": "message", "valid": false, "patch": { "xeip": "0.2" } },
+  { "name": "entity malformed version 0.1.0", "schema": "entity", "valid": false, "patch": { "xeip": "0.1.0" } },
+  { "name": "entity malformed version empty", "schema": "entity", "valid": false, "patch": { "xeip": "" } },
+  { "name": "entity unsupported version 0.2", "schema": "entity", "valid": false, "patch": { "xeip": "0.2" } },
+  { "name": "session malformed version 0.1.0", "schema": "session", "valid": false, "patch": { "xeip": "0.1.0" } },
+  { "name": "session malformed version empty", "schema": "session", "valid": false, "patch": { "xeip": "" } },
+  { "name": "session unsupported version 0.2", "schema": "session", "valid": false, "patch": { "xeip": "0.2" } },
+  { "name": "message inert extensions", "schema": "message", "valid": true, "patch": { "extensions": { "org.example.trace": { "traceId": "0123456789abcdef" } } } }
 ]

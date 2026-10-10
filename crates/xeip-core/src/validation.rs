@@ -132,13 +132,24 @@ pub(crate) fn ensure_uri(field: &'static str, value: &str) -> Result<(), Validat
 
 pub(crate) fn ensure_version(value: &str) -> Result<(), ValidationError> {
     if value == PROTOCOL_VERSION {
-        Ok(())
-    } else {
-        Err(ValidationError {
-            field: "xeip",
-            reason: "unsupported XEIP version",
-        })
+        return Ok(());
     }
+    let mut parts = value.split('.');
+    let major = parts.next().unwrap_or("");
+    let minor = parts.next().unwrap_or("");
+    let well_formed = parts.next().is_none()
+        && !major.is_empty()
+        && !minor.is_empty()
+        && major.bytes().all(|byte| byte.is_ascii_digit())
+        && minor.bytes().all(|byte| byte.is_ascii_digit());
+    Err(ValidationError {
+        field: "xeip",
+        reason: if well_formed {
+            "unsupported version"
+        } else {
+            "malformed xeip version"
+        },
+    })
 }
 
 pub(crate) fn ensure_utc(field: &'static str, value: &str) -> Result<(), ValidationError> {

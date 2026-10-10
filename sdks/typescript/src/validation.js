@@ -1,5 +1,4 @@
 /** Dependency-free wire validation shared by the SDK, browser console and local relay. */
-export const XEIP_VERSION = "0.1";
 /**
  * Wire versions this implementation can read. Advertising and negotiation are
  * defined by `spec/versioning.md`; the base schema pins `xeip` to `"0.1"`.

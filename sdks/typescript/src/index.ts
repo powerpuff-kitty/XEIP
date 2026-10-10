@@ -7,7 +7,7 @@ import { SseParser } from "./sse.js";
 
 export * from "./identity.js";
 
-export const XEIP_VERSION = "0.1" as const;
+export const XEIP_VERSION = XEIP_SUPPORTED_VERSIONS[0]!;
 
 /**
  * Wire versions this SDK can read. The relay advertises the same list from
@@ -142,8 +142,18 @@ export class XeipHttpSseClient {
       body: JSON.stringify(message)
     });
     if (response.status !== 202) {
-      await response.body?.cancel().catch(() => {});
-      throw new Error("XEIP relay rejected message: HTTP " + response.status);
+      let detail = "";
+      if (response.status === 422) {
+        try {
+          const errorBody: unknown = await response.json();
+          if (isRecord(errorBody) && typeof errorBody.error === "string" && errorBody.error) {
+            detail = ": " + errorBody.error;
+          }
+        } catch {}
+      } else {
+        await response.body?.cancel().catch(() => {});
+      }
+      throw new Error("XEIP relay rejected message: HTTP " + response.status + detail);
     }
     const result: unknown = await response.json();
     const responseBody = requireRecord(result, "relay response");

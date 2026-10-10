@@ -1,0 +1,19 @@
+{
+  "xeip": "0.1",
+  "id": "urn:uuid:8c0f1c2a-7b3d-4e5f-9a10-2b3c4d5e6f70",
+  "kind": "message",
+  "sender": "urn:xeip:entity:human-01",
+  "recipient": "urn:xeip:entity:agent-01",
+  "session": "urn:xeip:session:demo",
+  "timestamp": "2026-10-08T20:00:00.000Z",
+  "body": {
+    "contentType": "text/plain",
+    "data": "Unknown extension data is inert."
+  },
+  "extensions": {
+    "org.example.trace": {
+      "traceId": "0123456789abcdef"
+    },
+    "org.example.opaque": "unnegotiated and uninterpreted"
+  }
+}
