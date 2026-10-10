@@ -64,7 +64,10 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   const deliveryLog = delivery === undefined ? null : new DeliveryLog(delivery);
   const durableStore = durable === undefined ? null : new DurableStore(durable);
   const store = durableStore ?? deliveryLog;
-  const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts);
+  // Receipts persist through the durable store's directory only when both
+  // options are set; without a durable backend the ledger stays in-memory.
+  const receiptBackend = durableStore && receipts !== undefined ? durableStore.openReceiptLog() : null;
+  const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts, receiptBackend);
   const limitPolicy = limits === undefined ? null : new LimitPolicy(limits);
   // One token-bucket decision for the current request's rate-limit key, or null
   // when the profile is disabled. The transport supplies the peer address; the

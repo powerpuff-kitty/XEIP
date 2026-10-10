@@ -26,6 +26,7 @@ const SEGMENT_BYTES = 1024 * 1024;
 const BATCH_FSYNC = 64;
 const RECORD_HEADER = 4 + 32; // uint32 payload length + SHA-256(payload)
 const MANIFEST = "manifest.json";
+const RECEIPT_LOG = "receipts.log";
 const LOCK = "LOCK";
 const SEGMENT_PATTERN = /^segment-([0-9]+)\.log$/;
 const COMPACT_FAULTS = ["after-write", "after-manifest", "torn"];
@@ -65,6 +66,135 @@ function readRecords(buffer) {
   return { records, torn: false, validBytes: offset };
 }
 
+// One persisted receipt line: digest-only, never a copy of the envelope. The
+// fields are the authenticated principal digest, the session digest, the ID
+// digest, the correlated `seq` and a wall-clock expiry (the monotonic clock does
+// not survive restart).
+const validReceiptRecord = record =>
+  record !== null && typeof record === "object" && !Array.isArray(record) &&
+  typeof record.principal === "string" && record.principal.length > 0 &&
+  typeof record.session === "string" && record.session.length > 0 &&
+  typeof record.id === "string" &&
+  Number.isSafeInteger(record.seq) && record.seq >= 0 &&
+  Number.isFinite(record.expiresAt);
+
+/**
+ * Digest-only, append-only persistence for the local receipts ledger. It lives
+ * in the durable store directory as `receipts.log` and reuses the same
+ * length-prefixed, SHA-256-checksummed record framing as the delivery segments.
+ * A truncated final record is a torn tail that is dropped and reported
+ * "recovered"; interior corruption fails closed to "degraded" with no receipts
+ * and moves the unreadable file aside so appends never sit behind bad bytes. It
+ * stores no envelope copy. `compact` atomically rewrites the live set (temp +
+ * fsync + rename); the ledger rebases the log on each startup and online
+ * compaction while the process runs is deferred.
+ */
+export class ReceiptLog {
+  #dir;
+  #file;
+  #fd;
+  #fsync;
+  #status = "ok";
+  #records = [];
+  #closed = false;
+
+  constructor(configuration = {}) {
+    if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
+        Object.keys(configuration).some(key => !["dir", "fsync"].includes(key))) {
+      throw new TypeError("invalid receipt log configuration");
+    }
+    if (typeof configuration.dir !== "string" || configuration.dir.length === 0) {
+      throw new TypeError("receipt log directory is required");
+    }
+    const fsync = configuration.fsync ?? "always";
+    if (!FSYNC_MODES.includes(fsync)) throw new RangeError("invalid receipt log fsync");
+    this.#dir = path.resolve(configuration.dir);
+    this.#fsync = fsync;
+    this.#file = path.join(this.#dir, RECEIPT_LOG);
+    fs.mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
+    this.#records = this.#load();
+    this.#fd = fs.openSync(this.#file, "a", 0o600);
+  }
+
+  /** "ok", "recovered" (torn tail dropped) or "degraded" (corrupt, failed closed). */
+  get status() { return this.#status; }
+  get path() { return this.#file; }
+
+  /** Every valid persisted record; expiry filtering and bounds are the ledger's. */
+  load() { return this.#records; }
+
+  append(record) {
+    if (this.#closed) return;
+    fs.writeSync(this.#fd, encodeRecord(Buffer.from(JSON.stringify(record), "utf8")));
+    if (this.#fsync === "always") fs.fsyncSync(this.#fd);
+  }
+
+  /** Atomically replaces the log with exactly `records` (temp + fsync + rename). */
+  compact(records) {
+    if (this.#closed) return;
+    const data = Buffer.concat(records.map(record => encodeRecord(Buffer.from(JSON.stringify(record), "utf8"))));
+    const tmp = this.#file + ".tmp";
+    const fd = fs.openSync(tmp, "w", 0o600);
+    try {
+      fs.writeSync(fd, data);
+      if (this.#fsync !== "never") fs.fsyncSync(fd);
+    } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, this.#file);
+    if (this.#fsync !== "never") this.#fsyncDir();
+    if (this.#fd !== undefined) { try { fs.closeSync(this.#fd); } catch { /* best-effort */ } }
+    this.#fd = fs.openSync(this.#file, "a", 0o600);
+  }
+
+  close() {
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#fd !== undefined) {
+      if (this.#fsync !== "never") { try { fs.fsyncSync(this.#fd); } catch { /* best-effort */ } }
+      try { fs.closeSync(this.#fd); } catch { /* best-effort */ }
+      this.#fd = undefined;
+    }
+  }
+
+  #load() {
+    if (!fs.existsSync(this.#file)) return [];
+    let buffer;
+    try { buffer = fs.readFileSync(this.#file); }
+    catch { this.#status = "degraded"; return []; }
+    let result;
+    try { result = readRecords(buffer); }
+    catch {
+      // Interior corruption: fail closed to no receipts and preserve the file
+      // for inspection so new appends never sit behind unreadable bytes.
+      this.#status = "degraded";
+      try { fs.renameSync(this.#file, this.#file + ".corrupt"); } catch { /* best-effort */ }
+      return [];
+    }
+    if (result.torn) {
+      this.#status = "recovered";
+      try { fs.truncateSync(this.#file, result.validBytes); } catch { /* reported as recovered regardless */ }
+    }
+    const records = [];
+    for (const { record } of result.records) {
+      if (!validReceiptRecord(record)) { this.#status = "degraded"; return []; }
+      records.push(record);
+    }
+    return records;
+  }
+
+  #fsyncDir() {
+    let fd;
+    try {
+      fd = fs.openSync(this.#dir, "r");
+      fs.fsyncSync(fd);
+    } catch {
+      // A directory fsync is not supported on every platform; the rename is
+      // still atomic and the file itself was fsynced above.
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
+  }
+}
+
 export class DurableStore {
   #dir;
   #manifestPath;
@@ -90,6 +220,7 @@ export class DurableStore {
   #lockHeld = false;
   #manifestPending = 0;
   #faulted = false;
+  #receiptLog = null;
 
   constructor(configuration = {}) {
     if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
@@ -161,6 +292,21 @@ export class DurableStore {
 
   /** "ok", or "recovered" after a torn tail was dropped or a counter reconstructed. */
   status() { return this.#status; }
+
+  /**
+   * Creates (once) and returns the digest-only receipt log that shares this
+   * store's directory, exclusive lock and fsync policy. Its recovery state is
+   * folded into this store's `status()` so health reports it under the existing
+   * `durable.state` field without exposing any per-principal receipt state.
+   */
+  openReceiptLog() {
+    if (this.#receiptLog) return this.#receiptLog;
+    const log = new ReceiptLog({ dir: this.#dir, fsync: this.#fsync });
+    if (log.status === "degraded") this.#status = "degraded";
+    else if (log.status === "recovered" && this.#status === "ok") this.#status = "recovered";
+    this.#receiptLog = log;
+    return log;
+  }
 
   /**
    * Reserves and persists a strictly increasing per-session sequence BEFORE the
@@ -271,6 +417,7 @@ export class DurableStore {
       fs.closeSync(this.#activeFd);
       this.#activeFd = undefined;
     }
+    this.#receiptLog?.close();
     this.#releaseLock();
   }
 

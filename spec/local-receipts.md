@@ -1,6 +1,8 @@
 # Local delivery receipts profile — xeip.local-receipts/0.1
 
-Experimental, opt-in recipient-acknowledgment extension for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It lets an authenticated subscriber acknowledge a specific retained delivery, correlates that acknowledgment against the [local delivery](local-delivery.md) log, and remembers it in a **bounded, per-principal in-memory ledger**. It is not exactly-once execution, not proof of processing, not durable persistence and not a replacement for the application-level `receipt` kind. It is implemented as an opt-in local prototype in `services/relay/receipts.mjs`; [ADR 0005](decisions/0005-local-receipts.md) records the decision.
+Experimental, opt-in recipient-acknowledgment extension for the [HTTP + SSE](transports/http-sse.md) and [WebSocket](transports/websocket.md) development transports, carrying unchanged XEIP `"0.1"` envelopes. It lets an authenticated subscriber acknowledge a specific retained delivery, correlates that acknowledgment against the [local delivery](local-delivery.md) log, and remembers it in a **bounded, per-principal ledger** — in memory by default, or persisted inside the [durable](local-durable.md) store directory when both `receipts` and `durable` are configured. It is not exactly-once execution, not proof of processing and not a replacement for the application-level `receipt` kind. It is implemented as an opt-in local prototype in `services/relay/receipts.mjs`; [ADR 0005](decisions/0005-local-receipts.md) records the decision.
+
+> **Status note (durable slice).** `createRelay({ admission, durable, receipts })` now persists the ledger to `<durable.dir>/receipts.log` and reloads unexpired records on construction, so an idempotent repeat reports `duplicate: true` after a restart. Each line is digest-only (principal digest, session digest, ID digest, `seq`, wall expiry); no envelope copy is written and no endpoint or health field exposes per-principal receipt state. A torn tail is dropped (`durable.state: "recovered"`); interior corruption fails closed to "no receipts" and reports `durable.state: "degraded"`. Without `durable`, the ledger is unchanged and still memory-only. Online compaction of a long-running receipt log is deferred (the log is rebased on each startup).
 
 ## Selection and limits
 
@@ -42,7 +44,7 @@ It does **not** mean, and MUST NOT be presented as:
 - exactly-once execution, or that an action happened at most once;
 - proof of processing, execution, interpretation or human/agent review;
 - proof that the relay wrote the message to that principal, or that the principal did not later lose it;
-- durability: it is memory-only, expires on its window, is evicted under bounds and is lost on process restart or a new factory;
+- durability: without the [durable](local-durable.md) backing it is memory-only, expires on its window, is evicted under bounds and is lost on process restart or a new factory; with `durable` enabled the assertion and its wall-clock expiry survive restart but correlation still fails once the target is no longer retained;
 - authentication of a `kind: "receipt"` envelope or of `replyTo`, which remain unverified application data;
 - authorization for any command or side effect;
 - an ordering proof: receipt order is not acceptance order, sender creation order or application completion order;
@@ -101,7 +103,7 @@ Receipt processing reuses the existing loopback authority/origin gates and admis
 | 413 | Request or receipt body exceeds the transport byte bound |
 | 415 | Receipt media type is not `application/json` |
 
-The receipt ledger is bounded three ways: by `windowMs` on a process-monotonic clock, by `maxPerSession` per `(session, principal)` pair, and by `maxPerPrincipal` per authenticated principal. Records are fixed-size: the authenticated principal digest, session digest, ID digest (Node SHA-256, as in the [replay ledger](decisions/0002-local-replay-window.md)), `seq`, and expiry. The ledger does not retain a second copy of the envelope; the [delivery log](local-delivery.md) already retains the full envelope, so a receipt adds no new plaintext retention. On overflow the relay evicts the oldest receipt within the exceeded bound, because a receipt is advisory and explicitly non-durable; a receipt request is never failed merely because a bound is full. Restart, eviction or window expiry forgets receipts. Entry counts are not exact heap limits.
+The receipt ledger is bounded three ways: by `windowMs` on a process-monotonic clock, by `maxPerSession` per `(session, principal)` pair, and by `maxPerPrincipal` per authenticated principal. Records are fixed-size: the authenticated principal digest, session digest, ID digest (Node SHA-256, as in the [replay ledger](decisions/0002-local-replay-window.md)), `seq`, and expiry. The ledger does not retain a second copy of the envelope; the [delivery log](local-delivery.md) already retains the full envelope, so a receipt adds no new plaintext retention. On overflow the relay evicts the oldest receipt within the exceeded bound, because a receipt is advisory and explicitly non-durable; a receipt request is never failed merely because a bound is full. Without `durable`, restart, eviction or window expiry forgets receipts; with `durable`, unexpired records reload from a digest-only log and the same bounds are rebuilt by evicting the oldest loaded receipt. Entry counts are not exact heap limits.
 
 ## Non-disclosure and authorization
 
@@ -112,11 +114,11 @@ The receipt ledger is bounded three ways: by `windowMs` on a process-monotonic c
 
 ## Migration and rollback
 
-Adding the `receipts` option is additive and explicit. Without it, `POST /receipts` and the WebSocket `receipt` control both return `400` (profile not enabled), health omits the receipt fields, and all existing modes, schemas and fixtures behave as before. Selecting it requires admission and delivery, so a shared-token or delivery-only deployment is never silently upgraded. Removing the option restores the prior behavior and drops the in-memory ledger; no persistent data or migration is introduced. Rollback is not automatic after a validation or authorization error.
+Adding the `receipts` option is additive and explicit. Without it, `POST /receipts` and the WebSocket `receipt` control both return `400` (profile not enabled), health omits the receipt fields, and all existing modes, schemas and fixtures behave as before. Selecting it requires admission and delivery/durable, so a shared-token or delivery-only deployment is never silently upgraded. Removing the option restores the prior behavior and drops the in-memory ledger; when `durable` was configured it also leaves the digest-only `<dir>/receipts.log` in place for the operator to delete, and no envelope data, credential or schema is persisted. Rollback is not automatic after a validation or authorization error.
 
 ## Explicit non-goals
 
-- Durable, restart-surviving or cross-relay receipts and correlation.
+- Cross-relay receipts and correlation; local `durable` persistence is now implemented, but there is still no multi-relay or global receipt store, and online compaction of the receipt log is deferred.
 - Proof of processing, execution or human/agent review; a `completed` status is not defined in 0.1.
 - Exactly-once execution or any command side-effect guarantee.
 - Sender-visible, attributed or aggregated receipt reporting; see open questions.
