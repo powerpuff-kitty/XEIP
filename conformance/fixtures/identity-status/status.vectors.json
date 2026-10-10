@@ -1,0 +1,548 @@
+{
+  "trusted": {
+    "keydoc.entity": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    }
+  },
+  "statuses": {
+    "status.revoke.1": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "uQ1bjRgNIgytw7LGloKNYH5gH-xNx6V-MEzkTlb16cPw8OFyw0RarsY6zH9QotvRionJrJrHRdWG7_DamPzwDQ"
+        }
+      ]
+    },
+    "status.revoke.2": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "generation": 2
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "bEh18FclVwfqjkuss3OI0vJLeVHQNr06UMlJDis1xNb3GFzfidFP-muxTzi61ehwVdgWM9hz9eF1AXXupdqLDQ"
+        }
+      ]
+    },
+    "status.clean.1": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T06:00:00Z",
+      "revoked": [],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "f1LYzMnPeMo3b_8MmKOXWl8Y8cC3DYZFAja3NaL0X0FrpIVCFenQjAnsMOC0XSce_KY6Sn7zc0KsEodG9uKeCg"
+        }
+      ]
+    },
+    "status.zero": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 0,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "NQ9uaQ-gYkWrP5wBeeswhCMNPUn7nvEU84Xt91BCKaZdznfQHm_4sZrdzkvJsWbels2pVWz6j93oO9Eltx_9CA"
+        }
+      ]
+    },
+    "status.begin.3": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 3,
+      "issuedAt": "2026-10-12T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "wSrQxf6lEvcod3MdIBcKOOwGBVJajxjsmpZByFYyfY76cAbNLKvcLmEo7pmSRYjYZ3haDE133NqTna4V4G63Cg"
+        }
+      ]
+    },
+    "status.nonroot": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "sig": "KDbqwuPgf-pDgBZuWYmm-SuEmHxtkpAAsemTtV4xc8kpoAkLyyglTwIAFJrHU84PvoQ8vxEWckLPBDf5WxpzAw"
+        }
+      ]
+    },
+    "status.weak": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+          "sig": "uQ1bjRgNIgytw7LGloKNYH5gH-xNx6V-MEzkTlb16cPw8OFyw0RarsY6zH9QotvRionJrJrHRdWG7_DamPzwDQ"
+        }
+      ]
+    },
+    "status.empty-sigs": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": []
+    },
+    "status.tampered": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "AQ1bjRgNIgytw7LGloKNYH5gH-xNx6V-MEzkTlb16cPw8OFyw0RarsY6zH9QotvRionJrJrHRdWG7_DamPzwDQ"
+        }
+      ]
+    },
+    "status.stale": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-09-01T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "2-GM7jSNb8LJjTvnyFugPuYVKbfvWNxAPw7U5TJ_P0D6_K27gTur0j9Nn8YqigoiQCThXkZHCUBYuRqEyzx5Aw"
+        }
+      ]
+    },
+    "status.entity-mismatch": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "SISbAce8kgFspfC3AsgM3c00Je6Y1efbZh037qLSvMjmWGEdN_0gUMI6Wh-wzEXTYtcb5YPyTnphPZ1qorXTAw"
+        }
+      ]
+    },
+    "status.unknown-field": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "extra": true,
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "cNMuwfvVX6ZTNO6-e20L0wMiplo0Swoi5M_AWKtqhwdZ0qEwZz2SWPy03pamvgUUA-jK6K-epUTUI2Wzp-diBw"
+        }
+      ]
+    },
+    "status.unsupported-version": {
+      "xeip": "xeip.status/0.2",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "ZqEZvEoJ_sLIkQ5o5YzRHT_C3rXqWi4JvVzPFJpW8ikchw8StqkvV1EmL6xI6PK6iGercz0qZNYMsgj8EVKyDg"
+        }
+      ]
+    },
+    "status.bad-serial": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": -1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "nI6ekBAZ3DDMlRTVYW65cYlOXxPB_u5D5Vr6oltew79BtoRrbitJZztEQtfC4Bn0wS_ZVr8P5CsAvIxSq30-Bw"
+        }
+      ]
+    },
+    "status.bad-issued": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00+00:00",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 1
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "yj_Hb2rGNfFC6TxpFcLRqQ1FXVNMiQvDGcaBJ6j2z6axoFjmBKN21kUmqd6We4rV7NVXl8w3PDq3nAZwucKeCA"
+        }
+      ]
+    },
+    "status.bad-revoked": {
+      "xeip": "xeip.status/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "serial": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "revoked": [
+        {
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "generation": 0
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "f9RVQbKvdZ2b-KrCQ_qQCyMnM7ndh-CTqFsDpS6s2x-GgngJ2Q4TVHH8KIGw---L7xPL9RNxZrk7fCUhOXqaAw"
+        }
+      ]
+    }
+  },
+  "trackers": [
+    {
+      "name": "status.valid",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.revoke.1",
+          "status": "status.revoke.1",
+          "valid": true,
+          "revoked": [
+            {
+              "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+              "generation": 1,
+              "expected": true
+            },
+            {
+              "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+              "generation": 2,
+              "expected": true
+            },
+            {
+              "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+              "generation": 0,
+              "expected": false
+            },
+            {
+              "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+              "generation": 1,
+              "expected": false
+            },
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "generation": 1,
+              "expected": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status.rollback",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-12T00:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.revoke.1",
+          "status": "status.revoke.1",
+          "valid": true
+        },
+        {
+          "name": "status.revoke.1-again",
+          "status": "status.revoke.1",
+          "valid": false,
+          "reason": "serial rollback"
+        },
+        {
+          "name": "status.clean.1",
+          "status": "status.clean.1",
+          "valid": false,
+          "reason": "serial rollback"
+        },
+        {
+          "name": "status.revoke.2",
+          "status": "status.revoke.2",
+          "valid": true,
+          "revoked": [
+            {
+              "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+              "generation": 1,
+              "expected": true
+            },
+            {
+              "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+              "generation": 2,
+              "expected": true
+            }
+          ]
+        },
+        {
+          "name": "status.revoke.1-old",
+          "status": "status.revoke.1",
+          "valid": false,
+          "reason": "serial rollback"
+        }
+      ]
+    },
+    {
+      "name": "status.serial-zero",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.zero",
+          "status": "status.zero",
+          "valid": true
+        },
+        {
+          "name": "status.zero-again",
+          "status": "status.zero",
+          "valid": false,
+          "reason": "serial rollback"
+        }
+      ]
+    },
+    {
+      "name": "status.unknown-signer",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.nonroot",
+          "status": "status.nonroot",
+          "valid": false,
+          "reason": "unknown signer"
+        },
+        {
+          "name": "status.empty-sigs",
+          "status": "status.empty-sigs",
+          "valid": false,
+          "reason": "unknown signer"
+        }
+      ]
+    },
+    {
+      "name": "status.weak-signer",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.weak",
+          "status": "status.weak",
+          "valid": false,
+          "reason": "weak key"
+        }
+      ]
+    },
+    {
+      "name": "status.tampered",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.tampered",
+          "status": "status.tampered",
+          "valid": false,
+          "reason": "signature mismatch"
+        }
+      ]
+    },
+    {
+      "name": "status.stale",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T00:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.stale",
+          "status": "status.stale",
+          "valid": false,
+          "reason": "stale status"
+        }
+      ]
+    },
+    {
+      "name": "status.entity-binding",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.entity-mismatch",
+          "status": "status.entity-mismatch",
+          "valid": false,
+          "reason": "entity binding"
+        }
+      ]
+    },
+    {
+      "name": "status.unknown-field",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.unknown-field",
+          "status": "status.unknown-field",
+          "valid": false,
+          "reason": "unknown field"
+        }
+      ]
+    },
+    {
+      "name": "status.unsupported-version",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.unsupported-version",
+          "status": "status.unsupported-version",
+          "valid": false,
+          "reason": "unsupported version"
+        }
+      ]
+    },
+    {
+      "name": "status.malformed",
+      "trusted": "keydoc.entity",
+      "now": "2026-10-10T12:00:00Z",
+      "maxAgeSeconds": 604800,
+      "steps": [
+        {
+          "name": "status.bad-serial",
+          "status": "status.bad-serial",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "name": "status.bad-issued",
+          "status": "status.bad-issued",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "name": "status.bad-revoked",
+          "status": "status.bad-revoked",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "name": "status.malformed-text",
+          "text": "{\"xeip\":\"xeip.status/0.1\",\"entity\":\"dup\",\"entity\":\"dup\"}",
+          "valid": false,
+          "reason": "malformed document"
+        }
+      ]
+    }
+  ]
+}

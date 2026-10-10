@@ -7,6 +7,7 @@ import { requireUri } from "../sdks/typescript/src/validation.js";
 import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
 import { canonicalize, verifySignedEnvelope } from "./signed-envelope.mjs";
 import { verifyKeyDocument } from "./key-document.mjs";
+import { StatusTracker, verifyStatusDocument } from "./identity-status.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -104,7 +105,51 @@ for (const vector of keydocVectors) {
       JSON.stringify(vector.reason) + " but received " + JSON.stringify(result));
   }
 }
+const statusFile = readJson(new URL("../conformance/fixtures/identity-status/status.vectors.json", import.meta.url));
+// Direct single-document check, independent of the stateful tracker below.
+const directStatus = verifyStatusDocument(
+  statusFile.statuses["status.revoke.1"],
+  statusFile.trusted["keydoc.entity"],
+);
+if (directStatus.valid !== true) {
+  throw new Error("status vector status.revoke.1: expected a valid single document but received " +
+    JSON.stringify(directStatus));
+}
+let statusStepCount = 0;
+for (const tracker of statusFile.trackers) {
+  const trusted = statusFile.trusted[tracker.trusted];
+  const instance = new StatusTracker();
+  for (const step of tracker.steps) {
+    // A step carries either a registry `status` or raw JSON `text` (which only
+    // reaches the verifier through the strict pre-parse gate).
+    if ((step.status === undefined) === (step.text === undefined)) {
+      throw new Error("status vector " + tracker.name + "/" + step.name +
+        ": exactly one of `status` or `text` is required");
+    }
+    const input = step.text !== undefined ? step.text : statusFile.statuses[step.status];
+    const result = instance.ingest(input, {
+      trustedKeyDocument: trusted,
+      now: tracker.now,
+      maxAgeSeconds: tracker.maxAgeSeconds,
+    });
+    if (step.valid === true) {
+      if (result.valid !== true) throw new Error("status vector " + tracker.name + "/" + step.name +
+        ": expected a valid status but received " + JSON.stringify(result));
+      for (const check of step.revoked ?? []) {
+        const actual = instance.isRevoked(trusted.entity, check.kid, check.generation);
+        if (actual !== check.expected) throw new Error("status vector " + tracker.name + "/" + step.name +
+          ": isRevoked(" + check.kid + ", " + check.generation + ") expected " + check.expected +
+          " but received " + actual);
+      }
+    } else if (result.valid !== false || result.reason !== step.reason) {
+      throw new Error("status vector " + tracker.name + "/" + step.name + ": expected reason " +
+        JSON.stringify(step.reason) + " but received " + JSON.stringify(result));
+    }
+    statusStepCount++;
+  }
+}
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
   " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors, " +
   signedVectors.length + " signed-envelope vectors, " + canonicalVectors.length +
-  " canonicalization vectors and " + keydocVectors.length + " key-document vectors passed");
+  " canonicalization vectors, " + keydocVectors.length + " key-document vectors and " +
+  statusStepCount + " status steps passed");
