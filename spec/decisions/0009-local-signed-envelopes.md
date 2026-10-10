@@ -1,13 +1,15 @@
 # ADR 0009: Local signed-envelope reference profile
 
 Status: Accepted for local prototype (reference implementation and conformance
-consumer in [`tools/signed-envelope.mjs`](../../tools/signed-envelope.mjs); not
-wired into the relay). Date: 2026-10-10. This decision advances
-[issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1) by landing the
-first **verification slice** of the identity profile: a detached Ed25519
+consumer in [`tools/signed-envelope.mjs`](../../tools/signed-envelope.mjs)).
+Opt-in relay enforcement has landed through `createRelay({ signatures: {} })`,
+including the strict pre-parse gate at the HTTP and WebSocket transport, so the
+profile is no longer unwired from the relay. Date: 2026-10-10. This decision
+advances [issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1) by landing
+the first **verification slice** of the identity profile: a detached Ed25519
 signature over a canonicalized envelope, bound to `sender` through the key-id.
-It is an opt-in, verifier-side prototype and does not approve production
-identity, key distribution, revocation or relay enforcement.
+It is an opt-in prototype and does not approve production identity, key
+distribution, revocation or production relay enforcement.
 
 ## Context
 
@@ -64,7 +66,8 @@ In summary:
 7. **Scope.** State honestly what a signature does and does not prove: it
    proves integrity of the non-`extensions` fields and possession of the `kid`
    key, and nothing about authorization, trust, freshness, revocation or
-   `extensions` (which are unsigned). No relay path consumes it.
+   `extensions` (which are unsigned). An opt-in relay path consumes it when the
+   relay is constructed with `signatures: {}`.
 
 ## Alternatives
 
@@ -104,8 +107,9 @@ changes no schema and no dependency, keeps the `"0.1"` wire format, and gives a
 concrete answer to "A cannot send as B" at the message level (a signature under
 A's key with `sender: B` fails the binding check).
 
-Negative and limiting: this is not authentication or admission and is not wired
-into the relay, so the running relay still accepts a self-asserted `sender`.
+Negative and limiting: this is not authentication or admission; opt-in relay
+enforcement has landed, but a relay constructed without `signatures: {}` still
+accepts a self-asserted `sender`.
 There is no key distribution, trust root, rotation, revocation, freshness or
 replay handling, no end-to-end encryption, and `extensions` are unsigned, so a
 verifier can prove very little beyond integrity and key possession. Canonical
@@ -114,7 +118,7 @@ these bytes exactly or conformance fails. `crates/xeip-identity` now provides a
 byte-identical Rust consumer (pinned `ed25519-dalek =2.2.0` with
 `default-features = false` to avoid `zeroize >= 1.9.1`, which would require
 Rust 1.85 and break the workspace MSRV of 1.81; the trade-off is no secret
-zeroization and no precomputed tables). TypeScript SDK consumption, relay
-integration, key distribution/rotation/revocation, freshness/replay handling
+zeroization and no precomputed tables). TypeScript SDK consumption, production
+relay policy, key distribution/rotation/revocation, freshness/replay handling
 and independent review remain future work, so issue #1 stays incomplete. See
 [../local-signed-envelopes.md](../local-signed-envelopes.md) for the contract.

@@ -29,6 +29,17 @@ const envelope = (sender = SIGNER, recipient = OTHER) => ({
 });
 const signed = (value = envelope()) => signEnvelope(value, { privateKey, kid: KID });
 
+// Two wire texts that JSON.parse accepts but the strict gate rejects. Each is a
+// validly signed envelope otherwise, so a bypass would verify and route (202)
+// instead of failing at the gate (400).
+const withDuplicateKey = text => text.replace('{"xeip"', '{"xeip":"0.1","xeip"');
+const duplicateKeyBody = () => withDuplicateKey(JSON.stringify(signed()));
+const unsafeIntegerBody = () => {
+  const value = envelope();
+  value.extensions = { "x-unsafe": "PLACEHOLDER" };
+  return JSON.stringify(signed(value)).replace('"PLACEHOLDER"', "9007199254740993");
+};
+
 async function setup(t, { admission = false, signatures } = {}) {
   const credentials = new Map([SIGNER, OTHER].map(entity => [entity, randomBytes(32).toString("base64url")]));
   const options = admission
@@ -52,6 +63,9 @@ async function setup(t, { admission = false, signatures } = {}) {
   const post = (value, actor) => fetch(base + "/messages", { method: "POST",
     headers: { ...auth(actor), "Content-Type": "application/json" },
     body: JSON.stringify(value), signal: AbortSignal.timeout(5000) });
+  const postRaw = (text, actor) => fetch(base + "/messages", { method: "POST",
+    headers: { ...auth(actor), "Content-Type": "application/json" },
+    body: text, signal: AbortSignal.timeout(5000) });
   const health = async () => (await fetch(base + "/health")).json();
   const subscribe = async (element, actor = element) => {
     const abort = new AbortController();
@@ -75,7 +89,7 @@ async function setup(t, { admission = false, signatures } = {}) {
     stream.close = async () => { abort.abort(); await stream.worker; };
     return stream;
   };
-  return { server, base, post, health, subscribe };
+  return { server, base, post, postRaw, health, subscribe };
 }
 
 async function waitFor(predicate, label) {
@@ -99,6 +113,7 @@ class TestSocket {
     });
   }
   send(value) { if (!this.socket.destroyed) this.socket.write(encodeFrame(OPCODES.text, Buffer.from(JSON.stringify(value)), true, randomBytes(4))); }
+  sendText(text) { if (!this.socket.destroyed) this.socket.write(encodeFrame(OPCODES.text, Buffer.from(text), true, randomBytes(4))); }
   close() { if (!this.socket.destroyed) this.socket.write(encodeFrame(OPCODES.close, Buffer.alloc(0), true, randomBytes(4))); this.socket.end(); }
 }
 
@@ -169,6 +184,47 @@ test("leaves unsigned envelopes untouched when the profile is disabled", async t
   const { post, health } = await setup(t, {});
   assert.equal((await health()).signatureProfile, undefined);
   assert.deepEqual(await (await post(envelope())).json(), { accepted: true, delivered: 0 });
+});
+
+test("strict-parses the wire JSON before verification when signatures are enabled", async t => {
+  const { postRaw, base } = await setup(t, { signatures: {} });
+  const duplicate = duplicateKeyBody();
+  const unsafe = unsafeIntegerBody();
+
+  for (const body of [duplicate, unsafe]) {
+    const response = await postRaw(body);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "invalid or oversized JSON" });
+  }
+
+  const client = await openWebSocket(base, { token: TOKEN });
+  client.sendText('{"type":"send","message":' + duplicate + "}");
+  await waitFor(() => client.messages.some(value => value.type === "error"), "duplicate send rejected");
+  assert.deepEqual(client.messages.find(value => value.type === "error"),
+    { type: "error", status: 400, error: "invalid or oversized JSON" });
+
+  client.sendText('{"type":"send","message":' + unsafe + "}");
+  await waitFor(() => client.messages.filter(value => value.type === "error").length >= 2, "unsafe send rejected");
+  assert.deepEqual(client.messages.filter(value => value.type === "error")[1],
+    { type: "error", status: 400, error: "invalid or oversized JSON" });
+  client.close();
+});
+
+test("leaves the wire parse unchanged when signatures are disabled", async t => {
+  const { postRaw, base } = await setup(t, {});
+  const duplicate = duplicateKeyBody();
+  const unsafe = unsafeIntegerBody();
+
+  for (const body of [duplicate, unsafe]) {
+    assert.equal((await postRaw(body)).status, 202);
+  }
+
+  const client = await openWebSocket(base, { token: TOKEN });
+  client.sendText('{"type":"send","message":' + duplicate + "}");
+  await waitFor(() => client.messages.some(value => value.type === "accepted"), "duplicate send accepted");
+  client.sendText('{"type":"send","message":' + unsafe + "}");
+  await waitFor(() => client.messages.filter(value => value.type === "accepted").length >= 2, "unsafe send accepted");
+  client.close();
 });
 
 test("applies the signature and admission checks together", async t => {

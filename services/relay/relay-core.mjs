@@ -224,6 +224,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   const canSubscribe = (principal, session) => admission.canSubscribe(principal, session);
   const sendAllowed = (principal, message) => admission.canSend(principal, message);
   return {
+    signaturesEnabled,
     authenticate,
     isCurrent,
     canSubscribe,

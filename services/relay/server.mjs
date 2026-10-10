@@ -16,6 +16,7 @@ import {
 } from "./http-util.mjs";
 import { openSubscription } from "./subscription.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
+import { strictParse } from "../../tools/signed-envelope.mjs";
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
 export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures }) {
@@ -136,7 +137,11 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
       }
       let raw;
       try {
-        raw = JSON.parse(await readLimitedBody(req));
+        const text = await readLimitedBody(req);
+        // With signed envelopes enabled the wire bytes are untrusted input to the
+        // strict pre-parse gate, so parse them strictly and hand the resulting
+        // object to verification; otherwise JSON.parse is unchanged.
+        raw = core.signaturesEnabled ? strictParse(text) : JSON.parse(text);
         requireBoundedJsonDepth(raw);
       }
       catch (err) { return writeJson(res, err instanceof RangeError ? 413 : 400, { error: "invalid or oversized JSON" }); }
@@ -214,7 +219,9 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     });
     const handleControl = text => {
       let value;
-      try { value = JSON.parse(text); }
+      // When signed envelopes are enforced the frame is untrusted wire JSON, so
+      // it is parsed strictly before the nested `message` is verified or routed.
+      try { value = core.signaturesEnabled ? strictParse(text) : JSON.parse(text); }
       catch { return control({ type: "error", status: 400, error: "invalid or oversized JSON" }); }
       if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.type !== "string") {
         return control({ type: "error", status: 400, error: "invalid control frame" });
