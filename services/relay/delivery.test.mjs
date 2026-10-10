@@ -140,6 +140,6 @@ test("copies limits and rejects invalid elapsed time", () => {
   log.append(sessionA, message("a1"), 0);
   log.append(sessionA, message("a2"), 0);
   log.append(sessionA, message("a3"), 0);
-  assert.equal(log.since(sessionA, 0).entries.length, 2);
+  assert.equal(log.since(sessionA, 0, 0).entries.length, 2);
   for (const elapsed of [NaN, Infinity, -1, "1", Number.MAX_VALUE]) assert.throws(() => log.append(sessionA, message(), elapsed));
 });

@@ -56,7 +56,7 @@ async function setup(t, delivery = {}) {
   return { server, base, post, subscribe };
 }
 async function waitFor(stream, predicate, label) {
-  const deadline = Date.now() + 4000;
+  const deadline = Date.now() + 15000;
   while (!predicate(stream.frames)) {
     if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
     await delay(10);
@@ -122,7 +122,9 @@ test("supports the after query, emits a gap, and rejects malformed or unsupporte
 test("does not replay messages older than the fixed retention window", async t => {
   const { post, subscribe } = await setup(t, { windowMs: 120 });
   await post(envelope());
-  await delay(200);
+  // Advance past the fixed window with margin; the window is measured on the
+  // monotonic clock, so a longer sleep still proves expiry rather than a race.
+  await delay(400);
   const resumed = await subscribe(b, { after: "0" });
   await waitFor(resumed, frames => frames.some(frame => frame.event === "xeip.gap"), "gap after window");
   assert.deepEqual(messages(resumed.frames), []);

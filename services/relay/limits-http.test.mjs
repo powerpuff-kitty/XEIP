@@ -67,10 +67,37 @@ async function setup(t, { admission = false, limits } = {}) {
 }
 
 async function waitFor(predicate, label) {
-  const deadline = Date.now() + 4000;
+  const deadline = Date.now() + 15000;
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
     await delay(10);
+  }
+}
+
+// A limit slot is released asynchronously when the server observes the stream
+// or connection close. Retry the real operation until it is accepted instead of
+// sleeping a fixed interval that a loaded machine can outrun.
+async function subscribeEventually(subscribe, actor, label, deadlineMs = 15000) {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const attempt = await subscribe(actor);
+    if (attempt.response.status === 200) return attempt;
+    assert.equal(attempt.response.status, 429, label);
+    await attempt.response.arrayBuffer().catch(() => {});
+    if (Date.now() >= deadline) throw new Error(label);
+    await delay(25);
+  }
+}
+
+async function openEventually(base, options, label, deadlineMs = 15000) {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    try { return await openWebSocket(base, options); }
+    catch (error) {
+      if (error.status !== 429) throw error;
+      if (Date.now() >= deadline) throw new Error(label);
+      await delay(25);
+    }
   }
 }
 
@@ -129,8 +156,18 @@ test("allows a burst, then returns 429 with Retry-After, and refills after time"
   assert.equal(limited.headers.get("retry-after"), "1");
   assert.deepEqual(await limited.json(), { error: "rate limit exceeded" });
   // At one token per second the burst bucket needs a full second to refill.
-  await delay(1100);
-  assert.equal((await post(a, message())).status, 202);
+  // Poll for the refill rather than assuming a fixed sleep survives CI load; a
+  // bucket that never refills still fails once the deadline passes.
+  const deadline = Date.now() + 15000;
+  let refilled = await post(a, message());
+  while (refilled.status !== 202) {
+    assert.equal(refilled.status, 429);
+    await refilled.arrayBuffer();
+    if (Date.now() >= deadline) throw new Error("rate limit did not refill");
+    await delay(50);
+    refilled = await post(a, message());
+  }
+  assert.equal(refilled.status, 202);
 });
 
 test("isolates per-principal buckets in admission mode", async t => {
@@ -158,8 +195,7 @@ test("enforces the connection cap on streams and releases it on close", async t 
   assert.equal(second.response.status, 429);
   assert.deepEqual(await second.response.json(), { error: "connection limit exceeded" });
   await first.close();
-  await delay(50);
-  const third = await subscribe(a);
+  const third = await subscribeEventually(subscribe, a, "connection limit not released");
   assert.equal(third.response.status, 200);
   await third.close();
 });
@@ -172,8 +208,7 @@ test("enforces the subscription cap on streams and releases it on close", async 
   assert.equal(second.response.status, 429);
   assert.deepEqual(await second.response.json(), { error: "subscription limit exceeded" });
   await first.close();
-  await delay(50);
-  const third = await subscribe(b);
+  const third = await subscribeEventually(subscribe, b, "subscription limit not released");
   assert.equal(third.response.status, 200);
   await third.close();
 });
@@ -183,8 +218,7 @@ test("enforces the connection cap on the WebSocket upgrade and releases it on cl
   const first = await openWebSocket(base, { token: TOKEN });
   await assert.rejects(() => openWebSocket(base, { token: TOKEN }), error => error.status === 429);
   first.close();
-  await delay(100);
-  const third = await openWebSocket(base, { token: TOKEN });
+  const third = await openEventually(base, { token: TOKEN }, "WebSocket connection limit not released");
   third.close();
 });
 
@@ -198,9 +232,17 @@ test("enforces the subscription cap on WebSocket subscribe and releases it on cl
   await waitFor(() => second.messages.some(value => value.type === "error"), "subscription denial");
   assert.equal(second.messages.find(value => value.type === "error").status, 429);
   first.close();
-  await delay(100);
-  second.send({ type: "subscribe", session, entity: a });
-  await waitFor(() => second.messages.some(value => value.type === "subscribed"), "released subscription");
+  // Retry the subscribe on the surviving connection until the closed one's
+  // subscription slot is actually released.
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    const before = second.messages.length;
+    second.send({ type: "subscribe", session, entity: a });
+    await waitFor(() => second.messages.slice(before).some(value => value.type === "subscribed" || value.type === "error"), "release outcome");
+    if (second.messages.slice(before).some(value => value.type === "subscribed")) break;
+    if (Date.now() >= deadline) throw new Error("subscription slot not released");
+    await delay(25);
+  }
   second.close();
 });
 

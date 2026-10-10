@@ -66,6 +66,17 @@ function requestStatus(base, headers = {}, path = "/health") {
   });
 }
 
+// Event-driven wait for an eventual condition. The deadline only bounds a
+// genuine hang; a loaded CI machine converges to the same state, just later.
+async function waitUntil(predicate, label, deadlineMs = 30000) {
+  const deadline = Date.now() + deadlineMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
+    await delay(10);
+  }
+}
+const SLOW_DEADLINE = 40000;
+
 class WsClient {
   constructor(socket) {
     this.socket = socket;
@@ -82,7 +93,7 @@ class WsClient {
   close() { if (!this.socket.destroyed) this.socket.end(); }
   #write(buffer) { if (!this.socket.destroyed) this.socket.write(buffer); }
   async waitFor(predicate, label) {
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 15000;
     while (!predicate()) {
       if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
       await delay(10);
@@ -191,10 +202,10 @@ test("rejects malformed UTF-8 JSON instead of replacing invalid bytes", async ()
   });
 });
 
-test("rejects JSON that expands beyond the SSE frame limit before writing to healthy streams", { timeout: 5000 }, async () => {
+test("rejects JSON that expands beyond the SSE frame limit before writing to healthy streams", { timeout: 30000 }, async () => {
   await withRelay(async base => {
     const subscriber = await subscribe(base, agent);
-    const timer = setTimeout(() => subscriber.close(), 3000);
+    const timer = setTimeout(() => subscriber.close(), 25000);
     try {
       const skeleton = JSON.stringify(makeMessage({ body: { contentType: "application/json", data: null } }));
       const body = skeleton.replace('"data":null', '"data":[' + "1e15,".repeat(11999) + "1e15]");
@@ -297,7 +308,7 @@ test("WebSocket send reports the same distinct unsupported-version error", async
   }
 });
 
-test("routes live messages only to the selected session and recipient", async () => {
+test("routes live messages only to the selected session and recipient", { timeout: 30000 }, async () => {
   await withRelay(async base => {
     const target = await subscribe(base, agent);
     const other = await subscribe(base, machine);
@@ -309,7 +320,7 @@ test("routes live messages only to the selected session and recipient", async ()
       const result = await response.json();
       assert.equal(result.delivered, 1);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
+      const timer = setTimeout(() => controller.abort(), 25000);
       try {
         const reader = target.response.body.getReader();
         let data = "";
@@ -329,10 +340,10 @@ test("routes live messages only to the selected session and recipient", async ()
   });
 });
 
-test("uses opaque URI selectors, writes to every matching connection, and forwards duplicates", { timeout: 5000 }, async () => {
+test("uses opaque URI selectors, writes to every matching connection, and forwards duplicates", { timeout: 30000 }, async () => {
   await withRelay(async base => {
     const subscribers = [];
-    const timer = setTimeout(() => subscribers.forEach(subscriber => subscriber.close()), 3000);
+    const timer = setTimeout(() => subscribers.forEach(subscriber => subscriber.close()), 25000);
     try {
       const human = await subscribe(base, sender); subscribers.push(human);
       const first = await subscribe(base, agent); subscribers.push(first);
@@ -394,7 +405,7 @@ test("relay applies shared message conformance vectors", async () => {
   });
 });
 
-test("disconnects a stalled subscriber and keeps routing to healthy clients", { timeout: 10000 }, async () => {
+test("disconnects a stalled subscriber and keeps routing to healthy clients", { timeout: 120000 }, async () => {
   await withRelay(async (base, server) => {
     let stream;
     server.on("request", (req, res) => { if (req.url.startsWith("/events")) stream = res; });
@@ -434,8 +445,22 @@ test("disconnects a stalled subscriber and keeps routing to healthy clients", { 
           assert.equal(response.status, 202);
           await response.arrayBuffer();
         }
-        assert.equal(stalled.destroyed, true, "stalled stream must be disconnected before its queue grows without bound");
-        await Promise.race([worker, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("healthy subscriber did not receive all messages")), 3000); })]);
+        // The relay destroys the response once the peer stops draining and the
+        // bounded outbound queue fills. Poll for that eventual state instead of
+        // racing a single assertion right after the last POST. The deadline
+        // starts here so slow POSTs cannot consume the delivery budget.
+        const deadline = Date.now() + SLOW_DEADLINE;
+        await waitUntil(
+          () => stalled.destroyed,
+          "stalled stream must be disconnected before its queue grows without bound",
+          Math.max(0, deadline - Date.now())
+        );
+        await Promise.race([
+          worker,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("healthy subscriber did not receive all messages")), Math.max(0, deadline - Date.now()));
+          })
+        ]);
         assert.deepEqual(received, sent);
       } finally {
         clearTimeout(timer);

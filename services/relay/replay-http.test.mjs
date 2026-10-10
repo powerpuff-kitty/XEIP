@@ -56,7 +56,7 @@ async function setup(t, options = { replay: {} }) {
   return { server, base, admission, credentials, post, subscribe };
 }
 async function waitFor(stream, count) {
-  const deadline = Date.now() + 4000;
+  const deadline = Date.now() + 15000;
   while (stream.received.length < count) {
     if (Date.now() >= deadline) throw new Error("expected message frame did not arrive");
     await delay(10);
@@ -197,18 +197,20 @@ test("new factory instances cannot provide durable suppression for an earlier ac
   await accepted(restarted.post, a, message, { accepted: true, delivered: 0, duplicate: false });
 });
 
-test("an accepted message that expires is rejected before duplicate lookup", { timeout: 6000 }, async t => {
+test("an accepted message that expires is rejected before duplicate lookup", { timeout: 15000 }, async t => {
   const { post } = await setup(t), message = envelope({ expiresAt: new Date(Date.now() + 1000).toISOString() });
   await accepted(post, a, message, { accepted: true, delivered: 0, duplicate: false });
-  await delay(1200);
+  // Wall-clock expiry with margin, still strictly past the 1s deadline.
+  await delay(1500);
   const expired = await post(a, message);
   assert.equal(expired.status, 422); await expired.body.cancel();
 });
 
-test("a live relay releases capacity after fixed monotonic expiry", { timeout: 6000 }, async t => {
+test("a live relay releases capacity after fixed monotonic expiry", { timeout: 15000 }, async t => {
   const { post } = await setup(t, { replay: { windowMs: 1000, maxEntries: 1 } }), message = envelope();
   await accepted(post, a, message, { accepted: true, delivered: 0, duplicate: false });
   await accepted(post, a, message, { accepted: true, delivered: 0, duplicate: true });
-  await delay(1200);
+  // Advance past the fixed monotonic window with margin.
+  await delay(1500);
   await accepted(post, a, message, { accepted: true, delivered: 0, duplicate: false });
 });

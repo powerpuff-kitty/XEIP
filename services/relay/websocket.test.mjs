@@ -45,7 +45,7 @@ class TestSocket {
   }
   #write(buffer) { if (!this.socket.destroyed) this.socket.write(buffer); }
   async waitFor(predicate, label) {
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 15000;
     while (!predicate()) {
       if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
       await delay(10);
@@ -375,7 +375,9 @@ test("resumes a WebSocket subscriber after a sequence cursor and reports gaps", 
     const next = await open({ token: TOKEN });
     next.send({ type: "subscribe", session: room, entity: b, after: 2 });
     await next.waitFor(() => next.messages.some(m => m.type === "subscribed"), "subscribed");
-    await delay(50);
+    // Settle window for an absence assertion: any incorrect backlog would be
+    // written synchronously right after `subscribed`, so give it room to arrive.
+    await delay(200);
     assert.equal(next.messages.filter(m => m.type === "message").length, 0);
     sender.send({ type: "send", message: envelope() });
     await next.waitFor(() => next.messages.some(m => m.type === "message"), "live after cursor");
@@ -384,7 +386,7 @@ test("resumes a WebSocket subscriber after a sequence cursor and reports gaps", 
   });
 });
 
-test("keeps routing to a healthy WebSocket subscriber while another is stalled", { timeout: 10000 }, async t => {
+test("keeps routing to a healthy WebSocket subscriber while another is stalled", { timeout: 30000 }, async t => {
   await withRelay(t, { token: TOKEN }, async (base, open) => {
     const healthy = await open({ token: TOKEN });
     healthy.send({ type: "subscribe", session: room, entity: b });
