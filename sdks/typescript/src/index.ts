@@ -5,6 +5,8 @@
 import { validateEnvelope, validateEntity, validateSession, validateCapability, requireUri } from "./validation.js";
 import { SseParser } from "./sse.js";
 
+export * from "./identity.js";
+
 export const XEIP_VERSION = "0.1" as const;
 
 export type EntityKind = "human" | "agent" | "machine" | "service";

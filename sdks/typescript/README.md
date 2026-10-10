@@ -37,3 +37,30 @@ URI selectors are compared exactly by the relay. Session descriptors are declara
 `assertEnvelope`, `assertEntity`, `assertSession`, and `assertCapability` reject malformed versions, URIs, UTC timestamps, duplicate kinds/members, invalid enum values, extra fields, and schema length violations. JSON body data and extensions must contain finite JSON values without cycles. Validation checks wire structure, not identity or authorization.
 
 The incremental SSE parser supports LF, CRLF, and CR across arbitrary chunk boundaries, including split UTF-8 characters. Each unfinished frame is limited to 128 Ki UTF-16 code units; exceeding the limit closes iteration with an error. This is not a production messaging transport.
+
+## Detached signed envelopes (`xeip.local-signed-envelopes/0.1`)
+
+The SDK also ships a portable, dependency-free implementation of the detached Ed25519 signed-envelope profile in [`src/identity.ts`](src/identity.ts), matching [`tools/signed-envelope.mjs`](../../tools/signed-envelope.mjs) byte-for-byte over the shared vectors in [`conformance/fixtures/identity-signed/`](../../conformance/fixtures/identity-signed/signed.vectors.json). It uses only WebCrypto (`crypto.subtle`) and plain JavaScript, so JS/Node, Rust and TypeScript consume the same conformance vectors.
+
+```js
+import { signEnvelope, verifySignedEnvelope, encodeKeyId } from "./sdks/typescript/dist/index.js";
+
+// Sign: the input is UTF-8(RFC 8785(envelope without extensions)).
+const signed = await signEnvelope(message, { privateKey: seed32Bytes, kid });
+// `signed.extensions["xeip.sig"] = { v: "0.1", alg: "EdDSA", kid, sig }`
+
+// Verify: accepts a JSON string (strict pre-parse gate) or a parsed object.
+const result = await verifySignedEnvelope(json); // { valid: true }
+// or { valid: false, reason: "..." }
+```
+
+- `signEnvelope(envelope, { privateKey, kid })` — Ed25519-signs the canonical bytes with WebCrypto and returns a shallow copy with `extensions["xeip.sig"]` set. `privateKey` is a 32-byte seed (`Uint8Array`/`ArrayBuffer`), an Ed25519 private `CryptoKey`, or a PKCS#8 DER key. Sender binding is not enforced here.
+- `verifySignedEnvelope(envelope)` — async, never throws; returns `{ valid: true }` or `{ valid: false, reason }` with the reference reasons: `malformed envelope`, `missing signature`, `malformed signature`, `unsupported algorithm`, `sender binding`, `signature mismatch`. Given a string it applies the strict pre-parse gate (rejects duplicate keys, lone surrogates, non-finite and unsafe integers); given an object it skips that gate. It enforces `entityUrn(kid) === envelope.sender` and derives the key from `kid` only.
+- `canonicalize(value)` — RFC 8785 JCS string.
+- `encodeKeyId` / `decodeKeyId` — `z`+base58btc `ed25519-pub` (`0xed01`) key-id codec; `entityUrn` / `deviceUrn` expand it.
+- `strictParse(json)` — the strict pre-parse gate; `bytesToBase64Url` / `base64UrlToBytes` handle canonical unpadded base64url; `base58btcEncode` / `base58btcDecode` are the base conversion helpers; constants `SIG_EXTENSION`, `SIG_VERSION`, `SIG_ALG`, `ED25519_SIGNATURE_LENGTH`.
+
+**WebCrypto caveat.** Signing and verification require a runtime with Ed25519 in WebCrypto (`crypto.subtle`): Node.js ≥22 (as declared in the monorepo `engines`) and current evergreen browsers. Runtimes whose WebCrypto lacks Ed25519 reject `importKey`/`sign`/`verify`; the signing and key-id helpers remain usable, but the identity test will fail. A pre-parsed envelope object bypasses the strict pre-parse gate, so callers that require it must pass JSON text.
+
+The identity implementation also exposes `ed25519PrivateKeyFromSeed(seed)` for importing a seed as a non-extractable WebCrypto signing key.
+
