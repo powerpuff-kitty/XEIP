@@ -8,7 +8,17 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+# Pinned exactly per ADR 0007. The 3.0.0 line and sha2 0.11 require Rust 1.85,
+# above the workspace MSRV of 1.81, so the 2.2.0 / sha2 0.10.x lines are
+# required. Optional features are all disabled: no `rand_core` (no key-generation
+# RNG), and no `std`/`alloc`/`zeroize`/`fast`. This is deliberate — the `std` ->
+# `alloc` feature would activate `zeroize`, and zeroize 1.9+ declares
+# `rust-version = 1.85`, which breaks the 1.81 MSRV. Signing is deterministic
+# from a 32-byte RFC 8032 seed, so the RNG and allocation are unnecessary.
+ed25519-dalek = { version = "=2.2.0", default-features = false }
+# The public API canonicalizes and verifies `serde_json::Value` envelopes, so
+# serde_json is a runtime dependency (it is also used by the conformance test).
+serde_json = "1.0"
 
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
