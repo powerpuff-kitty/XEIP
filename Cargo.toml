@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xeip-core"]
+members = ["crates/xeip-core", "crates/xeip-identity"]
 
 [workspace.package]
 edition = "2021"
