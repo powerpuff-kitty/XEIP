@@ -7,55 +7,53 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createRelay } from "./server.mjs";
 import {
   LOCAL_SIGNED_ENVELOPES_PROFILE,
-  LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE
+  LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE,
+  LOCAL_STATUS_DOCUMENTS_PROFILE
 } from "./relay-core.mjs";
 import { encodeKeyId, entityUrn } from "../../tools/derive-keyid.mjs";
 import { signEnvelope, ed25519PrivateKeyFromSeed } from "../../tools/signed-envelope.mjs";
 import { SseParser } from "../../sdks/typescript/src/sse.js";
 import { FrameParser, OPCODES, encodeFrame, websocketAccept } from "./websocket.mjs";
 
-const TOKEN = "keydoc-test-shared-token-000";
+const TOKEN = "status-test-shared-token-000";
 
-// Deterministic RFC 8032 seeds shared with the committed key-document vectors:
-// A is the entity genesis root, B a rotated root and C an endorsed device.
+// Deterministic RFC 8032 seeds shared with the committed key-document and
+// status vectors: A is the entity genesis root, C an endorsed device.
 const SEED_A = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
-const SEED_B = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
 const SEED_C = "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f";
 
 const publicKeyOf = seed => createPublicKey(ed25519PrivateKeyFromSeed(Buffer.from(seed, "hex")))
   .export({ format: "der", type: "spki" }).subarray(-32);
 
 const privateKeyA = ed25519PrivateKeyFromSeed(Buffer.from(SEED_A, "hex"));
-const privateKeyB = ed25519PrivateKeyFromSeed(Buffer.from(SEED_B, "hex"));
 const privateKeyC = ed25519PrivateKeyFromSeed(Buffer.from(SEED_C, "hex"));
 const KID_A = encodeKeyId(publicKeyOf(SEED_A));
-const KID_B = encodeKeyId(publicKeyOf(SEED_B));
 const KID_C = encodeKeyId(publicKeyOf(SEED_C));
 const ENTITY_A = entityUrn(KID_A);
-const ENTITY_B = entityUrn(KID_B);
 const ENTITY_C = entityUrn(KID_C);
 
-const chainVectors = JSON.parse(readFileSync(
-  new URL("../../conformance/fixtures/identity-keydoc/keydoc-chain.vectors.json", import.meta.url), "utf8"));
-const genesis = chainVectors.documents["genesis.gen1"];
-const rotation = chainVectors.documents["rotation.gen2"];
-const badSignature = chainVectors.documents["bad-signature.gen2"];
+// The committed status vectors carry a verified genesis key document (root A,
+// device C) and the signed status documents used below.
+const statusVectors = JSON.parse(readFileSync(
+  new URL("../../conformance/fixtures/identity-status/status.vectors.json", import.meta.url), "utf8"));
+const trusted = statusVectors.trusted["keydoc.entity"];
+const status = name => statusVectors.statuses[name];
 const ANCHOR_A = { genesisKid: KID_A };
 
 const RECIPIENT = "urn:xeip:entity:recipient-01";
-const SESSION = "urn:xeip:session:keydoc";
+const SESSION = "urn:xeip:session:status";
 const envelope = (sender, recipient = RECIPIENT) => ({
   xeip: "0.1", id: "urn:uuid:" + randomUUID(), kind: "message",
   sender, recipient, session: SESSION, timestamp: new Date().toISOString(),
   body: { contentType: "text/plain", data: "hello" }
 });
-const signedWith = (privateKey, kid, sender) =>
-  signEnvelope(envelope(sender), { privateKey, kid });
+const signedWith = (privateKey, kid, sender) => signEnvelope(envelope(sender), { privateKey, kid });
 
-async function setup(t, { signatures, keyDocuments } = {}) {
+async function setup(t, { signatures, keyDocuments, statusDocuments } = {}) {
   const options = { token: TOKEN };
   if (signatures !== undefined) options.signatures = signatures;
   if (keyDocuments !== undefined) options.keyDocuments = keyDocuments;
+  if (statusDocuments !== undefined) options.statusDocuments = statusDocuments;
   const server = createRelay(options);
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = "http://127.0.0.1:" + server.address().port;
@@ -139,105 +137,93 @@ function openWebSocket(base, { token } = {}) {
   });
 }
 
-test("requires signatures and rejects invalid or untrusted documents at construction", () => {
-  // The trusted documents are a tightening of signed-envelope enforcement.
-  assert.throws(() => createRelay({ token: TOKEN, keyDocuments: [{ document: genesis, anchor: ANCHOR_A }] }),
-    /keyDocuments requires signatures/);
-  // Status/revocation is a further tightening of trusted-key resolution: it
-  // needs the trusted key document that supplies the roots that sign it.
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, statusDocuments: [{}] }),
+test("requires keyDocuments and rejects invalid, rollback or non-root status documents", () => {
+  // A status document is meaningless without the trusted key document that
+  // supplies the roots that must sign it.
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, statusDocuments: [{ document: status("status.revoke.1") }] }),
     /statusDocuments requires keyDocuments/);
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [] }), /non-empty/);
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: genesis, extra: 1 }] }),
-    /unknown keyDocuments entry field/);
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: trusted, anchor: ANCHOR_A }], statusDocuments: [] }),
+    /non-empty/);
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: trusted, anchor: ANCHOR_A }],
+    statusDocuments: [{ document: status("status.revoke.1"), extra: 1 }] }), /unknown statusDocuments entry field/);
 
-  // A self-certifying document with no anchor must fail closed: trust is not
-  // "which key the id means" but an out-of-band anchor.
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: genesis }] }),
-    /no anchor/);
-  // The pinned anchor must match the chain's genesis key-id.
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: genesis, anchor: { genesisKid: KID_B } }] }),
-    /untrusted anchor/);
-  // A bad signature and a broken chain are both rejected.
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: badSignature, anchor: ANCHOR_A }] }),
-    /signature mismatch/);
-  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments: [{ document: rotation, anchor: ANCHOR_A }] }),
-    /chain gap/);
+  const keyDocuments = [{ document: trusted, anchor: ANCHOR_A }];
+  // A device-signed status is not root-signed: unknown signer at construction.
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments,
+    statusDocuments: [{ document: status("status.nonroot") }] }), /unknown signer/);
+  // A serial that does not advance is a rollback at construction.
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments,
+    statusDocuments: [{ document: status("status.revoke.2") }, { document: status("status.revoke.1") }] }),
+    /serial rollback/);
+  // A status older than the supplied maximum age is stale at construction.
+  assert.throws(() => createRelay({ token: TOKEN, signatures: {}, keyDocuments,
+    statusDocuments: [{ document: status("status.stale"), now: "2027-01-01T00:00:00Z", maxAgeSeconds: 1 }] }),
+    /stale status/);
 });
 
-test("accepts a trust-anchored kid and rejects an unknown self-certifying kid over HTTP", async t => {
+test("accepts a non-revoked kid and rejects a revoked kid over HTTP", async t => {
   const { post, health, subscribe } = await setup(t, {
-    signatures: {}, keyDocuments: [{ document: genesis, anchor: ANCHOR_A }]
+    signatures: {},
+    keyDocuments: [{ document: trusted, anchor: ANCHOR_A }],
+    statusDocuments: [{ document: status("status.revoke.1") }]
   });
   const advertised = await health();
   assert.equal(advertised.signatureProfile, LOCAL_SIGNED_ENVELOPES_PROFILE);
   assert.equal(advertised.keyDocumentProfile, LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE);
+  assert.equal(advertised.statusProfile, LOCAL_STATUS_DOCUMENTS_PROFILE);
   assert.deepEqual(advertised.keyDocuments, { entities: 1 });
-  // Without status documents configured no status profile is advertised.
-  assert.equal(advertised.statusProfile, undefined);
-  assert.equal(advertised.statusDocuments, undefined);
-  // Health must not leak per-entity key material.
+  assert.deepEqual(advertised.statusDocuments, { entities: 1 });
+  // Health must not leak per-entity key or revocation material.
   assert.ok(!JSON.stringify(advertised).includes(KID_A), "health must not expose key ids");
+  assert.ok(!JSON.stringify(advertised).includes(KID_C), "health must not expose revoked key ids");
 
   const target = await subscribe();
-  const good = signedWith(privateKeyA, KID_A, ENTITY_A);
-  const accepted = await post(good);
+  // The root key is current and not revoked: accepted.
+  const root = signedWith(privateKeyA, KID_A, ENTITY_A);
+  const accepted = await post(root);
   assert.equal(accepted.status, 202);
   assert.deepEqual(await accepted.json(), { accepted: true, delivered: 1 });
-  await waitFor(() => target.frames.some(frame => frame.event === "xeip.message"), "trusted delivery");
+  await waitFor(() => target.frames.some(frame => frame.event === "xeip.message"), "non-revoked delivery");
 
-  // A valid, self-certifying key that no trusted chain endorses is forbidden.
-  const unknown = signedWith(privateKeyB, KID_B, ENTITY_B);
-  const rejected = await post(unknown);
-  assert.equal(rejected.status, 403);
-  assert.deepEqual(await rejected.json(), { error: "forbidden" });
-
-  // The signature gate still runs first: a tampered trusted envelope is 422.
-  const tampered = signedWith(privateKeyA, KID_A, ENTITY_A);
-  tampered.body.data = "tampered";
-  assert.equal((await post(tampered)).status, 422);
+  // The endorsed device is a current trusted key, but the status revokes it.
+  const revoked = await post(signedWith(privateKeyC, KID_C, ENTITY_C));
+  assert.equal(revoked.status, 403);
+  assert.deepEqual(await revoked.json(), { error: "forbidden" });
   await target.close();
 });
 
-test("resolves current rotated roots and endorsed devices through a supplied chain", async t => {
+test("leaves behavior unchanged when statusDocuments is not configured", async t => {
+  // With trusted keys but no status, the current device is still accepted.
   const { post } = await setup(t, {
-    signatures: {},
-    keyDocuments: [{ document: genesis, anchor: ANCHOR_A }, { document: rotation }]
+    signatures: {}, keyDocuments: [{ document: trusted, anchor: ANCHOR_A }]
   });
-  // The successor root (KID_B) is current only after the rotation generation.
-  assert.equal((await post(signedWith(privateKeyB, KID_B, ENTITY_B))).status, 202);
-  // The endorsed device (KID_C) is current in both generations.
-  assert.equal((await post(signedWith(privateKeyC, KID_C, ENTITY_C))).status, 202);
-});
-
-test("leaves behavior unchanged when keyDocuments is not configured", async t => {
-  const { post, health } = await setup(t, { signatures: {} });
-  assert.equal((await health()).keyDocumentProfile, undefined);
-  // A self-certifying key with no trusted document is still accepted, exactly
-  // as before the feature was added.
-  assert.deepEqual(await (await post(signedWith(privateKeyB, KID_B, ENTITY_B))).json(),
+  assert.deepEqual(await (await post(signedWith(privateKeyC, KID_C, ENTITY_C))).json(),
     { accepted: true, delivered: 0 });
 
+  // With no profiles at all, a self-certifying key routes exactly as before.
   const plain = await setup(t, {});
-  assert.equal((await plain.health()).signatureProfile, undefined);
+  assert.equal((await plain.health()).statusProfile, undefined);
+  assert.equal((await plain.health()).keyDocumentProfile, undefined);
   assert.deepEqual(await (await plain.post(envelope(RECIPIENT))).json(),
     { accepted: true, delivered: 0 });
 });
 
-test("enforces trusted-key resolution over WebSocket send", async t => {
+test("enforces status revocation over WebSocket send", async t => {
   const { base, subscribe } = await setup(t, {
-    signatures: {}, keyDocuments: [{ document: genesis, anchor: ANCHOR_A }]
+    signatures: {},
+    keyDocuments: [{ document: trusted, anchor: ANCHOR_A }],
+    statusDocuments: [{ document: status("status.revoke.1") }]
   });
   const target = await subscribe();
   const client = await openWebSocket(base, { token: TOKEN });
   const errors = () => client.messages.filter(value => value.type === "error");
 
   client.send({ type: "send", message: signedWith(privateKeyA, KID_A, ENTITY_A) });
-  await waitFor(() => client.messages.some(value => value.type === "accepted"), "trusted send accepted");
+  await waitFor(() => client.messages.some(value => value.type === "accepted"), "non-revoked send accepted");
   assert.equal(client.messages.find(value => value.type === "accepted").delivered, 1);
 
-  client.send({ type: "send", message: signedWith(privateKeyB, KID_B, ENTITY_B) });
-  await waitFor(() => errors().length >= 1, "unknown send rejected");
+  client.send({ type: "send", message: signedWith(privateKeyC, KID_C, ENTITY_C) });
+  await waitFor(() => errors().length >= 1, "revoked send rejected");
   assert.deepEqual(errors()[0], { type: "error", status: 403, error: "forbidden" });
 
   client.close();

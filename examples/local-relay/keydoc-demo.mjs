@@ -16,9 +16,11 @@ import {
   keyDocumentChainDigest,
   signKeyDocument
 } from "../../tools/key-document.mjs";
+import { STATUS_VERSION, signStatusDocument } from "../../tools/identity-status.mjs";
 import {
   LOCAL_SIGNED_ENVELOPES_PROFILE,
-  LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE
+  LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE,
+  LOCAL_STATUS_DOCUMENTS_PROFILE
 } from "../../services/relay/relay-core.mjs";
 
 const SEED_A = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -26,13 +28,15 @@ const SEED_B = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f
 const SEED_C = "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f";
 const privateKeyA = ed25519PrivateKeyFromSeed(Buffer.from(SEED_A, "hex"));
 const privateKeyB = ed25519PrivateKeyFromSeed(Buffer.from(SEED_B, "hex"));
+const privateKeyC = ed25519PrivateKeyFromSeed(Buffer.from(SEED_C, "hex"));
 const kidOf = privateKey => encodeKeyId(
   createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(-32));
 const kidA = kidOf(privateKeyA);
 const kidB = kidOf(privateKeyB);
-const kidC = kidOf(ed25519PrivateKeyFromSeed(Buffer.from(SEED_C, "hex")));
+const kidC = kidOf(privateKeyC);
 const entityA = entityUrn(kidA);
 const entityB = entityUrn(kidB);
+const entityC = entityUrn(kidC);
 const recipient = "urn:xeip:entity:recipient-01";
 const session = "urn:xeip:session:keydoc-demo";
 const token = "keydoc-demo-shared-token-00000";
@@ -47,6 +51,15 @@ const genesis = signKeyDocument({
   devices: [kidC]
 }, { privateKey: privateKeyA, kid: kidA });
 const anchor = { genesisKid: kidA, genesisDigest: keyDocumentChainDigest(genesis) };
+// A signed status document (revocation list) for the entity, root-signed and
+// revoking the endorsed device key. Serial is monotonic.
+const revokeDevice = signStatusDocument({
+  xeip: STATUS_VERSION,
+  entity: entityA,
+  serial: 1,
+  issuedAt: "2026-10-10T00:00:00Z",
+  revoked: [{ kid: kidC, generation: 1 }]
+}, { privateKey: privateKeyA, kid: kidA });
 
 const envelope = (sender, to = recipient) => ({
   xeip: "0.1", id: "urn:uuid:" + randomUUID(), kind: "message", sender, recipient: to,
@@ -134,14 +147,45 @@ try {
   await stop(enforced);
 }
 
+// Fail closed: a status document needs the trusted key document whose roots
+// must sign it.
+assert.throws(
+  () => createRelay({ token, signatures: {}, statusDocuments: [{ document: revokeDevice }] }),
+  /statusDocuments requires keyDocuments/
+);
+
+// Opt-in status/revocation: a current trusted key that the accepted status
+// revokes is denied even though its signature and key-document resolution pass.
+const revoked = await startRelay({
+  token, signatures: {},
+  keyDocuments: [{ document: genesis, anchor }],
+  statusDocuments: [{ document: revokeDevice }]
+});
+try {
+  const advertised = await revoked.health();
+  assert.equal(advertised.statusProfile, LOCAL_STATUS_DOCUMENTS_PROFILE);
+  assert.deepEqual(advertised.statusDocuments, { entities: 1 });
+  assert.ok(!JSON.stringify(advertised).includes(kidC), "health must not expose revoked key ids");
+
+  const accepted = await revoked.post(sign(privateKeyA, kidA, entityA));
+  assert.equal(accepted.status, 202);
+
+  const denied = await revoked.post(sign(privateKeyC, kidC, entityC));
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await denied.json(), { error: "forbidden" });
+} finally {
+  await stop(revoked);
+}
+
 // Default behavior is unchanged: without keyDocuments a self-certifying key routes.
 const disabled = await startRelay({ token, signatures: {} });
 try {
   assert.equal((await disabled.health()).keyDocumentProfile, undefined);
+  assert.equal((await disabled.health()).statusProfile, undefined);
   assert.deepEqual(await (await disabled.post(sign(privateKeyB, kidB, entityB))).json(),
     { accepted: true, delivered: 0 });
 } finally {
   await stop(disabled);
 }
 
-console.log("PASS local trusted key documents: bad anchor fails closed, trusted kid accepted, unknown kid 403 forbidden, health advertises profile without key material, self-certifying key accepted when disabled");
+console.log("PASS local trusted key documents + status: bad anchor fails closed, trusted kid accepted, unknown kid 403 forbidden, status-revoked device 403 forbidden, health advertises profiles without key/status material, self-certifying key accepted when disabled");

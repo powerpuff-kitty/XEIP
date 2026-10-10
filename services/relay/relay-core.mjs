@@ -15,6 +15,7 @@ import { authorize, sseFrame, validateMessage, absoluteUri, MAX_FRAME } from "./
 import { XEIP_SUPPORTED_VERSIONS } from "../../sdks/typescript/src/validation.js";
 import { SIG_EXTENSION, strictParse, verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
 import { KeyDocumentTrust } from "../../tools/key-document.mjs";
+import { StatusTracker, verifyStatusDocument } from "../../tools/identity-status.mjs";
 
 /**
  * Opt-in signed-envelope enforcement. The carrier, canonical bytes and
@@ -32,6 +33,22 @@ export const LOCAL_SIGNED_ENVELOPES_PROFILE = "xeip.local-signed-envelopes/0.1";
  */
 export const LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE = "xeip.local-trusted-key-documents/0.1";
 
+/**
+ * Opt-in status/revocation enforcement. When `statusDocuments` is configured, a
+ * signed envelope's resolved trusted `kid` is additionally checked against the
+ * entity's accepted `xeip.status/0.1` revocation list; a revoked key is denied
+ * (403 `forbidden`) even though its signature and key-document resolution are
+ * valid. Requires `keyDocuments`, which supplies the entity's trusted roots.
+ */
+export const LOCAL_STATUS_DOCUMENTS_PROFILE = "xeip.local-status-documents/0.1";
+
+// A status entry `{ kid, generation }` revokes `kid` for its recorded generation
+// and later (spec/plans/identity-status.md). This slice does not model a key's
+// key-document generation at the relay, so it treats any entry for a key as
+// revoking that key and asks the tracker with the maximum safe generation, which
+// is `>=` every recorded generation.
+const STATUS_GENERATION_ANY = Number.MAX_SAFE_INTEGER;
+
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -42,6 +59,17 @@ function parseKeyDocument(document) {
       return strictParse(document);
     } catch {
       throw new TypeError("trusted key document is not valid JSON");
+    }
+  }
+  return document;
+}
+
+function parseStatusDocument(document) {
+  if (typeof document === "string") {
+    try {
+      return strictParse(document);
+    } catch {
+      throw new TypeError("status document is not valid JSON");
     }
   }
   return document;
@@ -88,6 +116,7 @@ function buildKeyDocumentRegistry(keyDocuments) {
 
   const ownerByKid = new Map();
   const kidsByEntity = new Map();
+  const trustedByEntity = new Map();
   for (const entity of entityOrder) {
     const group = groups.get(entity);
     const anchor = group.anchor === undefined ? null : group.anchor;
@@ -105,6 +134,9 @@ function buildKeyDocumentRegistry(keyDocuments) {
       }
       current = document;
     }
+    // The latest accepted generation supplies the trusted `roots` against which
+    // a status document for the entity is verified.
+    trustedByEntity.set(entity, current);
     const kids = new Set([...current.roots, ...current.devices]);
     kidsByEntity.set(entity, kids);
     for (const kid of kids) {
@@ -115,7 +147,60 @@ function buildKeyDocumentRegistry(keyDocuments) {
       ownerByKid.set(kid, entity);
     }
   }
-  return { ownerByKid, entityCount: kidsByEntity.size };
+  return { ownerByKid, entityCount: kidsByEntity.size, trustedByEntity };
+}
+
+/**
+ * Verify the trusted status provisioning input at construction. Each status
+ * document is bound to a trusted key document for its entity (which supplies the
+ * roots that must sign it) and run through a per-entity {@link StatusTracker}:
+ * single-document verification plus serial-rollback and staleness rules. Any
+ * invalid, rollback or stale document throws (fail closed), so a relay is never
+ * constructed around a revoked-key list that fails closed. Status documents are
+ * trusted provisioning input, not runtime wire input; runtime status refresh is
+ * out of scope for this slice.
+ */
+function buildStatusRegistry(statusDocuments, keyDocRegistry) {
+  if (!Array.isArray(statusDocuments) || statusDocuments.length === 0) {
+    throw new TypeError("statusDocuments must be a non-empty array");
+  }
+  const tracker = new StatusTracker();
+  const entities = new Set();
+  for (const entry of statusDocuments) {
+    if (!isPlainObject(entry)) throw new TypeError("each statusDocuments entry must be an object");
+    for (const key of Object.keys(entry)) {
+      if (key !== "document" && key !== "now" && key !== "maxAgeSeconds") {
+        throw new TypeError(`unknown statusDocuments entry field: ${key}`);
+      }
+    }
+    if (!Object.hasOwn(entry, "document")) {
+      throw new TypeError("statusDocuments entry requires a document");
+    }
+    const document = parseStatusDocument(entry.document);
+    const entity = isPlainObject(document) && typeof document.entity === "string"
+      ? document.entity
+      : null;
+    const trusted = entity === null ? undefined : keyDocRegistry.trustedByEntity.get(entity);
+    if (trusted === undefined) {
+      throw new Error(`status document for an entity with no trusted key document: ${entity ?? "missing"}`);
+    }
+    // Explicit single-document verification against the trusted key document,
+    // then the stateful tracker applies serial rollback and staleness.
+    const single = verifyStatusDocument(document, trusted);
+    if (!single.valid) {
+      throw new Error(`untrusted status document for ${entity}: ${single.reason}`);
+    }
+    const result = tracker.ingest(document, {
+      trustedKeyDocument: trusted,
+      now: entry.now,
+      maxAgeSeconds: entry.maxAgeSeconds
+    });
+    if (!result.valid) {
+      throw new Error(`untrusted status document for ${entity}: ${result.reason}`);
+    }
+    entities.add(entity);
+  }
+  return { tracker, entityCount: entities.size };
 }
 
 // The verified signature kid, or undefined. The carrier is authenticated by the
@@ -142,7 +227,7 @@ const TOKEN_PRINCIPAL = Object.freeze({ token: true });
  * constructor run synchronously, so a misconfiguration throws here before any
  * transport is created.
  */
-export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments }) {
+export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments }) {
   // `signatures` is a bare opt-in. An empty object enables detached-signature
   // enforcement; null, arrays, primitives and any unknown member are rejected.
   // It is orthogonal to the authentication modes and needs no other profile.
@@ -158,7 +243,17 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   if (keyDocuments !== undefined && !signaturesEnabled) {
     throw new TypeError("keyDocuments requires signatures");
   }
+  // Status/revocation is a tightening of trusted-key resolution: the trusted key
+  // document supplies the roots that must sign the status, so it is meaningless
+  // (and rejected) without `keyDocuments`. Documents are verified here, before
+  // any transport exists, and fail closed.
+  if (statusDocuments !== undefined && keyDocuments === undefined) {
+    throw new TypeError("statusDocuments requires keyDocuments");
+  }
   const keyDocRegistry = keyDocuments === undefined ? null : buildKeyDocumentRegistry(keyDocuments);
+  const statusRegistry = statusDocuments === undefined
+    ? null
+    : buildStatusRegistry(statusDocuments, keyDocRegistry);
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
@@ -244,10 +339,16 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     // With trusted key documents configured, the verified `kid` must also be a
     // current root or device key of a trusted chain, not merely self-certifying.
     // This composes with, and does not replace, the `entityUrn(kid) === sender`
-    // binding enforced by `verifySignedEnvelope`. Revocation/status is out of
-    // scope here and is a future integration.
-    if (keyDocRegistry && !keyDocRegistry.ownerByKid.has(envelopeKid(raw))) {
-      return { status: 403, error: "forbidden" };
+    // binding enforced by `verifySignedEnvelope`. When status documents are also
+    // configured, a `kid` the entity's accepted status revokes is denied, even
+    // though its resolution succeeded.
+    if (keyDocRegistry) {
+      const kid = envelopeKid(raw);
+      const entity = keyDocRegistry.ownerByKid.get(kid);
+      if (entity === undefined) return { status: 403, error: "forbidden" };
+      if (statusRegistry && statusRegistry.tracker.isRevoked(entity, kid, STATUS_GENERATION_ANY)) {
+        return { status: 403, error: "forbidden" };
+      }
     }
     if (admission && !admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
     const base = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
@@ -344,6 +445,11 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       // Advertise only the count: no per-entity key ids or chain material.
       base.keyDocuments = { entities: keyDocRegistry.entityCount };
     }
+    if (statusRegistry) {
+      base.statusProfile = LOCAL_STATUS_DOCUMENTS_PROFILE;
+      // Advertise only the count: no per-entity key ids or revocation entries.
+      base.statusDocuments = { entities: statusRegistry.entityCount };
+    }
     return base;
   };
   const checkSubscriptions = () => {
@@ -363,6 +469,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   return {
     signaturesEnabled,
     keyDocRegistry,
+    statusRegistry,
     authenticate,
     isCurrent,
     canSubscribe,

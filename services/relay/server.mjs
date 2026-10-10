@@ -19,8 +19,8 @@ import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 import { strictParse } from "../../tools/signed-envelope.mjs";
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments }) {
-  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments });
+export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments }) {
+  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments });
   const { limitPolicy, durableStore } = core;
   const limitDecision = (req, principal) => core.limitDecision(principal, req.socket.remoteAddress);
   const server = createServer((req, res) => {

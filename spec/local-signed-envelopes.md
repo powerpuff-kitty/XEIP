@@ -265,10 +265,66 @@ authentication mode. When configured, `/health` advertises
 `keyDocumentProfile: "xeip.local-trusted-key-documents/0.1"` and a non-sensitive
 `keyDocuments: { entities }` count; no key ids or chain material are exposed.
 
-**Revocation and status are out of scope here.** This section resolves a `kid`
-to a *current* key of a trusted chain; it does not consult a status document and
-does not terminate live streams on revocation
-([identity-keys.md](identity-keys.md) §9). That is a future integration.
+**Revocation and status** are a separate opt-in tightening of this section; see
+[Status (revocation) resolution](#status-revocation-resolution). It resolves a
+`kid` to a *current* key of a trusted chain and additionally rejects a key the
+entity's accepted status document revokes. Runtime status refresh and live-stream
+termination on a learned revocation remain out of scope
+([identity-keys.md](identity-keys.md) §9).
+
+## Status (revocation) resolution
+
+The relay can additionally consult an opt-in set of signed
+[`xeip.status/0.1`](../tools/identity-status.mjs) **status documents** (revocation
+lists) supplied as provisioning input:
+
+```js
+createRelay({
+  token,
+  signatures: {},
+  keyDocuments: [{ document: genesis, anchor: { genesisKid, genesisDigest } }],
+  statusDocuments: [
+    { document: status } // { document, now?, maxAgeSeconds? }
+  ]
+});
+```
+
+`statusDocuments` requires `keyDocuments`; a status document is only meaningful
+against the trusted key document that supplies the entity's roots, so without it
+construction fails. Each entry is `{ document, now?, maxAgeSeconds? }`, where
+`document` is a signed `xeip.status/0.1` document (parsed object or JSON text) and
+the optional `now`/`maxAgeSeconds` are the reference instant and maximum accepted
+age passed to the tracker's staleness rule.
+
+At **construction** every status document is verified against the trusted key
+document of its `entity` (which must be a trusted key-document entity) with
+`verifyStatusDocument`, then run through a `StatusTracker` for that entity:
+single-document verification, serial-rollback rejection and optional staleness
+rejection. Any malformed, non-root-signed, rollback or stale document **throws**,
+so a relay is never constructed around a revoked-key list that fails closed.
+
+When enabled, an envelope whose resolved trusted `kid` is revoked is denied, even
+though its signature and key-document resolution are valid:
+
+| Condition | HTTP | WebSocket `type:"error"` |
+| --- | --- | --- |
+| resolved trusted `kid` is revoked by the entity's accepted status | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
+
+For this slice an entry `{ kid, generation }` is treated as revoking that `kid`
+regardless of its recorded `generation`: the relay does not yet model which
+key-document generation a `kid` belongs to, so `generation` is informational and
+the entry applies to all generations. The signature gate and the current-key
+resolution still run first, so an invalid or unknown envelope is rejected with its
+existing status before revocation is consulted. `statusDocuments` composes with
+either authentication mode. When configured, `/health` advertises
+`statusProfile: "xeip.local-status-documents/0.1"` and a non-sensitive
+`statusDocuments: { entities }` count; no key ids or revocation entries are
+exposed. When it is not configured, behavior is unchanged.
+
+Status documents are verified only at construction. **Runtime status updates and
+refresh are not supported**, and a learned revocation does not terminate an
+already-open stream; that live-stream effect remains deferred
+([identity-keys.md](identity-keys.md) §9.2, `spec/plans/identity-status.md`).
 
 ## Verification result
 
@@ -323,7 +379,10 @@ This profile deliberately does not define or claim:
   distribution. Bulk trust anchors and signed key documents remain
   [identity.md](identity.md) §3/§6 work.
 - **Revocation or status.** A revoked key still verifies until a separate
-  status check rejects it.
+  status check rejects it; the opt-in
+  [status resolution](#status-revocation-resolution) slice provides a local,
+  construction-time check, but there is no status distribution, runtime refresh
+  or live-stream termination.
 - **Replay or freshness.** There is no nonce, `expiresAt` bound or replay
   cache here.
 - **End-to-end encryption, forward secrecy or metadata protection.** Envelope
