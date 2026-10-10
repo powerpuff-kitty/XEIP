@@ -75,6 +75,7 @@ human / AI agent / machine / service
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Identity design (proposed, not implemented):** [spec/identity.md](spec/identity.md).
 - **Signed envelopes (verification slice, reference):** [spec/local-signed-envelopes.md](spec/local-signed-envelopes.md).
+- **Identity key lifecycle (proposed, not implemented):** [spec/identity-keys.md](spec/identity-keys.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
 - **Durable delivery (first slice implemented):** [spec/local-durable.md](spec/local-durable.md).
 - **Rate/connection limits:** [spec/local-limits.md](spec/local-limits.md) (opt-in local prototype).
