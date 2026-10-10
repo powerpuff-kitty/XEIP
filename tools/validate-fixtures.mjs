@@ -5,6 +5,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { requireUri } from "../sdks/typescript/src/validation.js";
 import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
+import { verifySignedEnvelope } from "./signed-envelope.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -64,5 +65,16 @@ for (const vector of keyidVectors) {
   }
   decodeKeyId(keyId);
 }
+const signedVectors = readJson(new URL("../conformance/fixtures/identity-signed/signed.vectors.json", import.meta.url));
+for (const vector of signedVectors) {
+  const result = verifySignedEnvelope(vector.envelope);
+  if (vector.valid === true) {
+    if (result.valid !== true) throw new Error("signed-envelope vector " + vector.name + ": expected a valid signature");
+  } else if (result.valid !== false || result.reason !== vector.reason) {
+    throw new Error("signed-envelope vector " + vector.name + ": expected reason " +
+      JSON.stringify(vector.reason) + " but received " + JSON.stringify(result));
+  }
+}
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
-  " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors passed");
+  " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors and " +
+  signedVectors.length + " signed-envelope vectors passed");

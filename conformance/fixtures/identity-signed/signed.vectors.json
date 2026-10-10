@@ -1,0 +1,173 @@
+[
+  {
+    "name": "valid signed envelope",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": true,
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "hello",
+          "n": 1
+        }
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "jmyQltLit2mUoxI8zbPLrFnIm4LAdyqJl1Dh3uwPFGUZvf1vQ6FHJ3IXEQuf1nR3pO97vVZOUFF7BGUEG1u7Dg"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: tampered body",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "signature mismatch",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "tampered",
+          "n": 1
+        }
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "jmyQltLit2mUoxI8zbPLrFnIm4LAdyqJl1Dh3uwPFGUZvf1vQ6FHJ3IXEQuf1nR3pO97vVZOUFF7BGUEG1u7Dg"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: sender does not match key",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "sender binding",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "hello",
+          "n": 1
+        }
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "ETrYKxCzIYqFz8e2MUqwWjHhSTsWvttBZT2KsnYc6aHH2gQJUVYFqk0y76LXhinBupij5BY6Xx0-8yYkc7tcDg"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: wrong kid claim",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "sender binding",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "hello",
+          "n": 1
+        }
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP",
+          "sig": "jmyQltLit2mUoxI8zbPLrFnIm4LAdyqJl1Dh3uwPFGUZvf1vQ6FHJ3IXEQuf1nR3pO97vVZOUFF7BGUEG1u7Dg"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: corrupted signature",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "signature mismatch",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "hello",
+          "n": 1
+        }
+      },
+      "extensions": {
+        "xeip.sig": {
+          "v": "0.1",
+          "alg": "EdDSA",
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "j2yQltLit2mUoxI8zbPLrFnIm4LAdyqJl1Dh3uwPFGUZvf1vQ6FHJ3IXEQuf1nR3pO97vVZOUFF7BGUEG1u7Dg"
+        }
+      }
+    }
+  },
+  {
+    "name": "negative: missing carrier",
+    "publicKeyHex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "valid": false,
+    "reason": "missing signature",
+    "envelope": {
+      "xeip": "0.1",
+      "id": "urn:xeip:message:signed-01",
+      "kind": "message",
+      "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "recipient": "urn:xeip:entity:recipient-01",
+      "session": "urn:xeip:session:signed",
+      "timestamp": "2026-10-09T00:00:00Z",
+      "body": {
+        "contentType": "application/json",
+        "data": {
+          "text": "hello",
+          "n": 1
+        }
+      }
+    }
+  }
+]
