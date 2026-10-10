@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRelay } from "./server.mjs";
 import { LocalAdmission } from "./admission.mjs";
-import { DurableStore, ReceiptLog, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
+import { BATCH_FSYNC, DurableStore, ReceiptLog, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
 import { ReceiptLedger } from "./receipts.mjs";
 import { digestHex } from "./primitives.mjs";
 
@@ -98,6 +98,67 @@ test("receipt log rejects invalid configuration", t => {
   }
   assert.throws(() => new ReceiptLog());
   assert.throws(() => new ReceiptLog({ dir: "" }));
+  assert.throws(() => new ReceiptLog({ dir, maxBytes: 0 }));
+  assert.throws(() => new ReceiptLog({ dir, compactAfter: 0 }));
+});
+
+test("a structurally invalid but checksum-valid record is quarantined and the log recovers", t => {
+  const dir = makeDir(t);
+  const good = record(1, Date.now() + 60000);
+  const log = new ReceiptLog({ dir, fsync: "always" });
+  log.append(good);
+  log.append({ bogus: true }); // checksum-valid framing, schema-invalid payload
+  log.close();
+
+  const reopened = new ReceiptLog({ dir });
+  assert.equal(reopened.status, "degraded");
+  assert.deepEqual(reopened.load(), []);
+  assert.ok(existsSync(log.path + ".corrupt"), "the poisoned log is moved aside");
+  reopened.close();
+
+  // The next start sees a clean, empty log rather than poisoning forever.
+  const recovered = new ReceiptLog({ dir });
+  assert.equal(recovered.status, "ok");
+  assert.deepEqual(recovered.load(), []);
+  recovered.close();
+});
+
+test("fsync policy mirrors the delivery batch interval", t => {
+  const always = new ReceiptLog({ dir: makeDir(t), fsync: "always" });
+  always.append(record(1, Date.now() + 60000));
+  assert.equal(always.fsyncs, 1, "always fsyncs each line");
+  always.close();
+
+  const batch = new ReceiptLog({ dir: makeDir(t), fsync: "batch" });
+  for (let seq = 1; seq < BATCH_FSYNC; seq++) batch.append(record(seq, Date.now() + 60000));
+  assert.equal(batch.fsyncs, 0, "batch waits for the interval");
+  batch.append(record(BATCH_FSYNC, Date.now() + 60000));
+  assert.equal(batch.fsyncs, 1, "batch fsyncs on the interval");
+  batch.close();
+
+  const never = new ReceiptLog({ dir: makeDir(t), fsync: "never" });
+  for (let seq = 1; seq <= BATCH_FSYNC; seq++) never.append(record(seq, Date.now() + 60000));
+  never.close();
+  assert.equal(never.fsyncs, 0, "never never fsyncs");
+});
+
+test("repeated re-acks keep the on-disk receipt log bounded", t => {
+  const dir = makeDir(t);
+  const log = new ReceiptLog({ dir, fsync: "never", maxBytes: 4096, compactAfter: 16 });
+  const ledger = new ReceiptLedger({}, log);
+  for (let index = 0; index < 500; index++) {
+    assert.deepEqual(ledger.record(principal(a), room, 1, "urn:xeip:message:one", index),
+      { duplicate: index > 0 });
+  }
+  assert.ok(statSync(log.path).size <= 4096, "the log stays within its hard byte budget");
+  log.close();
+
+  // The single live receipt survived the online compactions and reloads.
+  const reopened = new ReceiptLog({ dir });
+  assert.equal(reopened.status, "ok");
+  const reloaded = new ReceiptLedger({}, reopened);
+  assert.deepEqual(reloaded.record(principal(a), room, 1, "urn:xeip:message:one", 1000), { duplicate: true });
+  reopened.close();
 });
 
 test("a ledger reloaded from a backend reports an idempotent duplicate", () => {
@@ -231,6 +292,21 @@ test("a corrupt receipt log does not crash startup and fails closed", async t =>
   // fresh first record rather than a duplicate.
   assert.equal((await (await second.receipt(b, { session: room, seq: firstSeq })).json()).duplicate, false);
   await second.stop();
+});
+
+test("an invalid receipts config does not leak the durable lock", t => {
+  const dir = makeDir(t);
+  const credentials = new Map([a, b].map(entity => [entity, secret()]));
+  const admission = new LocalAdmission({
+    credentials: [...credentials].map(([entity, token]) => ({ entity, token })),
+    sessions: [{ xeip: "0.1", id: room, mode: "group", members: [a, b], createdAt: "2026-10-09T00:00:00Z" }]
+  });
+  // Constructing the ledger throws after the durable store took its lock; the
+  // core must close the store so the directory is not left locked or held open.
+  assert.throws(() => createRelay({ admission, durable: { dir }, receipts: { windowMs: 0 } }), /receipts/);
+  const store = new DurableStore({ dir, fsync: "always" });
+  assert.equal(store.status(), "ok");
+  store.close();
 });
 
 test("openReceiptLog is created once and shares the store directory", t => {

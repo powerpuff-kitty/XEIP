@@ -11,7 +11,9 @@ const FIELDS = ["windowMs", "maxPerSession", "maxPerPrincipal"];
 // under bounds and are lost on restart. When constructed with a persistence
 // `backend` (see `ReceiptLog` in durable.mjs) each new or refreshed record is
 // written as a digest-only opaque line and reloaded on construction, so the
-// ledger survives a restart when the durable profile is enabled. It exposes no
+// ledger survives a restart when the durable profile is enabled. The backend log
+// is compacted online on a bounded trigger (appended lines or byte budget) so
+// duplicate refreshes cannot grow it without bound. It exposes no
 // change listener: receipts are advisory and never broadcast, so nothing
 // outside this process observes ledger updates.
 export class ReceiptLedger {
@@ -106,8 +108,8 @@ export class ReceiptLedger {
       this.#adopt(record.principal, record.session, record.id, record.seq, this.#elapsed + (record.expiresAt - wallNow));
     }
     // Rebase the append-only log to the bounded live set so duplicate refreshes
-    // and expired records do not accumulate on disk across restarts. Online
-    // compaction while the process runs is deferred.
+    // and expired records do not accumulate on disk across restarts. While the
+    // process runs, `#persist` compacts online on the same bounded trigger.
     if (Array.isArray(persisted) && persisted.length > 0) this.#compactBackend();
   }
 
@@ -140,16 +142,26 @@ export class ReceiptLedger {
 
   // Writes the digest-only opaque record. The wall expiry is recomputed from
   // `Date.now()` rather than the monotonic `expiresAt`, because only wall time
-  // is meaningful across a restart.
+  // is meaningful across a restart. When the backend reports its append-line or
+  // byte budget is reached the live set is rewritten online so duplicate
+  // refreshes cannot grow the log without bound between restarts.
   #persist(record) {
     if (!this.#backend) return;
-    this.#backend.append({
+    const backend = this.#backend;
+    const outcome = backend.append({
       principal: record.principalKey,
       session: record.sessionKey,
       id: record.id,
       seq: record.seq,
       expiresAt: Date.now() + this.#windowMs
     });
+    const full = outcome === "full";
+    const saturated = typeof backend.saturated === "function" && backend.saturated();
+    const due = typeof backend.shouldCompact === "function" && backend.shouldCompact();
+    // Rewrite the live set when the line budget is reached, or once when an
+    // append overflows the byte budget. If even the live set is over budget the
+    // write is simply dropped (the log is bounded by the bounded live set).
+    if ((full && !saturated) || due) this.#compactBackend();
   }
 
   #bucket(map, key, max) {

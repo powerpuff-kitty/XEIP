@@ -64,12 +64,21 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   const replayWindow = replay === undefined ? null : new ReplayWindow(replay);
   const deliveryLog = delivery === undefined ? null : new DeliveryLog(delivery);
   const durableStore = durable === undefined ? null : new DurableStore(durable);
-  const store = durableStore ?? deliveryLog;
-  // Receipts persist through the durable store's directory only when both
-  // options are set; without a durable backend the ledger stays in-memory.
-  const receiptBackend = durableStore && receipts !== undefined ? durableStore.openReceiptLog() : null;
-  const receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts, receiptBackend);
-  const limitPolicy = limits === undefined ? null : new LimitPolicy(limits);
+  // The durable store holds an exclusive `<dir>/LOCK` and an open fd. Every later
+  // policy construction (receipts, limits) can throw on invalid configuration, so
+  // close the store before rethrowing rather than leaking its lock or fd.
+  let store, receiptBackend, receiptLedger, limitPolicy;
+  try {
+    store = durableStore ?? deliveryLog;
+    // Receipts persist through the durable store's directory only when both
+    // options are set; without a durable backend the ledger stays in-memory.
+    receiptBackend = durableStore && receipts !== undefined ? durableStore.openReceiptLog() : null;
+    receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts, receiptBackend);
+    limitPolicy = limits === undefined ? null : new LimitPolicy(limits);
+  } catch (error) {
+    durableStore?.close();
+    throw error;
+  }
   // One token-bucket decision for the current request's rate-limit key, or null
   // when the profile is disabled. The transport supplies the peer address; the
   // policy itself stays unaware of transports and principals.

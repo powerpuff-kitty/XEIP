@@ -22,8 +22,18 @@ const FIELDS = ["backend", "dir", "retentionMs", "maxEntriesPerSession", "maxSes
 const FSYNC_MODES = ["always", "batch", "never"];
 // Roll the append-only log before a single segment grows past this size.
 const SEGMENT_BYTES = 1024 * 1024;
-// With fsync:"batch" the active segment is flushed every N appends (and on close).
-const BATCH_FSYNC = 64;
+// With fsync:"batch" the active segment (and the receipt log) is flushed every N
+// appends and on close/compact.
+export const BATCH_FSYNC = 64;
+// The receipt log is compacted online after this many appended lines, so
+// duplicate refreshes never accumulate without bound between restarts.
+export const RECEIPT_COMPACT_LINES = 1024;
+// The receipt log's hard byte budget is derived from the durable `maxBytes` as a
+// fraction, clamped so a tiny store still gets a usable floor and a large store
+// cannot devote its whole budget to advisory receipts.
+const RECEIPT_BUDGET_FRACTION = 16;
+const RECEIPT_BUDGET_MIN = 64 * 1024;
+const RECEIPT_BUDGET_MAX = 8 * 1024 * 1024;
 const RECORD_HEADER = 4 + 32; // uint32 payload length + SHA-256(payload)
 const MANIFEST = "manifest.json";
 const RECEIPT_LOG = "receipts.log";
@@ -83,24 +93,38 @@ const validReceiptRecord = record =>
  * in the durable store directory as `receipts.log` and reuses the same
  * length-prefixed, SHA-256-checksummed record framing as the delivery segments.
  * A truncated final record is a torn tail that is dropped and reported
- * "recovered"; interior corruption fails closed to "degraded" with no receipts
- * and moves the unreadable file aside so appends never sit behind bad bytes. It
- * stores no envelope copy. `compact` atomically rewrites the live set (temp +
- * fsync + rename); the ledger rebases the log on each startup and online
- * compaction while the process runs is deferred.
+ * "recovered"; interior corruption *and* a structurally invalid record fail
+ * closed to "degraded", move the unreadable file aside (`receipts.log.corrupt`)
+ * and start a fresh log so appends never sit behind bad bytes. It stores no
+ * envelope copy.
+ *
+ * Growth is bounded online. Appends are tracked; once `compactAfter` lines have
+ * been appended (or a write would pass the hard `maxBytes` budget) the ledger
+ * rewrites only its live set via `compact` (temp + fsync + rename). A write that
+ * would still exceed the hard budget after compaction is dropped, so the file
+ * cannot grow without bound. `fsync` mirrors the delivery policy: "always"
+ * fsyncs each line, "batch" every `BATCH_FSYNC` appends and on close/compact,
+ * "never" never does.
  */
 export class ReceiptLog {
   #dir;
   #file;
   #fd;
   #fsync;
+  #maxBytes;
+  #compactAfter;
   #status = "ok";
   #records = [];
+  #bytes = 0;
+  #appended = 0;
+  #pending = 0;
+  #fsyncs = 0;
+  #saturated = false;
   #closed = false;
 
   constructor(configuration = {}) {
     if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
-        Object.keys(configuration).some(key => !["dir", "fsync"].includes(key))) {
+        Object.keys(configuration).some(key => !["dir", "fsync", "maxBytes", "compactAfter"].includes(key))) {
       throw new TypeError("invalid receipt log configuration");
     }
     if (typeof configuration.dir !== "string" || configuration.dir.length === 0) {
@@ -108,26 +132,58 @@ export class ReceiptLog {
     }
     const fsync = configuration.fsync ?? "always";
     if (!FSYNC_MODES.includes(fsync)) throw new RangeError("invalid receipt log fsync");
+    const maxBytes = configuration.maxBytes ?? RECEIPT_BUDGET_MAX;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 17179869184) {
+      throw new RangeError("invalid receipt log maxBytes");
+    }
+    const compactAfter = configuration.compactAfter ?? RECEIPT_COMPACT_LINES;
+    if (!Number.isSafeInteger(compactAfter) || compactAfter < 1 || compactAfter > 1048576) {
+      throw new RangeError("invalid receipt log compactAfter");
+    }
     this.#dir = path.resolve(configuration.dir);
     this.#fsync = fsync;
+    this.#maxBytes = maxBytes;
+    this.#compactAfter = compactAfter;
     this.#file = path.join(this.#dir, RECEIPT_LOG);
     fs.mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
     this.#records = this.#load();
     this.#fd = fs.openSync(this.#file, "a", 0o600);
+    this.#bytes = fs.fstatSync(this.#fd).size;
   }
 
   /** "ok", "recovered" (torn tail dropped) or "degraded" (corrupt, failed closed). */
   get status() { return this.#status; }
   get path() { return this.#file; }
+  /** Current on-disk log size in bytes. */
+  get bytes() { return this.#bytes; }
+  /** Number of fsync calls issued (test/diagnostic signal for the fsync policy). */
+  get fsyncs() { return this.#fsyncs; }
 
   /** Every valid persisted record; expiry filtering and bounds are the ledger's. */
   load() { return this.#records; }
 
+  /**
+   * Appends one checksummed line. Returns "ok" when written, "full" when the hard
+   * byte budget would be exceeded (nothing is written; the ledger compacts and
+   * re-persists its live set) or "closed".
+   */
   append(record) {
-    if (this.#closed) return;
-    fs.writeSync(this.#fd, encodeRecord(Buffer.from(JSON.stringify(record), "utf8")));
-    if (this.#fsync === "always") fs.fsyncSync(this.#fd);
+    if (this.#closed) return "closed";
+    const encoded = encodeRecord(Buffer.from(JSON.stringify(record), "utf8"));
+    if (this.#bytes + encoded.length > this.#maxBytes) return "full";
+    fs.writeSync(this.#fd, encoded);
+    this.#bytes += encoded.length;
+    this.#appended += 1;
+    if (this.#fsync === "always") this.#sync();
+    else if (this.#fsync === "batch" && ++this.#pending >= BATCH_FSYNC) this.#sync();
+    return "ok";
   }
+
+  /** True once the appended-line trigger has been reached. */
+  shouldCompact() { return !this.#saturated && this.#appended >= this.#compactAfter; }
+
+  /** True when the compacted live set alone exceeds the hard byte budget. */
+  saturated() { return this.#saturated; }
 
   /** Atomically replaces the log with exactly `records` (temp + fsync + rename). */
   compact(records) {
@@ -137,22 +193,34 @@ export class ReceiptLog {
     const fd = fs.openSync(tmp, "w", 0o600);
     try {
       fs.writeSync(fd, data);
-      if (this.#fsync !== "never") fs.fsyncSync(fd);
+      if (this.#fsync !== "never") { fs.fsyncSync(fd); this.#fsyncs += 1; }
     } finally { fs.closeSync(fd); }
     fs.renameSync(tmp, this.#file);
     if (this.#fsync !== "never") this.#fsyncDir();
     if (this.#fd !== undefined) { try { fs.closeSync(this.#fd); } catch { /* best-effort */ } }
     this.#fd = fs.openSync(this.#file, "a", 0o600);
+    this.#bytes = data.length;
+    this.#appended = 0;
+    this.#pending = 0;
+    // Once even the live set cannot fit, stop re-compacting on every dropped
+    // append; the file is already bounded by the (bounded) live set.
+    this.#saturated = this.#bytes > this.#maxBytes;
   }
 
   close() {
     if (this.#closed) return;
     this.#closed = true;
     if (this.#fd !== undefined) {
-      if (this.#fsync !== "never") { try { fs.fsyncSync(this.#fd); } catch { /* best-effort */ } }
+      if (this.#fsync !== "never") { try { this.#sync(); } catch { /* best-effort */ } }
       try { fs.closeSync(this.#fd); } catch { /* best-effort */ }
       this.#fd = undefined;
     }
+  }
+
+  #sync() {
+    fs.fsyncSync(this.#fd);
+    this.#pending = 0;
+    this.#fsyncs += 1;
   }
 
   #load() {
@@ -166,7 +234,7 @@ export class ReceiptLog {
       // Interior corruption: fail closed to no receipts and preserve the file
       // for inspection so new appends never sit behind unreadable bytes.
       this.#status = "degraded";
-      try { fs.renameSync(this.#file, this.#file + ".corrupt"); } catch { /* best-effort */ }
+      this.#quarantine();
       return [];
     }
     if (result.torn) {
@@ -175,10 +243,23 @@ export class ReceiptLog {
     }
     const records = [];
     for (const { record } of result.records) {
-      if (!validReceiptRecord(record)) { this.#status = "degraded"; return []; }
+      if (!validReceiptRecord(record)) {
+        // A checksum-valid but structurally invalid record is corruption too: it
+        // would otherwise poison every future load, so quarantine the whole file
+        // (as for interior corruption) and start a fresh, bounded log.
+        this.#status = "degraded";
+        this.#quarantine();
+        return [];
+      }
       records.push(record);
     }
     return records;
+  }
+
+  // Moves the unreadable or poisoned log aside so the next append starts a clean
+  // file. Best-effort: a failed rename still reports "degraded".
+  #quarantine() {
+    try { fs.renameSync(this.#file, this.#file + ".corrupt"); } catch { /* best-effort */ }
   }
 
   #fsyncDir() {
@@ -301,7 +382,11 @@ export class DurableStore {
    */
   openReceiptLog() {
     if (this.#receiptLog) return this.#receiptLog;
-    const log = new ReceiptLog({ dir: this.#dir, fsync: this.#fsync });
+    // The receipt log's hard byte budget is derived from (and smaller than) the
+    // delivery budget, so advisory receipts cannot consume the whole store.
+    const maxBytes = Math.min(RECEIPT_BUDGET_MAX,
+      Math.max(RECEIPT_BUDGET_MIN, Math.floor(this.#maxBytes / RECEIPT_BUDGET_FRACTION)));
+    const log = new ReceiptLog({ dir: this.#dir, fsync: this.#fsync, maxBytes, compactAfter: RECEIPT_COMPACT_LINES });
     if (log.status === "degraded") this.#status = "degraded";
     else if (log.status === "recovered" && this.#status === "ok") this.#status = "recovered";
     this.#receiptLog = log;
