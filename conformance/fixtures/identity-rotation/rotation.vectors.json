@@ -1,0 +1,468 @@
+{
+  "trusted": {
+    "keydoc.entity": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    }
+  },
+  "rotations": {
+    "rotation.valid": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "rK6lwSjHubnxdjYB2EaXVc-3ugbft4AKjCpASaVJ-bUtxnP6iRGdeChgyhPrj2oN99eDtxGSQoHrL33fJdeoBQ"
+        }
+      ]
+    },
+    "rotation.extend": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "successor_kid": "z6Mkjppjwd12cSzdhduNMf3reWgxgkUn7WFM3pnA5f3gFcLj",
+      "issuedAt": "2026-10-20T00:00:00Z",
+      "overlapUntil": "2026-10-30T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "pucwrMODaHJh9R0oR-CTlZ5hxWja94cSg7ZOvoLR8qM0UAJf8xKN_3IBwQe5d-qsU1QXgdi9AajYBvCava-oDw"
+        }
+      ]
+    },
+    "rotation.second-rotation": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6Mkjppjwd12cSzdhduNMf3reWgxgkUn7WFM3pnA5f3gFcLj",
+      "issuedAt": "2026-10-25T00:00:00Z",
+      "overlapUntil": "2026-11-04T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "DNBt-10IbpAADkqAmRYo64kU1q33xZASy-gTkYcC34uM4JeDvdCvLNvANEboeo9l-MXaTjpHayT8KXwDkVlPAQ"
+        }
+      ]
+    },
+    "rotation.retired-successor": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "successor_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "issuedAt": "2026-10-25T00:00:00Z",
+      "overlapUntil": "2026-10-30T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "IssLkMwsUTTlJrIbW_GbmQ_c0RlOmwdLqhf9fAxoWN6EP80xWD7oQEhJpIC5B8nkUDc5k99hwcDvRS-edBKjAQ"
+        }
+      ]
+    },
+    "rotation.nonroot": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+          "sig": "zm3I1_0wA09_ewzUu8kvih8lwCaZyKC1zrn7IV_tQoyB9VDmbMlJcSXd-8gS69cHRfJsgd0QLYBMyMI6MhmKCw"
+        }
+      ]
+    },
+    "rotation.weak-successor": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "AJCZNvgDXJ0Ys9OOEbZ8uue875JFeqcfDwrjA1aBmaZYmby69u40qGQof9WO3IuxM0dqhfE0hsNF4oHztZnWCA"
+        }
+      ]
+    },
+    "rotation.tampered": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "AK6lwSjHubnxdjYB2EaXVc-3ugbft4AKjCpASaVJ-bUtxnP6iRGdeChgyhPrj2oN99eDtxGSQoHrL33fJdeoBQ"
+        }
+      ]
+    },
+    "rotation.entity-mismatch": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "WHjobrliHnylBcRLEUgv_272JYnrMKJlVZzq8EDR39KLPBvdXOqpG61nni_TbyhsQ7IFsEdbCkBjCPc_EuQxCA"
+        }
+      ]
+    },
+    "rotation.unknown-field": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "extra": true,
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "qmalZEJyjeyf6f6yAlsv3WO6KfETHAhYoBytTyuGTlo7cJs0328TZTcJxCtszQzhJvRSAP_q1fzIJ9w1ARR_BA"
+        }
+      ]
+    },
+    "rotation.unsupported-version": {
+      "xeip": "xeip.device-rotation/0.2",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "P1Do5hhHZukuIpuVJvedJts8fMTcnMiXQ-XmdDX7ZDLn-NVkPMtpzcugTX3XscWSDICiqImJZf--62-Gel5cBg"
+        }
+      ]
+    },
+    "rotation.bad-issued": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00+00:00",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "FyfX7dfhe7-FXlhEpC5odCaPftkroD6YIxn0n6ltnCCYFJnSmDHJiuM3KIGwnDYijnFIAdL6RFLt470F5JHLAw"
+        }
+      ]
+    },
+    "rotation.bad-kid": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "not-a-kid",
+      "successor_kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "05hFxfWKmyKSmOBJHk2pADzULxF0_3yaQA2MJXK1DxiggR9fK4HJo4z_dmBW6mg-CwuDdG-qy6SUKM_nTLtQDA"
+        }
+      ]
+    },
+    "rotation.equal-kids": {
+      "xeip": "xeip.device-rotation/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "previous_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "successor_kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "overlapUntil": "2026-11-09T00:00:00Z",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "k30iA8DeNnnHU5sICjAaywR8KxOoCc0X9xbO323DdGp4NfJ8x6QMgmHKG2Bm3Qr-rTOR1eJ9G6YCcHO5ESTvBA"
+        }
+      ]
+    }
+  },
+  "trackers": [
+    {
+      "name": "rotation.valid",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "accept",
+          "rotation": "rotation.valid",
+          "valid": true
+        },
+        {
+          "kind": "active",
+          "name": "successor-active",
+          "kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+          "now": "2026-10-10T00:00:00Z",
+          "active": true
+        },
+        {
+          "kind": "active",
+          "name": "predecessor-at-issue",
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "now": "2026-10-10T00:00:00Z",
+          "active": true
+        },
+        {
+          "kind": "active",
+          "name": "predecessor-at-overlap-end",
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "now": "2026-11-09T00:00:00Z",
+          "active": true
+        },
+        {
+          "kind": "active",
+          "name": "predecessor-after-overlap",
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "now": "2026-11-09T00:00:01Z",
+          "active": false,
+          "reason": "expired predecessor"
+        },
+        {
+          "kind": "active",
+          "name": "unknown-device",
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "now": "2026-10-10T00:00:00Z",
+          "active": false,
+          "reason": "unknown device"
+        }
+      ]
+    },
+    {
+      "name": "rotation.conflict",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "accept",
+          "rotation": "rotation.valid",
+          "valid": true
+        },
+        {
+          "kind": "ingest",
+          "name": "second-rotation",
+          "rotation": "rotation.second-rotation",
+          "valid": false,
+          "reason": "rotation conflict"
+        },
+        {
+          "kind": "ingest",
+          "name": "retired-successor",
+          "rotation": "rotation.retired-successor",
+          "valid": false,
+          "reason": "rotation conflict"
+        }
+      ]
+    },
+    {
+      "name": "rotation.chain",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "accept",
+          "rotation": "rotation.valid",
+          "valid": true
+        },
+        {
+          "kind": "ingest",
+          "name": "extend",
+          "rotation": "rotation.extend",
+          "valid": true
+        },
+        {
+          "kind": "active",
+          "name": "current-successor",
+          "kid": "z6Mkjppjwd12cSzdhduNMf3reWgxgkUn7WFM3pnA5f3gFcLj",
+          "now": "2026-11-01T00:00:00Z",
+          "active": true
+        },
+        {
+          "kind": "active",
+          "name": "mid-predecessor",
+          "kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+          "now": "2026-10-25T00:00:00Z",
+          "active": true
+        },
+        {
+          "kind": "active",
+          "name": "mid-predecessor-expired",
+          "kid": "z6MktFovzcapNZyZBWzFJpCXf26B8XLKdXtwfwnXXFebPgzM",
+          "now": "2026-10-30T00:00:01Z",
+          "active": false,
+          "reason": "expired predecessor"
+        },
+        {
+          "kind": "active",
+          "name": "first-predecessor",
+          "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+          "now": "2026-11-01T00:00:00Z",
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "rotation.nonroot",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "nonroot",
+          "rotation": "rotation.nonroot",
+          "valid": false,
+          "reason": "unknown signer"
+        }
+      ]
+    },
+    {
+      "name": "rotation.weak-successor",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "weak-successor",
+          "rotation": "rotation.weak-successor",
+          "valid": false,
+          "reason": "weak key"
+        }
+      ]
+    },
+    {
+      "name": "rotation.tampered",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "tampered",
+          "rotation": "rotation.tampered",
+          "valid": false,
+          "reason": "signature mismatch"
+        }
+      ]
+    },
+    {
+      "name": "rotation.overlap-too-long",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 86400,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "too-long",
+          "rotation": "rotation.valid",
+          "valid": false,
+          "reason": "overlap too long"
+        }
+      ]
+    },
+    {
+      "name": "rotation.entity-binding",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "entity-mismatch",
+          "rotation": "rotation.entity-mismatch",
+          "valid": false,
+          "reason": "entity binding"
+        }
+      ]
+    },
+    {
+      "name": "rotation.unknown-field",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "unknown-field",
+          "rotation": "rotation.unknown-field",
+          "valid": false,
+          "reason": "unknown field"
+        }
+      ]
+    },
+    {
+      "name": "rotation.unsupported-version",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "unsupported-version",
+          "rotation": "rotation.unsupported-version",
+          "valid": false,
+          "reason": "unsupported version"
+        }
+      ]
+    },
+    {
+      "name": "rotation.malformed",
+      "trusted": "keydoc.entity",
+      "maxOverlapSeconds": 2592000,
+      "steps": [
+        {
+          "kind": "ingest",
+          "name": "bad-issued",
+          "rotation": "rotation.bad-issued",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "kind": "ingest",
+          "name": "bad-kid",
+          "rotation": "rotation.bad-kid",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "kind": "ingest",
+          "name": "equal-kids",
+          "rotation": "rotation.equal-kids",
+          "valid": false,
+          "reason": "malformed document"
+        },
+        {
+          "kind": "ingest",
+          "name": "duplicate-members",
+          "text": "{\"xeip\":\"xeip.device-rotation/0.1\",\"entity\":\"dup\",\"entity\":\"dup\"}",
+          "valid": false,
+          "reason": "malformed document"
+        }
+      ]
+    }
+  ]
+}

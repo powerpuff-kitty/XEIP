@@ -8,6 +8,10 @@ import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.m
 import { canonicalize, verifySignedEnvelope } from "./signed-envelope.mjs";
 import { verifyKeyDocument } from "./key-document.mjs";
 import { StatusTracker, verifyStatusDocument } from "./identity-status.mjs";
+import {
+  DeviceRotationTracker,
+  verifyDeviceRotation,
+} from "./identity-device-rotation.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -148,8 +152,56 @@ for (const tracker of statusFile.trackers) {
     statusStepCount++;
   }
 }
+const rotationFile = readJson(new URL("../conformance/fixtures/identity-rotation/rotation.vectors.json", import.meta.url));
+// Direct single-document check, independent of the stateful tracker below.
+const directRotation = verifyDeviceRotation(
+  rotationFile.rotations["rotation.valid"],
+  rotationFile.trusted["keydoc.entity"],
+);
+if (directRotation.valid !== true) {
+  throw new Error("rotation vector rotation.valid: expected a valid single document but received " +
+    JSON.stringify(directRotation));
+}
+let rotationStepCount = 0;
+for (const tracker of rotationFile.trackers) {
+  const trusted = rotationFile.trusted[tracker.trusted];
+  const instance = new DeviceRotationTracker();
+  for (const step of tracker.steps) {
+    if (step.kind === "ingest") {
+      if ((step.rotation === undefined) === (step.text === undefined)) {
+        throw new Error("rotation vector " + tracker.name + "/" + step.name +
+          ": exactly one of `rotation` or `text` is required");
+      }
+      const input = step.text !== undefined ? step.text : rotationFile.rotations[step.rotation];
+      const result = instance.ingest(input, {
+        trustedKeyDocument: trusted,
+        maxOverlapSeconds: tracker.maxOverlapSeconds,
+      });
+      if (step.valid === true) {
+        if (result.valid !== true) throw new Error("rotation vector " + tracker.name + "/" + step.name +
+          ": expected a valid rotation but received " + JSON.stringify(result));
+      } else if (result.valid !== false || result.reason !== step.reason) {
+        throw new Error("rotation vector " + tracker.name + "/" + step.name + ": expected reason " +
+          JSON.stringify(step.reason) + " but received " + JSON.stringify(result));
+      }
+    } else if (step.kind === "active") {
+      const result = instance.isActive(trusted.entity, step.kid, step.now);
+      if (step.active === true) {
+        if (result.active !== true) throw new Error("rotation vector " + tracker.name + "/" + step.name +
+          ": expected the key to be active but received " + JSON.stringify(result));
+      } else if (result.active !== false || result.reason !== step.reason) {
+        throw new Error("rotation vector " + tracker.name + "/" + step.name + ": expected reason " +
+          JSON.stringify(step.reason) + " but received " + JSON.stringify(result));
+      }
+    } else {
+      throw new Error("rotation vector " + tracker.name + "/" + step.name +
+        ": unknown step kind " + JSON.stringify(step.kind));
+    }
+    rotationStepCount++;
+  }
+}
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
   " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors, " +
   signedVectors.length + " signed-envelope vectors, " + canonicalVectors.length +
-  " canonicalization vectors, " + keydocVectors.length + " key-document vectors and " +
-  statusStepCount + " status steps passed");
+  " canonicalization vectors, " + keydocVectors.length + " key-document vectors, " +
+  statusStepCount + " status steps and " + rotationStepCount + " rotation steps passed");
