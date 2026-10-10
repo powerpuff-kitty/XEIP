@@ -13,7 +13,8 @@ import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { LimitPolicy, LOCAL_LIMITS_PROFILE } from "./limits.mjs";
 import { authorize, sseFrame, validateMessage, absoluteUri, MAX_FRAME } from "./http-util.mjs";
 import { XEIP_SUPPORTED_VERSIONS } from "../../sdks/typescript/src/validation.js";
-import { verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
+import { SIG_EXTENSION, strictParse, verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
+import { KeyDocumentTrust } from "../../tools/key-document.mjs";
 
 /**
  * Opt-in signed-envelope enforcement. The carrier, canonical bytes and
@@ -22,6 +23,110 @@ import { verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
  * implementation in `tools/signed-envelope.mjs`, not re-implemented here.
  */
 export const LOCAL_SIGNED_ENVELOPES_PROFILE = "xeip.local-signed-envelopes/0.1";
+
+/**
+ * Opt-in trusted-key resolution. When `keyDocuments` is configured, a signed
+ * envelope's `kid` must additionally be a *current* root or device key of a
+ * trusted chain (verified at construction with `tools/key-document.mjs`), not
+ * merely self-certifying.
+ */
+export const LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE = "xeip.local-trusted-key-documents/0.1";
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseKeyDocument(document) {
+  if (typeof document === "string") {
+    try {
+      return strictParse(document);
+    } catch {
+      throw new TypeError("trusted key document is not valid JSON");
+    }
+  }
+  return document;
+}
+
+/**
+ * Verify the trusted provisioning input at construction and build a per-entity
+ * view of current root/device kids. Each entity's documents are ingested, in
+ * order, through a {@link KeyDocumentTrust} pinned to the anchor supplied for
+ * that entity: single-document verification, chain linking and anchor checks
+ * all run here. Any invalid or untrusted document throws (fail closed), so no
+ * relay is ever constructed around an untrusted chain.
+ */
+function buildKeyDocumentRegistry(keyDocuments) {
+  if (!Array.isArray(keyDocuments) || keyDocuments.length === 0) {
+    throw new TypeError("keyDocuments must be a non-empty array");
+  }
+  const groups = new Map();
+  const entityOrder = [];
+  for (const entry of keyDocuments) {
+    if (!isPlainObject(entry)) throw new TypeError("each keyDocuments entry must be an object");
+    for (const key of Object.keys(entry)) {
+      if (key !== "document" && key !== "anchor") {
+        throw new TypeError(`unknown keyDocuments entry field: ${key}`);
+      }
+    }
+    if (!Object.hasOwn(entry, "document")) {
+      throw new TypeError("keyDocuments entry requires a document");
+    }
+    const document = parseKeyDocument(entry.document);
+    if (!isPlainObject(document) || typeof document.entity !== "string") {
+      throw new TypeError("trusted key document must carry a string entity");
+    }
+    let group = groups.get(document.entity);
+    if (group === undefined) {
+      group = { anchor: entry.anchor, documents: [] };
+      groups.set(document.entity, group);
+      entityOrder.push(document.entity);
+    } else if (group.anchor === undefined && entry.anchor !== undefined) {
+      group.anchor = entry.anchor;
+    }
+    group.documents.push(document);
+  }
+
+  const ownerByKid = new Map();
+  const kidsByEntity = new Map();
+  for (const entity of entityOrder) {
+    const group = groups.get(entity);
+    const anchor = group.anchor === undefined ? null : group.anchor;
+    let trust;
+    try {
+      trust = new KeyDocumentTrust({ entity, anchor });
+    } catch (error) {
+      throw new TypeError(`invalid trusted key document anchor for ${entity}: ${error.message}`);
+    }
+    let current;
+    for (const document of group.documents) {
+      const result = trust.ingest(document);
+      if (!result.valid) {
+        throw new Error(`untrusted key document for ${entity}: ${result.reason}`);
+      }
+      current = document;
+    }
+    const kids = new Set([...current.roots, ...current.devices]);
+    kidsByEntity.set(entity, kids);
+    for (const kid of kids) {
+      const existing = ownerByKid.get(kid);
+      if (existing !== undefined && existing !== entity) {
+        throw new Error(`key ${kid} is endorsed by multiple entities`);
+      }
+      ownerByKid.set(kid, entity);
+    }
+  }
+  return { ownerByKid, entityCount: kidsByEntity.size };
+}
+
+// The verified signature kid, or undefined. The carrier is authenticated by the
+// time this is read, but a defensive shape check keeps a malformed value from
+// throwing on the routing path.
+const envelopeKid = raw => {
+  const carrier = isPlainObject(raw) && isPlainObject(raw.extensions)
+    ? raw.extensions[SIG_EXTENSION]
+    : undefined;
+  return isPlainObject(carrier) ? carrier.kid : undefined;
+};
 
 const RECEIPT_FIELDS = ["session", "seq", "id", "status"];
 // Reserve room for the SSE `id:` line and the WebSocket message wrapper so the
@@ -37,7 +142,7 @@ const TOKEN_PRINCIPAL = Object.freeze({ token: true });
  * constructor run synchronously, so a misconfiguration throws here before any
  * transport is created.
  */
-export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures }) {
+export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments }) {
   // `signatures` is a bare opt-in. An empty object enables detached-signature
   // enforcement; null, arrays, primitives and any unknown member are rejected.
   // It is orthogonal to the authentication modes and needs no other profile.
@@ -47,6 +152,13 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     throw new TypeError("invalid signatures configuration");
   }
   const signaturesEnabled = signatures !== undefined;
+  // Trusted key resolution is a tightening of signed-envelope enforcement, so
+  // it is meaningless (and rejected) without `signatures`. The documents are
+  // verified here, before any transport exists, and fail closed.
+  if (keyDocuments !== undefined && !signaturesEnabled) {
+    throw new TypeError("keyDocuments requires signatures");
+  }
+  const keyDocRegistry = keyDocuments === undefined ? null : buildKeyDocumentRegistry(keyDocuments);
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
@@ -128,6 +240,14 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
           ? { status: 403, error: "forbidden" }
           : { status: 422, error: "invalid signature" };
       }
+    }
+    // With trusted key documents configured, the verified `kid` must also be a
+    // current root or device key of a trusted chain, not merely self-certifying.
+    // This composes with, and does not replace, the `entityUrn(kid) === sender`
+    // binding enforced by `verifySignedEnvelope`. Revocation/status is out of
+    // scope here and is a future integration.
+    if (keyDocRegistry && !keyDocRegistry.ownerByKid.has(envelopeKid(raw))) {
+      return { status: 403, error: "forbidden" };
     }
     if (admission && !admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
     const base = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
@@ -219,6 +339,11 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       base.limits = limitPolicy.limits;
     }
     if (signaturesEnabled) base.signatureProfile = LOCAL_SIGNED_ENVELOPES_PROFILE;
+    if (keyDocRegistry) {
+      base.keyDocumentProfile = LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE;
+      // Advertise only the count: no per-entity key ids or chain material.
+      base.keyDocuments = { entities: keyDocRegistry.entityCount };
+    }
     return base;
   };
   const checkSubscriptions = () => {
@@ -237,6 +362,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   const sendAllowed = (principal, message) => admission.canSend(principal, message);
   return {
     signaturesEnabled,
+    keyDocRegistry,
     authenticate,
     isCurrent,
     canSubscribe,

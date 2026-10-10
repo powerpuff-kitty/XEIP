@@ -214,6 +214,62 @@ Enforcement is per-relay and local-only. It changes no wire format, provides no
 key distribution, freshness or revocation, and does not make `extensions` —
 including the signature carrier itself — part of the signed bytes.
 
+## Trusted-key resolution
+
+A signature proves only that the holder of the key named by `kid` signed the
+bytes; it does **not** prove that `kid` belongs to `sender`
+([what a signature does and does not prove](#what-a-signature-does-and-does-not-prove)).
+The relay can close that gap with an opt-in set of **trusted key documents**
+supplied as provisioning input:
+
+```js
+createRelay({
+  token,
+  signatures: {},
+  keyDocuments: [
+    { document: genesis, anchor: { genesisKid, genesisDigest } },
+    { document: rotation } // later generations of the same entity
+  ]
+});
+```
+
+`keyDocuments` requires `signatures`; without it construction fails. Each entry
+is `{ document, anchor? }`, where `document` is a signed
+[`xeip.keydoc/0.1`](../tools/key-document.mjs) document (parsed object or JSON
+text) and `anchor` is the out-of-band trust anchor from
+[identity-keys.md](identity-keys.md) §7 (`{ genesisKid?, genesisDigest? }`).
+Documents are grouped per `entity`; the anchor may be supplied on any entry for
+that entity (typically the genesis generation) and applies to the whole chain.
+
+At **construction** the relay verifies every document through
+`tools/key-document.mjs`: single-document verification, per-entity chain linking
+(generation, `previous` digest, rollback/fork/gap) and anchor resolution
+(`KeyDocumentTrust`). The documents must be trusted provisioning input, not
+runtime wire input. Any malformed, unanchored or untrusted document **throws**,
+so a relay is never constructed around a chain that fails closed. A
+self-certifying document with no configured anchor is rejected as `no anchor`.
+
+When `keyDocuments` is configured, an envelope's signature `kid` MUST be one of
+the entity's **current** root or device keys from the verified chain, in
+addition to the existing `entityUrn(kid) === sender` binding. A `kid` that is
+unknown or no longer current in its trusted chain is rejected even though it is
+otherwise self-certifying:
+
+| Condition | HTTP | WebSocket `type:"error"` |
+| --- | --- | --- |
+| verified `kid` is not a current trusted root/device | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
+
+The signature gate still runs first, so a tampered envelope is `422 invalid
+signature` regardless of the key documents. `keyDocuments` composes with either
+authentication mode. When configured, `/health` advertises
+`keyDocumentProfile: "xeip.local-trusted-key-documents/0.1"` and a non-sensitive
+`keyDocuments: { entities }` count; no key ids or chain material are exposed.
+
+**Revocation and status are out of scope here.** This section resolves a `kid`
+to a *current* key of a trusted chain; it does not consult a status document and
+does not terminate live streams on revocation
+([identity-keys.md](identity-keys.md) §9). That is a future integration.
+
 ## Verification result
 
 `verifySignedEnvelope` returns a structured result rather than throwing, so
@@ -261,7 +317,10 @@ This profile deliberately does not define or claim:
 - **Key distribution, discovery, trust roots, rotation or recovery.** A
   verifier must already know or otherwise trust that `kid` belongs to
   `sender`; this profile only proves the signature and the key-id-to-`sender`
-  binding. Trust anchors and signed key documents remain
+  binding. The opt-in
+  [trusted-key resolution](#trusted-key-resolution) slice lets an operator
+  provision a verified chain locally, but there is still no on-wire
+  distribution. Bulk trust anchors and signed key documents remain
   [identity.md](identity.md) §3/§6 work.
 - **Revocation or status.** A revoked key still verifies until a separate
   status check rejects it.
