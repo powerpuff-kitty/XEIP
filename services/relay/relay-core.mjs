@@ -12,6 +12,15 @@ import { DurableStore, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
 import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { LimitPolicy, LOCAL_LIMITS_PROFILE } from "./limits.mjs";
 import { authorize, sseFrame, validateMessage, absoluteUri, MAX_FRAME } from "./http-util.mjs";
+import { verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
+
+/**
+ * Opt-in signed-envelope enforcement. The carrier, canonical bytes and
+ * `entityUrn(kid) === sender` binding are defined by
+ * `spec/local-signed-envelopes.md`; verification is the reference
+ * implementation in `tools/signed-envelope.mjs`, not re-implemented here.
+ */
+export const LOCAL_SIGNED_ENVELOPES_PROFILE = "xeip.local-signed-envelopes/0.1";
 
 const RECEIPT_FIELDS = ["session", "seq", "id", "status"];
 // Reserve room for the SSE `id:` line and the WebSocket message wrapper so the
@@ -27,7 +36,16 @@ const TOKEN_PRINCIPAL = Object.freeze({ token: true });
  * constructor run synchronously, so a misconfiguration throws here before any
  * transport is created.
  */
-export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits }) {
+export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures }) {
+  // `signatures` is a bare opt-in. An empty object enables detached-signature
+  // enforcement; null, arrays, primitives and any unknown member are rejected.
+  // It is orthogonal to the authentication modes and needs no other profile.
+  if (signatures !== undefined &&
+      (signatures === null || typeof signatures !== "object" || Array.isArray(signatures) ||
+       Object.keys(signatures).length > 0)) {
+    throw new TypeError("invalid signatures configuration");
+  }
+  const signaturesEnabled = signatures !== undefined;
   if (admission !== undefined) {
     if (token !== undefined) throw new TypeError("choose exactly one relay authentication mode");
     if (!(admission instanceof LocalAdmission)) throw new TypeError("admission must be a LocalAdmission policy");
@@ -82,10 +100,23 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   const routeMessage = (principal, raw) => {
     const error = validateMessage(raw);
     if (error) return { status: 422, error };
-    if (admission) {
-      if (!admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
-      if (!admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
+    // Authentication is checked before the signature so a revoked credential is
+    // still reported as 401; the signature is verified before any authorization,
+    // replay recording or delivery.
+    if (admission && !admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
+    if (signaturesEnabled) {
+      let verified;
+      try { verified = verifySignedEnvelope(raw); }
+      catch { return { status: 422, error: "invalid signature" }; }
+      if (!verified.valid) {
+        // A signer/key-to-sender mismatch is an authorization denial; every
+        // other verification failure is an unacceptable envelope.
+        return verified.reason === "sender binding"
+          ? { status: 403, error: "forbidden" }
+          : { status: 422, error: "invalid signature" };
+      }
     }
+    if (admission && !admission.canSend(principal, raw)) return { status: 403, error: "forbidden" };
     const base = "event: xeip.message\ndata: " + JSON.stringify(raw) + "\n\n";
     // Compact numeric notation can expand when JSON is reserialized. Keep the
     // emitted bytes compatible with both reference readers before routing,
@@ -172,6 +203,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       base.limitsProfile = LOCAL_LIMITS_PROFILE;
       base.limits = limitPolicy.limits;
     }
+    if (signaturesEnabled) base.signatureProfile = LOCAL_SIGNED_ENVELOPES_PROFILE;
     return base;
   };
   const checkSubscriptions = () => {

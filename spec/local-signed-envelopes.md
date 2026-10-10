@@ -1,15 +1,16 @@
 # Local signed envelopes profile — xeip.local-signed-envelopes/0.1
 
-Experimental **reference profile** for a detached Ed25519 signature over a XEIP
+Experimental profile for a detached Ed25519 signature over a XEIP
 [envelope](core.md#5-message-envelope). It fixes the exact canonical bytes and
 the carrier that binds a signature to the envelope `sender`. It is the first
-verification slice of [issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1)
-and is **not wired into the relay**: envelopes are still accepted on the
-self-asserted `sender` field, and the only implemented authentication remains
-the shared-token mode and the opt-in [local admission profile](local-admission.md).
-The reference implementation and conformance consumer is
-[`tools/signed-envelope.mjs`](../tools/signed-envelope.mjs); the decision is
-recorded in [ADR 0009](decisions/0009-local-signed-envelopes.md).
+verification slice of [issue #1](https://github.com/powerpuff-kitty/XEIP/issues/1).
+Verification is implemented in
+[`tools/signed-envelope.mjs`](../tools/signed-envelope.mjs) and is now available
+as an **opt-in relay profile**: a relay constructed with `signatures: {}`
+rejects envelopes that do not carry a valid, `sender`-bound signature. When the
+option is absent, relay behavior is unchanged and envelopes are still accepted
+on the self-asserted `sender` field. The decision is recorded in
+[ADR 0009](decisions/0009-local-signed-envelopes.md).
 
 This profile is the concrete, local analogue of the authentication profile
 proposed in [identity.md](identity.md) §5 (Ed25519 + JCS + `extensions`). It
@@ -98,6 +99,51 @@ principal-to-`sender` binding in [identity.md](identity.md) §4, generalizing th
 sender-spoof denial in [local-admission.md](local-admission.md#authentication-and-authorization).
 The key is always taken from `kid`; `sender` is only cross-checked against it.
 
+## Opt-in relay enforcement
+
+The development-only relay can enforce this profile locally. Enforcement is
+**opt-in** and off by default:
+
+```js
+createRelay({ token, signatures: {} });      // shared-token mode
+createRelay({ admission, signatures: {} });  // local admission mode
+```
+
+`signatures` is a bare opt-in: it MUST be an empty object. `null`, an array, a
+primitive or any unknown member is a construction error, and no other profile is
+required to enable it. It is orthogonal to the authentication mode, so shared
+token and local admission both work; when combined with local admission **both**
+the signature check and the admission check apply.
+
+When enabled, every accepted envelope — HTTP `POST /messages` and the WebSocket
+`{ "type": "send" }` control — MUST pass `verifySignedEnvelope` and the
+`entityUrn(kid) === sender` binding before it is authorized, recorded or routed.
+A failed envelope is never routed and never enters the replay or delivery
+ledgers. Failures map to stable transport responses:
+
+| `verifySignedEnvelope` reason | HTTP | WebSocket `type:"error"` |
+| --- | --- | --- |
+| `missing signature` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `malformed signature` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `unsupported algorithm` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `malformed envelope` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `signature mismatch` | 422 `{"error":"invalid signature"}` | `{"status":422,"error":"invalid signature"}` |
+| `sender binding` | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
+
+Only `sender binding` is an authorization denial; every other verification
+failure is reported uniformly as `invalid signature`. Connection authentication
+is still ambient: in shared-token mode any holder of the token may present a
+signed envelope, and in local admission mode the verified `sender` must also
+equal the authenticated principal entity.
+
+When enabled, `/health` advertises the profile as
+`signatureProfile: "xeip.local-signed-envelopes/0.1"`; the field is absent
+otherwise.
+
+Enforcement is per-relay and local-only. It changes no wire format, provides no
+key distribution, freshness or revocation, and does not make `extensions` —
+including the signature carrier itself — part of the signed bytes.
+
 ## Verification result
 
 `verifySignedEnvelope` returns a structured result rather than throwing, so
@@ -154,9 +200,10 @@ This profile deliberately does not define or claim:
   contents are plaintext.
 - **Signing `extensions`.** Extensions, including the signature carrier
   itself, are outside the signed bytes and are not protected by the signature.
-- **Relay integration.** Envelopes are not rejected for a missing or bad
-  signature by any current relay path; this profile is a verifier-side
-  primitive and conformance consumer.
+- **Mandatory or network-wide enforcement.** Only a relay explicitly
+  constructed with `signatures: {}` enforces this profile, and only for the
+  envelopes it accepts; it is local-only and off by default. Signing remains a
+  verifier-side primitive and delivery over any other path is unchanged.
 
 ## Conformance and usage
 

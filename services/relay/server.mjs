@@ -1,7 +1,9 @@
 /**
  * XEIP 0.1 development-only relay. NEVER expose it to untrusted networks.
  * Shared-token mode has no identity binding; the opt-in admission profile binds
- * locally provisioned credentials to entities. Neither mode is a production relay.
+ * locally provisioned credentials to entities. The opt-in `signatures` profile
+ * additionally requires a detached Ed25519 signature bound to `sender`; it
+ * combines with either authentication mode. No mode is a production relay.
  */
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -16,8 +18,8 @@ import { openSubscription } from "./subscription.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery, durable, receipts, limits }) {
-  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits });
+export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures }) {
+  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures });
   const { limitPolicy, durableStore } = core;
   const limitDecision = (req, principal) => core.limitDecision(principal, req.socket.remoteAddress);
   const server = createServer((req, res) => {
