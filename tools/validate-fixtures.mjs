@@ -6,6 +6,7 @@ import addFormats from "ajv-formats";
 import { requireUri } from "../sdks/typescript/src/validation.js";
 import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
 import { canonicalize, verifySignedEnvelope } from "./signed-envelope.mjs";
+import { verifyKeyDocument } from "./key-document.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path, "utf8"));
 const args = process.argv.slice(2);
@@ -88,7 +89,22 @@ for (const vector of canonicalVectors) {
       JSON.stringify(vector.canonical) + " but received " + JSON.stringify(actual));
   }
 }
+const keydocVectors = readJson(new URL("../conformance/fixtures/identity-keydoc/keydoc.vectors.json", import.meta.url));
+for (const vector of keydocVectors) {
+  // A vector carries either a parsed `document` or raw JSON `text` (which only
+  // reaches the verifier through the strict pre-parse gate).
+  if ((vector.document === undefined) === (vector.text === undefined)) {
+    throw new Error("key-document vector " + vector.name + ": exactly one of `document` or `text` is required");
+  }
+  const result = verifyKeyDocument(vector.text !== undefined ? vector.text : vector.document);
+  if (vector.valid === true) {
+    if (result.valid !== true) throw new Error("key-document vector " + vector.name + ": expected a valid document but received " + JSON.stringify(result));
+  } else if (result.valid !== false || result.reason !== vector.reason) {
+    throw new Error("key-document vector " + vector.name + ": expected reason " +
+      JSON.stringify(vector.reason) + " but received " + JSON.stringify(result));
+  }
+}
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
   " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors, " +
-  signedVectors.length + " signed-envelope vectors and " + canonicalVectors.length +
-  " canonicalization vectors passed");
+  signedVectors.length + " signed-envelope vectors, " + canonicalVectors.length +
+  " canonicalization vectors and " + keydocVectors.length + " key-document vectors passed");

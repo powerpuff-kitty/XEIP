@@ -1018,6 +1018,332 @@ pub fn verify_signed_envelope_text(text: &str) -> Result<(), SignedEnvelopeError
     verify_signed_envelope(&envelope)
 }
 
+// ---------------------------------------------------------------------------
+// Signed key documents: `xeip.keydoc/0.1`
+//
+// The first testable slice of `spec/identity-keys.md` / ADR 0010. This is
+// single-document verification only: chain, rollback and trust-store
+// resolution are deliberately out of scope. The grammar and the stable reasons
+// are byte-identical to `tools/key-document.mjs` and the shared vectors under
+// `conformance/fixtures/identity-keydoc/`.
+// ---------------------------------------------------------------------------
+
+/// The only accepted `xeip` value; anything else is `UnsupportedVersion`.
+pub const KEYDOC_VERSION: &str = "xeip.keydoc/0.1";
+
+/// The complete key-document member set. Any other member is rejected as
+/// [`KeyDocumentError::UnknownField`].
+const KEYDOC_FIELDS: [&str; 9] = [
+    "xeip",
+    "entity",
+    "genesis",
+    "generation",
+    "issuedAt",
+    "previous",
+    "roots",
+    "devices",
+    "signatures",
+];
+
+/// Reasons a signed key document can be rejected by [`verify_key_document`].
+///
+/// The [`fmt::Display`] spelling of each variant matches the stable `reason`
+/// strings of the JavaScript reference (`tools/key-document.mjs`), so
+/// cross-language reason comparisons are byte-identical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyDocumentError {
+    /// Not an object (or invalid JSON through a text entry point), a field has
+    /// the wrong type, `generation` is not an integer `>= 1`, `issuedAt` is not
+    /// a UTC instant, a `kid` or `sig` is malformed, or `previous` is not a
+    /// SHA-256 hex digest.
+    MalformedDocument,
+    /// `xeip` is not exactly `xeip.keydoc/0.1`.
+    UnsupportedVersion,
+    /// The document carries a member outside the fixed profile.
+    UnknownField,
+    /// `entity` is not `urn:xeip:entity:<genesis>`.
+    EntityBinding,
+    /// No signature by a key listed in `roots` (unknown or missing signer).
+    UnknownSigner,
+    /// A `kid` decodes to a small-order (weak) Ed25519 point.
+    WeakKey,
+    /// The canonical bytes do not verify under any listed root key.
+    SignatureMismatch,
+}
+
+impl fmt::Display for KeyDocumentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self {
+            Self::MalformedDocument => "malformed document",
+            Self::UnsupportedVersion => "unsupported version",
+            Self::UnknownField => "unknown field",
+            Self::EntityBinding => "entity binding",
+            Self::UnknownSigner => "unknown signer",
+            Self::WeakKey => "weak key",
+            Self::SignatureMismatch => "signature mismatch",
+        };
+        f.write_str(reason)
+    }
+}
+
+impl std::error::Error for KeyDocumentError {}
+
+/// Whether `text` is an RFC 3339 instant in UTC (`YYYY-MM-DDTHH:MM:SS[.fff]Z`).
+/// Offsets are rejected: the profile fixes UTC.
+fn is_utc_timestamp(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() < 20 {
+        return false;
+    }
+    let digit = |index: usize| bytes[index].is_ascii_digit();
+    let fixed = digit(0)
+        && digit(1)
+        && digit(2)
+        && digit(3)
+        && bytes[4] == b'-'
+        && digit(5)
+        && digit(6)
+        && bytes[7] == b'-'
+        && digit(8)
+        && digit(9)
+        && bytes[10] == b'T'
+        && digit(11)
+        && digit(12)
+        && bytes[13] == b':'
+        && digit(14)
+        && digit(15)
+        && bytes[16] == b':'
+        && digit(17)
+        && digit(18);
+    if !fixed {
+        return false;
+    }
+    if bytes[19] == b'Z' {
+        return bytes.len() == 20;
+    }
+    if bytes[19] != b'.' {
+        return false;
+    }
+    let mut index = 20;
+    let start = index;
+    while index < bytes.len() && bytes[index].is_ascii_digit() {
+        index += 1;
+    }
+    index > start && index + 1 == bytes.len() && bytes[index] == b'Z'
+}
+
+/// Whether `text` is 64 lowercase hex characters (a SHA-256 digest).
+fn is_sha256_hex(text: &str) -> bool {
+    text.len() == 64
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// The RFC 8785 signing input of a key document: the document with the
+/// `signatures` member removed in its entirety, canonicalized.
+fn keydoc_signing_input(document: &Value) -> String {
+    let mut base = document.clone();
+    if let Some(object) = base.as_object_mut() {
+        object.remove("signatures");
+    }
+    canonicalize_json(&base)
+}
+
+/// Decode a key-id to its 32 raw bytes, mapping a malformed spelling to
+/// [`KeyDocumentError::MalformedDocument`] and a small-order point to
+/// [`KeyDocumentError::WeakKey`].
+fn decode_keydoc_kid(kid: &str) -> Result<[u8; ED25519_PUBLIC_KEY_LENGTH], KeyDocumentError> {
+    let raw = decode_key_id(kid).map_err(|_| KeyDocumentError::MalformedDocument)?;
+    if is_weak_ed25519_public_key(&raw) {
+        return Err(KeyDocumentError::WeakKey);
+    }
+    Ok(raw)
+}
+
+/// Sign a key document: canonicalize the document with `signatures` removed
+/// (RFC 8785) and Ed25519-sign those UTF-8 bytes, then append `{ kid, sig }` to
+/// any existing `signatures` array (so a dual-signed rotation is produced by
+/// signing twice).
+///
+/// Returns [`KeyDocumentError::MalformedDocument`] if `document` is not a JSON
+/// object. Existing signatures are preserved; verification is what enforces the
+/// root-signer requirement.
+pub fn sign_key_document(
+    document: &Value,
+    seed: &[u8; ED25519_SEED_LENGTH],
+    kid: &str,
+) -> Result<Value, KeyDocumentError> {
+    if !document.is_object() {
+        return Err(KeyDocumentError::MalformedDocument);
+    }
+    let signing_key = SigningKey::from_bytes(seed);
+    let message = keydoc_signing_input(document);
+    let signature = signing_key.sign(message.as_bytes());
+
+    let mut signed = document.clone();
+    let object = signed.as_object_mut().expect("checked above");
+    let mut signatures = match object.get("signatures").and_then(Value::as_array) {
+        Some(existing) => existing.clone(),
+        None => Vec::new(),
+    };
+    signatures.push(json!({
+        "kid": kid,
+        "sig": base64url_encode(&signature.to_bytes()),
+    }));
+    object.insert("signatures".to_string(), Value::Array(signatures));
+    Ok(signed)
+}
+
+/// Verify a single signed key document and return `Ok(())` when valid, or a
+/// [`KeyDocumentError`] reason. Never panics for a well-formed call.
+///
+/// Order (with stable reasons): unknown member → `xeip` → field types and
+/// `generation`/`issuedAt`/`previous` shape → genesis decode → `entity ==
+/// entity_urn(genesis)` → every root/device `kid` decodes non-weak → at least
+/// one valid signature by a key listed in `roots`.
+///
+/// `previous` is shape-checked but never chased: chain/rollback verification is
+/// out of scope. Weak or unknown signers never satisfy the root-signature
+/// requirement; extra non-root signatures are ignored.
+///
+/// This accepts a pre-parsed value and therefore skips the strict pre-parse
+/// gate; use [`verify_key_document_text`] for wire bytes.
+pub fn verify_key_document(document: &Value) -> Result<(), KeyDocumentError> {
+    let object = document
+        .as_object()
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+
+    for key in object.keys() {
+        if !KEYDOC_FIELDS.contains(&key.as_str()) {
+            return Err(KeyDocumentError::UnknownField);
+        }
+    }
+
+    match object.get("xeip").and_then(Value::as_str) {
+        Some(version) if version == KEYDOC_VERSION => {}
+        Some(_) => return Err(KeyDocumentError::UnsupportedVersion),
+        None => return Err(KeyDocumentError::MalformedDocument),
+    }
+
+    let entity = object
+        .get("entity")
+        .and_then(Value::as_str)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    let genesis = object
+        .get("genesis")
+        .and_then(Value::as_str)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    let generation = object
+        .get("generation")
+        .and_then(Value::as_f64)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    if generation.fract() != 0.0 || generation < 1.0 || generation > MAX_SAFE_INTEGER as f64 {
+        return Err(KeyDocumentError::MalformedDocument);
+    }
+    let issued_at = object
+        .get("issuedAt")
+        .and_then(Value::as_str)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    if !is_utc_timestamp(issued_at) {
+        return Err(KeyDocumentError::MalformedDocument);
+    }
+    if let Some(previous) = object.get("previous") {
+        let previous = previous
+            .as_str()
+            .ok_or(KeyDocumentError::MalformedDocument)?;
+        if !is_sha256_hex(previous) {
+            return Err(KeyDocumentError::MalformedDocument);
+        }
+    }
+    let roots = object
+        .get("roots")
+        .and_then(Value::as_array)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    if !roots.iter().all(Value::is_string) {
+        return Err(KeyDocumentError::MalformedDocument);
+    }
+    let devices = object
+        .get("devices")
+        .and_then(Value::as_array)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    if !devices.iter().all(Value::is_string) {
+        return Err(KeyDocumentError::MalformedDocument);
+    }
+    let signatures = object
+        .get("signatures")
+        .and_then(Value::as_array)
+        .ok_or(KeyDocumentError::MalformedDocument)?;
+    for entry in signatures {
+        let entry = entry
+            .as_object()
+            .ok_or(KeyDocumentError::MalformedDocument)?;
+        if !entry.get("kid").is_some_and(Value::is_string)
+            || !entry.get("sig").is_some_and(Value::is_string)
+        {
+            return Err(KeyDocumentError::MalformedDocument);
+        }
+    }
+
+    let _genesis_bytes = decode_keydoc_kid(genesis)?;
+    if entity_urn(genesis) != entity {
+        return Err(KeyDocumentError::EntityBinding);
+    }
+    for kid in roots {
+        decode_keydoc_kid(kid.as_str().expect("validated above"))?;
+    }
+    for kid in devices {
+        decode_keydoc_kid(kid.as_str().expect("validated above"))?;
+    }
+
+    if signatures.is_empty() {
+        return Err(KeyDocumentError::UnknownSigner);
+    }
+
+    let message = keydoc_signing_input(document);
+    let mut saw_root_signer = false;
+    for entry in signatures {
+        let entry = entry.as_object().expect("validated shape above");
+        let kid = entry["kid"].as_str().expect("validated shape above");
+        let sig_text = entry["sig"].as_str().expect("validated shape above");
+        let public_key = decode_keydoc_kid(kid)?;
+        let signature_bytes =
+            base64url_decode(sig_text).ok_or(KeyDocumentError::MalformedDocument)?;
+        if signature_bytes.len() != ED25519_SIGNATURE_LENGTH {
+            return Err(KeyDocumentError::MalformedDocument);
+        }
+        if !roots.iter().any(|value| value.as_str() == Some(kid)) {
+            continue;
+        }
+        saw_root_signer = true;
+        let verifying_key = VerifyingKey::from_bytes(&public_key)
+            .map_err(|_| KeyDocumentError::MalformedDocument)?;
+        let signature = Signature::from_slice(&signature_bytes)
+            .map_err(|_| KeyDocumentError::MalformedDocument)?;
+        // `verify_strict` additionally rejects non-canonical `R` values,
+        // matching the JavaScript small-order gate.
+        if verifying_key
+            .verify_strict(message.as_bytes(), &signature)
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+    if !saw_root_signer {
+        return Err(KeyDocumentError::UnknownSigner);
+    }
+    Err(KeyDocumentError::SignatureMismatch)
+}
+
+/// Verify key-document *JSON text*: strict-parse (rejecting duplicate keys,
+/// lone surrogates and out-of-range integers) and then run
+/// [`verify_key_document`]. This is the entry point a consumer of wire bytes
+/// must use so the strict pre-parse gate is always applied.
+pub fn verify_key_document_text(text: &str) -> Result<(), KeyDocumentError> {
+    let document = strict_parse(text).map_err(|_| KeyDocumentError::MalformedDocument)?;
+    verify_key_document(&document)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,246 @@
+[
+  {
+    "name": "genesis.valid",
+    "valid": true,
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    }
+  },
+  {
+    "name": "rotation.dual-signed",
+    "valid": true,
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "previous": "1bd8a51b1a9653d198d7de68996dcba75bf8a67a658e63fe9be0670da677d35d",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "z-R8d36kRS8HSTA7kqGc6A0HhqIS5pCL-VEgcSSxiBDS9kmavE7Mxlw54R5nw14gHGMccCrfiTitzeqwrGnGBQ"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "O4u3gabvl2gUmji3eBthlxMwJYUx7ATzzJiO230WCtYDBKxr8dEhQEtxaRgdc68Q7NFeRPW1TFcd_SH12vitDw"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.bad-signature",
+    "valid": false,
+    "reason": "signature mismatch",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "K_T24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.entity-mismatch",
+    "valid": false,
+    "reason": "entity binding",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "5GFbtBRKXbj0YSg-CgRj1r0fXTCeFH4j2UKZWm_vmSMYHeYIYGWujoQRgMBMpQw1wob7EbAC3biHflp5d7v4DA"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.weak-signer",
+    "valid": false,
+    "reason": "weak key",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [],
+      "signatures": [
+        {
+          "kid": "z6MkeXATEjyXENzBXBxgC5EHk2JE5aqd7qMGGtDpLUH1e2Sj",
+          "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.unsupported-version",
+    "valid": false,
+    "reason": "unsupported version",
+    "document": {
+      "xeip": "xeip.keydoc/0.2",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.unknown-field",
+    "valid": false,
+    "reason": "unknown field",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ],
+      "extra": true
+    }
+  },
+  {
+    "name": "doc.invalid-base64url",
+    "valid": false,
+    "reason": "malformed document",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ="
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.unknown-signer",
+    "valid": false,
+    "reason": "unknown signer",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "sRgDDR0Y4JBJaKOrrseQoPesISbFFKGqNtmBBhjmeOfUz1XdTL-14LeB7gt7r5TM5hkvKrCYfNg-Rhw66iM1Ag"
+        }
+      ]
+    }
+  },
+  {
+    "name": "doc.missing-signature",
+    "valid": false,
+    "reason": "unknown signer",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": []
+    }
+  },
+  {
+    "name": "doc.malformed-text",
+    "valid": false,
+    "reason": "malformed document",
+    "text": "{\"xeip\":\"xeip.keydoc/0.1\",\"entity\":\"urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd\",\"entity\":\"dup\"}"
+  }
+]
