@@ -1053,12 +1053,15 @@ const KEYDOC_FIELDS: [&str; 9] = [
     "signatures",
 ];
 
-/// Reasons a signed key document can be rejected by [`verify_key_document`] or
-/// [`KeyDocumentChain::ingest`].
+/// Reasons a signed key document can be rejected by [`verify_key_document`],
+/// [`KeyDocumentChain::ingest`] or [`KeyDocumentTrust::ingest`].
 ///
-/// The first seven variants are the single-document reasons; the last three
-/// (`Rollback`, `Fork`, `ChainGap`) are produced only by chain verification,
-/// after the candidate has already passed single-document verification.
+/// The first seven variants are the single-document reasons. `Rollback`,
+/// `Fork` and `ChainGap` are produced only by chain verification;
+/// `NoAnchor`, `UntrustedAnchor` and `GenerationExceedsMaximum` are produced
+/// only by trust-store resolution. Every document must first pass
+/// single-document verification and chain linking, so a chain or trust reason is
+/// only ever returned after the structural reasons have been cleared.
 ///
 /// The [`fmt::Display`] spelling of each variant matches the stable `reason`
 /// strings of the JavaScript reference (`tools/key-document.mjs`), so
@@ -1091,6 +1094,14 @@ pub enum KeyDocumentError {
     /// Chain only: a generation jump (`generation > prev + 1`) or a `previous`
     /// that does not match the accepted document's digest.
     ChainGap,
+    /// Trust only: no anchor is configured for the entity (and TOFU is off), so
+    /// the verifier fails closed instead of trusting on first use.
+    NoAnchor,
+    /// Trust only: the chain's genesis key-id or digest does not match the
+    /// pinned anchor.
+    UntrustedAnchor,
+    /// Trust only: the document's generation exceeds the configured maximum.
+    GenerationExceedsMaximum,
 }
 
 impl fmt::Display for KeyDocumentError {
@@ -1106,6 +1117,9 @@ impl fmt::Display for KeyDocumentError {
             Self::Rollback => "rollback",
             Self::Fork => "fork",
             Self::ChainGap => "chain gap",
+            Self::NoAnchor => "no anchor",
+            Self::UntrustedAnchor => "untrusted anchor",
+            Self::GenerationExceedsMaximum => "generation exceeds maximum",
         };
         f.write_str(reason)
     }
@@ -1424,7 +1438,7 @@ struct AcceptedKeyDocument {
 /// [`KeyDocumentError::Rollback`] (it is not newer); a caller that needs
 /// at-least-once delivery must treat `rollback` as "already known". Trust-store
 /// resolution and revocation stay out of scope.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KeyDocumentChain {
     entities: std::collections::HashMap<String, AcceptedKeyDocument>,
 }
@@ -1498,6 +1512,174 @@ impl KeyDocumentChain {
         let digest = key_document_chain_digest(document);
         self.entities
             .insert(entity, AcceptedKeyDocument { generation, digest });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Trust-store anchor resolution.
+//
+// `KeyDocumentChain` links generations but deliberately has no notion of *which*
+// genesis to start from. `KeyDocumentTrust` adds that out-of-band anchor: it
+// wraps a chain and, for a single configured entity, accepts a document only
+// when it passes single-document verification and the chain rules *and* is
+// reached from the configured anchor.
+// ---------------------------------------------------------------------------
+
+/// The out-of-band anchor a [`KeyDocumentTrust`] pins. Either or both fields may
+/// be set; `genesis_digest` is the [`key_document_chain_digest`] of the genesis
+/// document.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrustAnchor {
+    /// Pinned genesis key-id (the `genesis` member of the genesis document).
+    pub genesis_kid: Option<String>,
+    /// Pinned genesis chain digest (the full signed genesis document digest).
+    pub genesis_digest: Option<String>,
+}
+
+/// How a document was trusted by [`KeyDocumentTrust::ingest`].
+///
+/// [`TrustLevel::Pinned`] is a configured anchor and may be presented as verified
+/// identity. [`TrustLevel::Tofu`] is first-use, **unverified** trust that MUST
+/// NOT be presented to applications as verified (`spec/identity-keys.md` §7.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrustLevel {
+    /// The document was reached from the operator-pinned anchor.
+    Pinned,
+    /// The document was accepted by opt-in, bounded first-use (TOFU); unverified.
+    Tofu,
+}
+
+/// Trust-store anchor resolution for `xeip.keydoc/0.1`.
+///
+/// Wraps a [`KeyDocumentChain`] and enforces the anchor for one `entity` after
+/// the candidate has passed single-document verification and chain linking (run
+/// on a private clone, so a rejected document is never recorded). A candidate is
+/// rejected with:
+///
+/// - **No anchor** — when no anchor is configured and TOFU is off, every
+///   document is [`KeyDocumentError::NoAnchor`]: the default is to fail closed
+///   rather than trust on first use.
+/// - **Wrong anchor** — a document whose `entity`, `genesis` key-id or (for the
+///   genesis document) chain digest does not match the pinned anchor is
+///   [`KeyDocumentError::UntrustedAnchor`].
+/// - **Generation bound** — a document whose `generation > max_generation`
+///   (when configured) is [`KeyDocumentError::GenerationExceedsMaximum`].
+///
+/// **Bounded TOFU (opt-in, not verified).** With `tofu = true` and no pinned
+/// anchor, the first document accepted for the entity records its
+/// `(entity, genesis-kid, genesis-digest)` as the effective anchor and every
+/// later document must chain from it; the recorded anchor is bounded by the same
+/// `max_generation`. A successful [`TrustLevel::Tofu`] result is **not**
+/// verified identity and must not be conflated with [`TrustLevel::Pinned`].
+#[derive(Debug, Clone)]
+pub struct KeyDocumentTrust {
+    entity: String,
+    anchor: Option<TrustAnchor>,
+    max_generation: Option<i64>,
+    tofu: bool,
+    chain: KeyDocumentChain,
+    tofu_anchors: std::collections::HashMap<String, TrustAnchor>,
+}
+
+impl KeyDocumentTrust {
+    /// Create a trust store pinned to `entity`.
+    ///
+    /// `anchor` is the operator-pinned genesis key-id and/or digest; `None` means
+    /// no anchor is configured (fail closed unless `tofu`). When `max_generation`
+    /// is set, a document above it is rejected. `tofu` opts in to bounded,
+    /// *unverified* first-use trust.
+    pub fn new(
+        entity: impl Into<String>,
+        anchor: Option<TrustAnchor>,
+        max_generation: Option<i64>,
+        tofu: bool,
+    ) -> Self {
+        Self {
+            entity: entity.into(),
+            anchor,
+            max_generation,
+            tofu,
+            chain: KeyDocumentChain::new(),
+            tofu_anchors: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Verify and anchor `document` for the configured entity.
+    ///
+    /// This accepts a pre-parsed value and therefore skips the strict pre-parse
+    /// gate; use [`KeyDocumentTrust::ingest_text`] for wire bytes.
+    pub fn ingest(&mut self, document: &Value) -> Result<TrustLevel, KeyDocumentError> {
+        // Run the existing single-document and chain rules on an independent
+        // copy. Nothing is committed unless every trust check also passes.
+        let mut trial = self.chain.clone();
+        trial.ingest(document)?;
+
+        let object = document
+            .as_object()
+            .expect("verify_key_document accepts only objects");
+        let entity = object["entity"]
+            .as_str()
+            .expect("verify_key_document guarantees an entity string")
+            .to_string();
+        let genesis = object["genesis"]
+            .as_str()
+            .expect("verify_key_document guarantees a genesis string")
+            .to_string();
+        // Single-document verification guarantees an integer `>= 1`.
+        let generation = object["generation"]
+            .as_f64()
+            .expect("verify_key_document guarantees a numeric generation")
+            as i64;
+
+        let (anchor, level) = if let Some(anchor) = &self.anchor {
+            (anchor.clone(), TrustLevel::Pinned)
+        } else if self.tofu {
+            if let Some(recorded) = self.tofu_anchors.get(&entity) {
+                (recorded.clone(), TrustLevel::Tofu)
+            } else if generation == 1 && object.get("previous").is_none() {
+                let recorded = TrustAnchor {
+                    genesis_kid: Some(genesis.clone()),
+                    genesis_digest: Some(key_document_chain_digest(document)),
+                };
+                (recorded, TrustLevel::Tofu)
+            } else {
+                return Err(KeyDocumentError::NoAnchor);
+            }
+        } else {
+            return Err(KeyDocumentError::NoAnchor);
+        };
+
+        if entity != self.entity {
+            return Err(KeyDocumentError::UntrustedAnchor);
+        }
+        if let Some(max) = self.max_generation {
+            if generation > max {
+                return Err(KeyDocumentError::GenerationExceedsMaximum);
+            }
+        }
+        if let Some(kid) = &anchor.genesis_kid {
+            if &genesis != kid {
+                return Err(KeyDocumentError::UntrustedAnchor);
+            }
+        }
+        if let Some(digest) = &anchor.genesis_digest {
+            if generation == 1 && key_document_chain_digest(document) != *digest {
+                return Err(KeyDocumentError::UntrustedAnchor);
+            }
+        }
+
+        if level == TrustLevel::Tofu && !self.tofu_anchors.contains_key(&entity) {
+            self.tofu_anchors.insert(entity, anchor);
+        }
+        self.chain = trial;
+        Ok(level)
+    }
+
+    /// Verify and anchor key-document *JSON text*: strict-parse and then run
+    /// [`KeyDocumentTrust::ingest`].
+    pub fn ingest_text(&mut self, text: &str) -> Result<TrustLevel, KeyDocumentError> {
+        let document = strict_parse(text).map_err(|_| KeyDocumentError::MalformedDocument)?;
+        self.ingest(&document)
     }
 }
 

@@ -22,7 +22,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use xeip_identity::{
     key_document_chain_digest, sign_key_document, verify_key_document, verify_key_document_text,
-    KeyDocumentChain, ED25519_SEED_LENGTH,
+    KeyDocumentChain, KeyDocumentError, KeyDocumentTrust, TrustAnchor, TrustLevel,
+    ED25519_SEED_LENGTH,
 };
 
 /// Deterministic RFC 8032 seeds shared with the JavaScript reference and the
@@ -50,6 +51,11 @@ fn vectors_path() -> PathBuf {
 fn chain_vectors_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../conformance/fixtures/identity-keydoc/keydoc-chain.vectors.json")
+}
+
+fn trust_vectors_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/fixtures/identity-keydoc/keydoc-trust.vectors.json")
 }
 
 fn load_vectors() -> Vec<Vector> {
@@ -317,4 +323,216 @@ fn every_chain_vector_yields_its_documented_per_step_result() {
     for reason in ["rollback", "fork", "chain gap"] {
         assert!(reasons.contains(reason), "missing chain reason: {reason}");
     }
+}
+
+/// A trust-vector file: a shared registry of documents plus trust stores, each
+/// with its own anchor configuration and ordered steps.
+#[derive(Debug, Deserialize)]
+struct TrustFile {
+    documents: std::collections::HashMap<String, Value>,
+    trusts: Vec<TrustVector>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TrustVector {
+    name: String,
+    entity: String,
+    #[serde(default)]
+    anchor: Option<TrustAnchorJson>,
+    #[serde(default, rename = "maxGeneration")]
+    max_generation: Option<i64>,
+    #[serde(default)]
+    tofu: bool,
+    steps: Vec<TrustStep>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrustAnchorJson {
+    #[serde(default)]
+    genesis_kid: Option<String>,
+    #[serde(default)]
+    genesis_digest: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TrustStep {
+    name: String,
+    document: String,
+    valid: bool,
+    reason: Option<String>,
+    #[serde(default)]
+    trust: Option<String>,
+}
+
+fn load_trust_file() -> TrustFile {
+    let raw = std::fs::read_to_string(trust_vectors_path()).expect("read trust vectors");
+    serde_json::from_str(&raw).expect("parse trust vectors")
+}
+
+#[test]
+fn every_trust_vector_yields_its_documented_per_step_result() {
+    let file = load_trust_file();
+    assert!(
+        file.trusts.len() >= 4,
+        "at least four trust vectors are required (pinned, wrong anchor, no anchor, max)"
+    );
+
+    let mut names = HashSet::new();
+    let mut reasons = HashSet::new();
+    let mut valid_steps = 0usize;
+    let mut saw_pinned = false;
+    let mut saw_tofu = false;
+
+    for trust in &file.trusts {
+        assert!(
+            names.insert(trust.name.clone()),
+            "duplicate trust name: {}",
+            trust.name
+        );
+        let anchor = trust.anchor.as_ref().map(|anchor| TrustAnchor {
+            genesis_kid: anchor.genesis_kid.clone(),
+            genesis_digest: anchor.genesis_digest.clone(),
+        });
+        let mut verifier = KeyDocumentTrust::new(
+            trust.entity.clone(),
+            anchor,
+            trust.max_generation,
+            trust.tofu,
+        );
+        for step in &trust.steps {
+            let document = file
+                .documents
+                .get(&step.document)
+                .unwrap_or_else(|| panic!("{}/{}: unknown document", trust.name, step.name));
+            let result = verifier.ingest(document);
+            if step.valid {
+                let level = result.unwrap_or_else(|error| {
+                    panic!("step must verify: {}/{}: {error}", trust.name, step.name)
+                });
+                let expected = step
+                    .trust
+                    .as_deref()
+                    .expect("a valid step carries a trust level");
+                let actual = match level {
+                    TrustLevel::Pinned => "pinned",
+                    TrustLevel::Tofu => "tofu",
+                };
+                assert_eq!(
+                    actual, expected,
+                    "trust mismatch: {}/{}",
+                    trust.name, step.name
+                );
+                match level {
+                    TrustLevel::Pinned => saw_pinned = true,
+                    TrustLevel::Tofu => saw_tofu = true,
+                }
+                valid_steps += 1;
+            } else {
+                let expected = step
+                    .reason
+                    .as_deref()
+                    .expect("a negative step carries a reason");
+                let error = result.expect_err("a negative step must be rejected");
+                assert_eq!(
+                    error.to_string(),
+                    expected,
+                    "reason mismatch: {}/{}",
+                    trust.name,
+                    step.name
+                );
+                reasons.insert(expected.to_string());
+            }
+        }
+    }
+
+    assert!(
+        valid_steps >= 3,
+        "the trusted chain accepts its generations"
+    );
+    for reason in [
+        "no anchor",
+        "untrusted anchor",
+        "generation exceeds maximum",
+    ] {
+        assert!(reasons.contains(reason), "missing trust reason: {reason}");
+    }
+    assert!(saw_pinned, "a pinned trust level is required");
+    assert!(saw_tofu, "a TOFU trust level is required");
+}
+
+#[test]
+fn trust_rejects_a_wrong_anchor_without_polluting_state() {
+    let file = load_trust_file();
+    let genesis = &file.documents["genesis.gen1"];
+    let rotation = &file.documents["rotation.gen2"];
+    let entity = genesis["entity"].as_str().expect("entity").to_string();
+    let kid_b = rotation["roots"][1]
+        .as_str()
+        .expect("successor kid")
+        .to_string();
+
+    let mut wrong = KeyDocumentTrust::new(
+        entity.clone(),
+        Some(TrustAnchor {
+            genesis_kid: Some(kid_b),
+            genesis_digest: None,
+        }),
+        None,
+        false,
+    );
+    assert_eq!(
+        wrong.ingest(genesis),
+        Err(KeyDocumentError::UntrustedAnchor)
+    );
+
+    // The rejected genesis was never recorded, so the correctly anchored store
+    // still starts from it.
+    let mut correct = KeyDocumentTrust::new(
+        entity,
+        Some(TrustAnchor {
+            genesis_kid: Some(
+                genesis["genesis"]
+                    .as_str()
+                    .expect("genesis kid")
+                    .to_string(),
+            ),
+            genesis_digest: None,
+        }),
+        None,
+        false,
+    );
+    assert_eq!(correct.ingest(genesis), Ok(TrustLevel::Pinned));
+    assert_eq!(correct.ingest(rotation), Ok(TrustLevel::Pinned));
+}
+
+#[test]
+fn trust_fails_closed_without_an_anchor_and_reuses_single_document_reasons() {
+    let file = load_trust_file();
+    let genesis = &file.documents["genesis.gen1"];
+    let entity = genesis["entity"].as_str().expect("entity").to_string();
+
+    let mut no_anchor = KeyDocumentTrust::new(entity.clone(), None, None, false);
+    assert_eq!(no_anchor.ingest(genesis), Err(KeyDocumentError::NoAnchor));
+    // Repeated ingest still fails closed (nothing was recorded).
+    assert_eq!(no_anchor.ingest(genesis), Err(KeyDocumentError::NoAnchor));
+
+    let mut anchored = KeyDocumentTrust::new(
+        entity,
+        Some(TrustAnchor {
+            genesis_kid: Some(
+                genesis["genesis"]
+                    .as_str()
+                    .expect("genesis kid")
+                    .to_string(),
+            ),
+            genesis_digest: None,
+        }),
+        None,
+        false,
+    );
+    assert_eq!(
+        anchored.ingest_text("{ not json"),
+        Err(KeyDocumentError::MalformedDocument)
+    );
 }

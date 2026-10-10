@@ -11,6 +11,7 @@ import {
   KEYDOC_REASONS,
   KEYDOC_VERSION,
   KeyDocumentChain,
+  KeyDocumentTrust,
   keyDocumentChainDigest,
   keyDocumentDigest,
   keyDocumentSigningInput,
@@ -39,6 +40,12 @@ const CHAIN_VECTORS_URL = new URL(
   import.meta.url,
 );
 const chainVectors = JSON.parse(readFileSync(CHAIN_VECTORS_URL, "utf8"));
+
+const TRUST_VECTORS_URL = new URL(
+  "../conformance/fixtures/identity-keydoc/keydoc-trust.vectors.json",
+  import.meta.url,
+);
+const trustVectors = JSON.parse(readFileSync(TRUST_VECTORS_URL, "utf8"));
 
 const byName = (name) => {
   const vector = vectors.find((candidate) => candidate.name === name);
@@ -365,4 +372,171 @@ test("CLI verify reports the structured result and exits by validity", () => {
   const missing = spawnSync(process.execPath, [cli, "verify"], { encoding: "utf8" });
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /usage:/);
+});
+
+// ---------------------------------------------------------------------------
+// KeyDocumentTrust: trust-store anchor resolution
+// ---------------------------------------------------------------------------
+
+const trustDocument = (name) => {
+  const document = trustVectors.documents[name];
+  assert.ok(document, `missing trust document ${name}`);
+  return document;
+};
+
+const trustVerifier = (vector) =>
+  new KeyDocumentTrust({
+    entity: vector.entity,
+    anchor: vector.anchor ?? null,
+    maxGeneration: vector.maxGeneration,
+    tofu: vector.tofu ?? false,
+  });
+
+test("KeyDocumentTrust.clone leaves the committed chain independent", () => {
+  const chain = new KeyDocumentChain();
+  const copy = chain.clone();
+  assert.deepEqual(copy.ingest(chainVectors.documents["genesis.gen1"]), { valid: true });
+  // The original chain never saw the genesis.
+  assert.deepEqual(chain.ingest(chainVectors.documents["rotation.gen2"]), {
+    valid: false,
+    reason: "chain gap",
+  });
+});
+
+test("every trust vector yields its documented per-step result", () => {
+  assert.ok(trustVectors.documents, "the trust file carries a documents registry");
+  assert.ok(Array.isArray(trustVectors.trusts), "the trust file carries trusts");
+  assert.ok(trustVectors.trusts.length >= 4, "at least four trusts are required");
+
+  const names = new Set();
+  const reasons = new Set();
+  const trustLevels = new Set();
+  let validSteps = 0;
+  for (const vector of trustVectors.trusts) {
+    assert.ok(!names.has(vector.name), `duplicate trust name: ${vector.name}`);
+    names.add(vector.name);
+    const verifier = trustVerifier(vector);
+    for (const step of vector.steps) {
+      assert.ok(
+        Object.hasOwn(trustVectors.documents, step.document),
+        `${vector.name}/${step.name}: unknown document ${step.document}`,
+      );
+      const document = trustDocument(step.document);
+      const result = verifier.ingest(document);
+      if (step.valid === true) {
+        assert.deepEqual(result, { valid: true, trust: step.trust }, `${vector.name}/${step.name}`);
+        trustLevels.add(result.trust);
+        validSteps += 1;
+      } else {
+        assert.equal(result.valid, false, `${vector.name}/${step.name}`);
+        assert.equal(result.reason, step.reason, `${vector.name}/${step.name}`);
+        reasons.add(result.reason);
+      }
+    }
+  }
+
+  assert.ok(validSteps >= 3, "the trusted chain must accept its generations");
+  for (const reason of ["no anchor", "untrusted anchor", "generation exceeds maximum"]) {
+    assert.ok(reasons.has(reason), `a trust vector with reason ${reason} is required`);
+  }
+  assert.ok(trustLevels.has("pinned"), "a pinned trust level is required");
+});
+
+test("a wrong anchor rejects the chain without polluting trust state", () => {
+  const genesis = trustDocument("genesis.gen1");
+  const rotation = trustDocument("rotation.gen2");
+  const entity = genesis.entity;
+  const kidB = rotation.roots[1];
+  const verifier = new KeyDocumentTrust({ entity, anchor: { genesisKid: kidB } });
+  // The foreign genesis is untrusted...
+  assert.deepEqual(verifier.ingest(genesis), {
+    valid: false,
+    reason: "untrusted anchor",
+  });
+  // ...and was never recorded, so the correctly anchored genesis still starts.
+  const correct = new KeyDocumentTrust({ entity, anchor: { genesisKid: genesis.genesis } });
+  assert.deepEqual(correct.ingest(genesis), { valid: true, trust: "pinned" });
+  assert.deepEqual(correct.ingest(rotation), { valid: true, trust: "pinned" });
+});
+
+test("no anchor fails closed and never trusts on first use", () => {
+  const genesis = trustDocument("genesis.gen1");
+  const verifier = new KeyDocumentTrust({ entity: genesis.entity });
+  assert.deepEqual(verifier.ingest(genesis), { valid: false, reason: "no anchor" });
+  assert.deepEqual(verifier.ingest(genesis), { valid: false, reason: "no anchor" });
+});
+
+test("generation beyond maxGeneration is rejected after the chain links", () => {
+  const genesis = trustDocument("genesis.gen1");
+  const rotation = trustDocument("rotation.gen2");
+  const beyond = trustDocument("rotation.gen3");
+  const entity = genesis.entity;
+  const verifier = new KeyDocumentTrust({
+    entity,
+    anchor: { genesisKid: genesis.genesis },
+    maxGeneration: 2,
+  });
+  assert.deepEqual(verifier.ingest(genesis), { valid: true, trust: "pinned" });
+  assert.deepEqual(verifier.ingest(rotation), { valid: true, trust: "pinned" });
+  assert.deepEqual(verifier.ingest(beyond), {
+    valid: false,
+    reason: "generation exceeds maximum",
+  });
+});
+
+test("bounded TOFU records the first-seen anchor and stays bounded", () => {
+  const genesis = trustDocument("genesis.gen1");
+  const rotation = trustDocument("rotation.gen2");
+  const beyond = trustDocument("rotation.gen3");
+  const entity = genesis.entity;
+  const verifier = new KeyDocumentTrust({
+    entity,
+    maxGeneration: 2,
+    tofu: true,
+  });
+  // First use is recorded and explicitly marked unverified.
+  assert.deepEqual(verifier.ingest(genesis), { valid: true, trust: "tofu" });
+  assert.deepEqual(verifier.ingest(rotation), { valid: true, trust: "tofu" });
+  // The recorded anchor is bounded by maxGeneration.
+  assert.deepEqual(verifier.ingest(beyond), {
+    valid: false,
+    reason: "generation exceeds maximum",
+  });
+  // A non-genesis first document is never a TOFU anchor.
+  const empty = new KeyDocumentTrust({ entity, tofu: true });
+  assert.deepEqual(empty.ingest(rotation), { valid: false, reason: "chain gap" });
+  const fresh = new KeyDocumentTrust({ entity, tofu: true });
+  assert.deepEqual(fresh.ingest(beyond), { valid: false, reason: "chain gap" });
+});
+
+test("trust verification reuses single-document and chain reasons first", () => {
+  const genesis = trustDocument("genesis.gen1");
+  const verifier = new KeyDocumentTrust({
+    entity: genesis.entity,
+    anchor: { genesisKid: genesis.genesis },
+  });
+  // A malformed document reports its single-document reason, not "no anchor".
+  assert.deepEqual(verifier.ingest("{ not json"), {
+    valid: false,
+    reason: "malformed document",
+  });
+  const bad = byName("doc.bad-signature").document;
+  assert.deepEqual(verifier.ingest(bad), { valid: false, reason: "signature mismatch" });
+  // A non-genesis first document is a chain gap, not an anchor failure.
+  const noAnchor = new KeyDocumentTrust({ entity: genesis.entity });
+  assert.deepEqual(noAnchor.ingest(trustDocument("rotation.gen2")), {
+    valid: false,
+    reason: "chain gap",
+  });
+});
+
+test("KeyDocumentTrust validates its configuration", () => {
+  assert.throws(() => new KeyDocumentTrust({}), TypeError);
+  assert.throws(() => new KeyDocumentTrust({ entity: "e", anchor: { extra: 1 } }), TypeError);
+  assert.throws(
+    () => new KeyDocumentTrust({ entity: "e", anchor: { genesisKid: 7 } }),
+    TypeError,
+  );
+  assert.throws(() => new KeyDocumentTrust({ entity: "e", maxGeneration: 0 }), TypeError);
+  assert.throws(() => new KeyDocumentTrust({ entity: "e", tofu: "yes" }), TypeError);
 });

@@ -1,0 +1,198 @@
+{
+  "documents": {
+    "genesis.gen1": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    },
+    "rotation.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "mcKtltQqz_qSau1f-XDk07Pw0y9-JzLx_Uo0OR3eVq6vuISR832ImNXbGE01lpzw4ANJpXE5jAVYpetD31_JAw"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "KIS5c-he2mWTXA3DyDouW_i5EaVIrM1q7bJTJQB_wxbtYT02zBxYzU1gJV50vy6-m8Wx35rR1OWJRwuLw1CKCA"
+        }
+      ]
+    },
+    "rotation.gen3": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 3,
+      "issuedAt": "2026-10-12T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "dd4ad5cdf12127770f96220c24cbb7208fe57e2a8b1b5f94b216e28984efb152",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "EozFe3bif1vNY5TTlNZMFhzX1P8dJ2288gRcnEB2Z--5M5tTk84vZLFN8PUczKvPWYzYYoW0_b61KXUKz7yyAA"
+        }
+      ]
+    }
+  },
+  "trusts": [
+    {
+      "name": "trust.pinned-chain",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": {
+        "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "genesisDigest": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d"
+      },
+      "maxGeneration": 3,
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true,
+          "trust": "pinned"
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true,
+          "trust": "pinned"
+        },
+        {
+          "name": "rotation.gen3",
+          "document": "rotation.gen3",
+          "valid": true,
+          "trust": "pinned"
+        }
+      ]
+    },
+    {
+      "name": "trust.wrong-genesis-key-id",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": {
+        "genesisKid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      },
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": false,
+          "reason": "untrusted anchor"
+        }
+      ]
+    },
+    {
+      "name": "trust.wrong-genesis-digest",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": {
+        "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "genesisDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": false,
+          "reason": "untrusted anchor"
+        }
+      ]
+    },
+    {
+      "name": "trust.no-anchor",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": null,
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": false,
+          "reason": "no anchor"
+        }
+      ]
+    },
+    {
+      "name": "trust.generation-exceeds-max",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": {
+        "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      },
+      "maxGeneration": 2,
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true,
+          "trust": "pinned"
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true,
+          "trust": "pinned"
+        },
+        {
+          "name": "rotation.gen3",
+          "document": "rotation.gen3",
+          "valid": false,
+          "reason": "generation exceeds maximum"
+        }
+      ]
+    },
+    {
+      "name": "trust.tofu-bounded",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "anchor": null,
+      "maxGeneration": 2,
+      "tofu": true,
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true,
+          "trust": "tofu"
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true,
+          "trust": "tofu"
+        },
+        {
+          "name": "rotation.gen3",
+          "document": "rotation.gen3",
+          "valid": false,
+          "reason": "generation exceeds maximum"
+        }
+      ]
+    }
+  ]
+}

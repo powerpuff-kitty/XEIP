@@ -2,9 +2,12 @@
 //
 // Dependency-free reference for *signed XEIP key documents* (issue #1, first
 // key-lifecycle slice). This is the first testable slice of the design in
-// spec/identity-keys.md and ADR 0010: a single signed key document and
-// single-document verification. Chain, rollback and trust-store resolution are
-// deliberately out of scope (see spec/plans/identity-keydoc.md).
+// spec/identity-keys.md and ADR 0010: a single signed key document,
+// single-document verification, per-entity chain verification (generation
+// linking, rollback and fork detection) and trust-store anchor resolution
+// (pinned anchor and bounded TOFU). Revocation/status documents, bounded
+// overlap, directory discovery and durable fork evidence are deliberately out
+// of scope (see spec/plans/identity-keydoc.md).
 //
 // Fixed carrier (`xeip.keydoc/0.1`):
 //
@@ -81,10 +84,13 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
  * Structural reasons a key document can be rejected. The `reason` strings are
  * the stable cross-language contract shared with `crates/xeip-identity`.
  *
- * The final three reasons are produced only by chain verification
- * ({@link KeyDocumentChain}); every document must first pass single-document
- * verification, so a chain reason is only ever returned after the structural
- * reasons above have been cleared.
+ * The first seven reasons are single-document reasons. `ROLLBACK`, `FORK` and
+ * `CHAIN_GAP` are produced only by chain verification
+ * ({@link KeyDocumentChain}); `NO_ANCHOR`, `UNTRUSTED_ANCHOR` and
+ * `GENERATION_EXCEEDS_MAX` are produced only by trust-store resolution
+ * ({@link KeyDocumentTrust}). Every document must first pass single-document
+ * verification and chain linking, so a chain or trust reason is only ever
+ * returned after the structural reasons above have been cleared.
  */
 export const KEYDOC_REASONS = Object.freeze({
   MALFORMED: "malformed document",
@@ -97,6 +103,9 @@ export const KEYDOC_REASONS = Object.freeze({
   ROLLBACK: "rollback",
   FORK: "fork",
   CHAIN_GAP: "chain gap",
+  NO_ANCHOR: "no anchor",
+  UNTRUSTED_ANCHOR: "untrusted anchor",
+  GENERATION_EXCEEDS_MAX: "generation exceeds maximum",
 });
 
 function isPlainObject(value) {
@@ -390,6 +399,177 @@ export class KeyDocumentChain {
       generation: value.generation,
       digest: keyDocumentChainDigest(value),
     });
+  }
+
+  /**
+   * Return an independent copy of the accepted per-entity state. Used by
+   * {@link KeyDocumentTrust} to evaluate a candidate without committing it, so
+   * an untrusted document is never recorded. Cloning does not change the
+   * behavior of `ingest`.
+   *
+   * @returns {KeyDocumentChain}
+   */
+  clone() {
+    const copy = new KeyDocumentChain();
+    for (const [entity, state] of this.#accepted) {
+      copy.#accepted.set(entity, { ...state });
+    }
+    return copy;
+  }
+}
+
+/**
+ * Trust-store anchor resolution for `xeip.keydoc/0.1`.
+ *
+ * A {@link KeyDocumentChain} only links generations; it deliberately has no
+ * notion of *which* genesis to start from. `KeyDocumentTrust` adds that
+ * out-of-band anchor: it wraps a chain and, for a single configured `entity`,
+ * accepts a document only when it passes single-document verification and the
+ * chain rules *and* is reached from the configured anchor. It never throws for
+ * a well-formed call.
+ *
+ * Anchor enforcement runs after the wrapped chain has accepted the candidate on
+ * a private trial copy (so a rejected document is never recorded). A candidate
+ * is rejected with:
+ *
+ * - **No anchor** — when no anchor is configured (and TOFU is off) every
+ *   document is rejected with `no anchor`. This is the default: a trust store
+ *   fails closed rather than trusting on first use.
+ * - **Wrong anchor** — a document whose `entity`, `genesis` key-id or (for the
+ *   genesis document) chain digest does not match the pinned anchor is rejected
+ *   with `untrusted anchor`.
+ * - **Generation bound** — a document whose `generation > maxGeneration`
+ *   (when configured) is rejected with `generation exceeds maximum`.
+ *
+ * **Bounded TOFU (opt-in, not verified).** With `{ tofu: true }` and no pinned
+ * anchor, the first document accepted for the entity records its
+ * `(entity, genesis-kid, genesis-digest)` as the effective anchor, and every
+ * later document must chain from it (a different genesis is `untrusted
+ * anchor`). The recorded anchor is bounded by the same `maxGeneration`. TOFU is
+ * **not verified identity**: callers MUST present a successful `tofu` result as
+ * unverified and MUST NOT conflate it with a pinned anchor
+ * (`spec/identity-keys.md` §7.2), which a pinned result signals.
+ *
+ * @example
+ * const trust = new KeyDocumentTrust({
+ *   entity: entityUrn(genesisKid),
+ *   anchor: { genesisKid, genesisDigest },
+ *   maxGeneration: 3,
+ * });
+ * trust.ingest(genesis); // { valid: true, trust: "pinned" }
+ */
+export class KeyDocumentTrust {
+  #entity;
+  #anchor;
+  #maxGeneration;
+  #tofu;
+  #chain = new KeyDocumentChain();
+  #tofuAnchors = new Map();
+
+  /**
+   * @param {object} options
+   * @param {string} options.entity Entity URN this trust store is pinned to.
+   * @param {{ genesisKid?: string, genesisDigest?: string }|null} [options.anchor]
+   *   Pinned genesis key-id and/or genesis chain digest. `null`/omitted means no
+   *   anchor is configured (fail closed unless TOFU is enabled).
+   * @param {number} [options.maxGeneration] Reject `generation` above this.
+   * @param {boolean} [options.tofu] Opt in to bounded, *unverified* TOFU.
+   */
+  constructor({ entity, anchor = null, maxGeneration, tofu = false } = {}) {
+    if (typeof entity !== "string") throw new TypeError("entity must be a string");
+    if (anchor !== null) {
+      if (!isPlainObject(anchor)) throw new TypeError("anchor must be an object or null");
+      for (const key of Object.keys(anchor)) {
+        if (key !== "genesisKid" && key !== "genesisDigest") {
+          throw new TypeError(`unknown anchor field: ${key}`);
+        }
+      }
+      if (anchor.genesisKid !== undefined && typeof anchor.genesisKid !== "string") {
+        throw new TypeError("anchor.genesisKid must be a string");
+      }
+      if (anchor.genesisDigest !== undefined && typeof anchor.genesisDigest !== "string") {
+        throw new TypeError("anchor.genesisDigest must be a string");
+      }
+    }
+    if (
+      maxGeneration !== undefined &&
+      (!Number.isInteger(maxGeneration) || maxGeneration < 1)
+    ) {
+      throw new TypeError("maxGeneration must be an integer >= 1");
+    }
+    if (typeof tofu !== "boolean") throw new TypeError("tofu must be a boolean");
+    this.#entity = entity;
+    this.#anchor = anchor;
+    this.#maxGeneration = maxGeneration;
+    this.#tofu = tofu;
+  }
+
+  /**
+   * Verify and anchor `document` (a parsed object or JSON text).
+   *
+   * @returns {{ valid: true, trust: "pinned"|"tofu" } | { valid: false, reason: string }}
+   */
+  ingest(document) {
+    let value = document;
+    if (typeof document === "string") {
+      try {
+        value = strictParse(document);
+      } catch {
+        return malformed();
+      }
+    }
+
+    // Run the existing single-document and chain rules on an independent copy.
+    // Nothing is committed unless every trust check below also passes.
+    const trial = this.#chain.clone();
+    const chained = trial.ingest(value);
+    if (!chained.valid) return chained;
+
+    let anchor;
+    let trust;
+    if (this.#anchor !== null) {
+      anchor = this.#anchor;
+      trust = "pinned";
+    } else if (this.#tofu) {
+      const recorded = this.#tofuAnchors.get(value.entity);
+      if (recorded !== undefined) {
+        anchor = recorded;
+        trust = "tofu";
+      } else if (value.generation === 1 && value.previous === undefined) {
+        anchor = {
+          genesisKid: value.genesis,
+          genesisDigest: keyDocumentChainDigest(value),
+        };
+        trust = "tofu";
+      } else {
+        return { valid: false, reason: KEYDOC_REASONS.NO_ANCHOR };
+      }
+    } else {
+      return { valid: false, reason: KEYDOC_REASONS.NO_ANCHOR };
+    }
+
+    if (value.entity !== this.#entity) {
+      return { valid: false, reason: KEYDOC_REASONS.UNTRUSTED_ANCHOR };
+    }
+    if (this.#maxGeneration !== undefined && value.generation > this.#maxGeneration) {
+      return { valid: false, reason: KEYDOC_REASONS.GENERATION_EXCEEDS_MAX };
+    }
+    if (anchor.genesisKid !== undefined && value.genesis !== anchor.genesisKid) {
+      return { valid: false, reason: KEYDOC_REASONS.UNTRUSTED_ANCHOR };
+    }
+    if (
+      anchor.genesisDigest !== undefined &&
+      value.generation === 1 &&
+      keyDocumentChainDigest(value) !== anchor.genesisDigest
+    ) {
+      return { valid: false, reason: KEYDOC_REASONS.UNTRUSTED_ANCHOR };
+    }
+
+    if (trust === "tofu" && !this.#tofuAnchors.has(value.entity)) {
+      this.#tofuAnchors.set(value.entity, anchor);
+    }
+    this.#chain = trial;
+    return { valid: true, trust };
   }
 }
 

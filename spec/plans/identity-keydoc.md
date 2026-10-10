@@ -3,17 +3,18 @@
 Scope: implement the signed **key-document** slice of the identity key-lifecycle
 design in [../identity-keys.md](../identity-keys.md) and
 [ADR 0010](../decisions/0010-identity-key-lifecycle.md) in JavaScript and Rust,
-with shared vectors. This covers *single-document verification* and, on top of
-it, *per-entity chain verification*: genesis anchoring, `generation`/`previous`
-linking, rollback rejection, fork/equivocation detection and gap detection.
-Trust-store resolution, revocation/status documents, device-rotation statements
-and bounded `overlapUntil` are still deferred (see below). It reuses the
-implemented key-ID codec (`tools/derive-keyid.mjs`, `crates/xeip-identity`) and
-the RFC 8785 + Ed25519 signing primitives of the signed-envelope slice; it adds
-no hand-written primitive. (`sha2 0.10.9`, already a transitive dependency of
-the pinned `ed25519-dalek` and the version named by ADR 0007, is now a direct
-dependency of `crates/xeip-identity` for the chain digest; no new crate version
-enters the lockfile.)
+with shared vectors. This covers *single-document verification*, *per-entity
+chain verification* (genesis anchoring, `generation`/`previous` linking, rollback
+rejection, fork/equivocation detection and gap detection) and *trust-store anchor
+resolution* (a pinned genesis anchor plus bounded, opt-in TOFU). Revocation/status
+documents, bounded `overlapUntil`, directory discovery and durable fork evidence
+are still deferred (see below). It reuses the implemented key-ID codec
+(`tools/derive-keyid.mjs`, `crates/xeip-identity`) and the RFC 8785 + Ed25519
+signing primitives of the signed-envelope slice; it adds no hand-written
+primitive. (`sha2 0.10.9`, already a transitive dependency of the pinned
+`ed25519-dalek` and the version named by ADR 0007, is now a direct dependency of
+`crates/xeip-identity` for the chain digest; no new crate version enters the
+lockfile.)
 
 ## Fixed document format (`xeip.keydoc/0.1`)
 
@@ -117,8 +118,52 @@ document is `rollback` (it is not newer); a caller that needs at-least-once
 delivery treats `rollback` as "already known". Fork detection is only as strong
 as what a verifier has already accepted for that `entity`: it rejects a distinct
 document at the accepted generation, not a fork the verifier has never seen.
-Trust-store resolution and revocation are out of scope, so the chain has no
-notion of a pinned anchor, `max_generation` or a conflict store.
+`KeyDocumentChain` stays anchor-less — the caller decides which genesis to start
+from — while trust-store anchor resolution is layered on top by
+`KeyDocumentTrust` below; a durable conflict store remains out of scope.
+
+## Trust-store anchor resolution
+
+`KeyDocumentChain` links generations but has no notion of *which* genesis to
+start from. `KeyDocumentTrust` (JS `tools/key-document.mjs`, Rust
+`crates/xeip-identity`) adds that out-of-band anchor: it wraps a chain and, for a
+single configured `entity`, accepts a document only when it passes
+single-document verification and the chain rules **and** is reached from the
+configured anchor. The anchor is `{ genesisKid?, genesisDigest? }` — a pinned
+genesis key-id and/or the genesis document's chain digest — plus an optional
+`maxGeneration`.
+
+It implements §7.1 (pinned anchor) and §7.2 (bounded TOFU) of
+`spec/identity-keys.md` and fails closed (§7.4). `ingest` returns
+`{ valid: true, trust: "pinned" | "tofu" }` / `{ valid: false, reason }` (Rust
+`Ok(TrustLevel)` / `Err(KeyDocumentError)`).
+
+| Anchor state | Document | Result / reason |
+| --- | --- | --- |
+| No anchor, TOFU off (default) | anything that passes the chain | `no anchor` |
+| Pinned anchor | `entity`, `genesis` key-id or genesis digest mismatch | `untrusted anchor` |
+| Any | `generation > maxGeneration` (when configured) | `generation exceeds maximum` |
+| Pinned or recorded anchor | chain reached from the anchor | *accepted* (`pinned` / `tofu`) |
+
+Ordering composes the existing checks unchanged: single-document verification,
+then the chain rules, then the anchor. The chain rules are run on a private
+`clone()` of the accepted chain state, so a document rejected by the anchor is
+**never recorded** — a subsequent correctly anchored genesis still starts the
+chain cleanly rather than colliding as a `fork`.
+
+**Bounded TOFU (opt-in, not verified).** With `tofu: true` and no pinned anchor,
+the first genesis accepted for the entity records
+`(entity, genesis-kid, genesis-digest)` as the effective anchor; every later
+document must chain from it (a different genesis is `untrusted anchor`) and is
+bounded by the same `maxGeneration`. A `tofu` result is **not verified identity**:
+callers MUST present it as unverified and MUST NOT conflate it with a `pinned`
+anchor (`spec/identity-keys.md` §7.2, [../identity.md](../identity.md) §3). TOFU
+is never the default.
+
+This makes the previously anchor-less chain usable as a trust store: the genesis
+key-id pins the entity, the digest pins the exact genesis document (defeating a
+tampered-but-self-certifying genesis), and `maxGeneration` bounds how far a chain
+may advance.
 
 ## Cross-language vectors
 
@@ -160,30 +205,59 @@ has a shared `documents` registry and a list of `chains`, each an ordered list o
 - `chain.single-document-failure` — an invalid signature, proving the
   single-document check runs first.
 
+Trust vectors live in
+`conformance/fixtures/identity-keydoc/keydoc-trust.vectors.json`, generated
+deterministically from the same pinned seed and genesis. The file reuses the same
+`documents` registry and adds a list of `trusts`, each a `{ name, entity,
+anchor, maxGeneration?, tofu?, steps }` case whose steps are
+`{ name, document, valid, reason?, trust? }` and are consumed by both
+`tools/key-document.test.mjs` and `crates/xeip-identity/tests/keydoc_vectors.rs`:
+
+- `trust.pinned-chain` — a pinned `{ genesisKid, genesisDigest }` with
+  `maxGeneration: 3` accepts generations 1–3 (`trust: "pinned"`);
+- `trust.wrong-genesis-key-id` and `trust.wrong-genesis-digest` — a pinned
+  genesis key-id or digest that does not match the presented genesis is
+  `untrusted anchor`;
+- `trust.no-anchor` — no anchor configured (the default) is `no anchor` for an
+  otherwise valid chain;
+- `trust.generation-exceeds-max` — a chain that reaches generation 3 with
+  `maxGeneration: 2` is `generation exceeds maximum`;
+- `trust.tofu-bounded` — opt-in TOFU records the first-seen genesis
+  (`trust: "tofu"`) and is bounded by `maxGeneration`.
+
+Both tests also assert that an anchor-rejected genesis leaves the committed
+chain untouched (JS `KeyDocumentChain.clone`; Rust `#[derive(Clone)]`), and that
+single-document and chain reasons are reported before trust reasons.
+
 The existing single-document `keydoc.vectors.json` is unchanged and still carries
 its own positive and negative cases.
 
 ## Deferred (explicitly out of scope)
 
-- Trust roots: pinned anchor, bounded TOFU, inline bootstrap, `max_generation`,
-  pinned digests; resolving a `kid` to a trusted document. Chain verification
-  here is stateful but anchor-less: the caller decides which genesis to start
-  from.
+- Directory discovery and inline bootstrap: how a verifier learns a genesis or a
+  current document without an out-of-band anchor (`spec/identity-keys.md` §7.3).
+  The trust store here is configured out of band; discovery records stay
+  self-asserted until this verification succeeds.
+- Resolving an arbitrary envelope `kid` to a trusted document and binding it to
+  an entity at generation time (`spec/identity-keys.md` §8); this slice verifies
+  documents and their anchoring, not envelope `kid` → document resolution.
 - Rotation semantics beyond generation/digest linking: the retiring/successor
   signature rules of `spec/identity-keys.md` §5.2, pre-endorsed successors,
   bounded `overlapUntil`, post-overlap rejection and `issuedAt` monotonicity.
 - Revocation/status documents, serial rollback, staleness, live-stream effects.
 - Device rotation statements and device validity windows (`notBefore`/
   `notAfter`); endorsed devices are validated structurally only.
-- Durable fork evidence: a conflict store that remembers forks a verifier has
-  seen, beyond rejecting a distinct document at the accepted generation.
+- Durable, keyed fork evidence: a conflict store that remembers forks a verifier
+  has seen (and attributes them to an entity/anchor), beyond rejecting a distinct
+  document at the accepted generation. The anchor here detects a wrong genesis
+  but does not persist equivocation across restarts.
 - Short-lived credentials and recovery.
 
 ## Verification (all passing)
 
-- `node --test tools/key-document.test.mjs` — 17 tests (11 single-document, 6
-  chain).
+- `node --test tools/key-document.test.mjs` — 25 tests (11 single-document, 6
+  chain, 8 trust).
 - `npm run validate:fixtures` — key-document vectors included.
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
-  `cargo test --workspace --all-targets --locked` — 4 `keydoc_vectors` tests.
+  `cargo test --workspace --all-targets --locked` — 7 `keydoc_vectors` tests.
 - `npm run check:js`.
