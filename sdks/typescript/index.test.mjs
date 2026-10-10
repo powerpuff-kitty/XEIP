@@ -214,6 +214,21 @@ test("valid golden fixtures and rejects bad versions", () => {
   assert.throws(() => assertEnvelope(fixture("message.invalid-version.json")), /version/);
 });
 
+test("advertises supported versions and distinguishes unsupported from malformed xeip", () => {
+  assert.deepEqual(sdk.XEIP_SUPPORTED_VERSIONS, ["0.1"]);
+  assert.ok(sdk.XEIP_SUPPORTED_VERSIONS.includes("0.1"));
+  for (const xeip of ["9.9", "0.2", "1.0"]) {
+    assert.throws(() => assertEnvelope({ ...fixture("message.valid.json"), xeip }), /unsupported version/, xeip);
+  }
+  for (const xeip of ["", "0", "0.1.0", "v0.1", "0.1 ", 1, null, true]) {
+    assert.throws(() => assertEnvelope({ ...fixture("message.valid.json"), xeip }),
+      error => error instanceof TypeError && !/unsupported version/.test(error.message), JSON.stringify(xeip));
+  }
+  const missing = { ...fixture("message.valid.json") };
+  delete missing.xeip;
+  assert.throws(() => assertEnvelope(missing), error => !/unsupported version/.test(error.message));
+});
+
 test("builds an envelope with a unique ID and UTC timestamp", () => {
   const msg = makeMessage({
     kind: "message",

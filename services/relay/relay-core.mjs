@@ -12,6 +12,7 @@ import { DurableStore, LOCAL_DURABLE_PROFILE } from "./durable.mjs";
 import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { LimitPolicy, LOCAL_LIMITS_PROFILE } from "./limits.mjs";
 import { authorize, sseFrame, validateMessage, absoluteUri, MAX_FRAME } from "./http-util.mjs";
+import { XEIP_SUPPORTED_VERSIONS } from "../../sdks/typescript/src/validation.js";
 import { verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
 
 /**
@@ -189,6 +190,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
         transports: ["http-sse", "websocket"],
         ...(replayWindow ? { deliveryProfile: LOCAL_REPLAY_PROFILE, replay: replayWindow.limits } : {}) }
       : { status: "ok", protocol: "xeip/0.1", mode: "development-only", transports: ["http-sse", "websocket"] };
+    base.protocolVersions = XEIP_SUPPORTED_VERSIONS;
     if (store) {
       base.resumeProfile = LOCAL_DELIVERY_PROFILE;
       base.resume = store.resumeLimits ?? store.limits;

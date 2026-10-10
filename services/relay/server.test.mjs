@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRelay } from "./server.mjs";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { request } from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
+import { FrameParser, OPCODES, encodeFrame, websocketAccept } from "./websocket.mjs";
 import { SseParser } from "../../sdks/typescript/src/sse.js";
 
 const TOKEN = "test-token-very-long-and-secret";
@@ -59,6 +61,56 @@ function requestStatus(base, headers = {}, path = "/health") {
       res.resume();
       res.once("end", () => resolve(res.statusCode));
     });
+    req.once("error", reject);
+    req.end();
+  });
+}
+
+class WsClient {
+  constructor(socket) {
+    this.socket = socket;
+    this.parser = new FrameParser({ maxFrame: 128 * 1024, maxMessage: 128 * 1024, expectMask: false });
+    this.messages = [];
+    socket.on("data", chunk => {
+      for (const event of this.parser.push(chunk)) {
+        if (event.type === "message") this.messages.push(JSON.parse(event.text));
+        else if (event.type === "ping") this.#write(encodeFrame(OPCODES.pong, event.payload, true, randomBytes(4)));
+      }
+    });
+  }
+  send(value) { this.#write(encodeFrame(OPCODES.text, Buffer.from(JSON.stringify(value)), true, randomBytes(4))); }
+  close() { if (!this.socket.destroyed) this.socket.end(); }
+  #write(buffer) { if (!this.socket.destroyed) this.socket.write(buffer); }
+  async waitFor(predicate, label) {
+    const deadline = Date.now() + 4000;
+    while (!predicate()) {
+      if (Date.now() >= deadline) throw new Error(label ?? "condition not met");
+      await delay(10);
+    }
+  }
+}
+function openWebSocket(base, token) {
+  return new Promise((resolve, reject) => {
+    const key = randomBytes(16).toString("base64");
+    const url = new URL(base);
+    const req = request({
+      host: url.hostname, port: url.port, path: "/ws",
+      headers: {
+        Connection: "Upgrade", Upgrade: "websocket",
+        "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": key,
+        Authorization: "Bearer " + token
+      }
+    });
+    req.once("upgrade", (response, socket, head) => {
+      if (response.headers["sec-websocket-accept"] !== websocketAccept(key)) {
+        socket.destroy();
+        return reject(new Error("invalid Sec-WebSocket-Accept"));
+      }
+      const client = new WsClient(socket);
+      if (head.length > 0) socket.unshift(head);
+      resolve(client);
+    });
+    req.once("response", response => { response.resume(); reject(new Error("HTTP " + response.statusCode)); });
     req.once("error", reject);
     req.end();
   });
@@ -189,6 +241,60 @@ test("rejects malformed, unsupported, expired and oversized messages", async () 
     assert.equal((await post(base, makeMessage({ body: { contentType: "text/plain" } }))).status, 422);
     assert.equal((await post(base, makeMessage({ body: { contentType: "text/plain", data: "x".repeat(70_000) } }))).status, 413);
   });
+});
+
+test("advertises protocol versions and reports a distinct unsupported-version error", async () => {
+  await withRelay(async base => {
+    const health = await (await fetch(base + "/health")).json();
+    assert.deepEqual(health.protocolVersions, ["0.1"]);
+    assert.equal(health.status, "ok");
+    assert.equal(health.protocol, "xeip/0.1");
+    for (const xeip of ["9.9", "0.2", "1.0"]) {
+      const response = await post(base, makeMessage({ xeip }));
+      assert.equal(response.status, 422, xeip);
+      assert.deepEqual(await response.json(), { error: "unsupported version" }, xeip);
+    }
+    const missing = makeMessage();
+    delete missing.xeip;
+    for (const value of [missing, makeMessage({ xeip: "" }), makeMessage({ xeip: "0.1.0" }), makeMessage({ xeip: 1 })]) {
+      const response = await post(base, value);
+      assert.equal(response.status, 422, JSON.stringify(value.xeip));
+      const body = await response.json();
+      assert.notEqual(body.error, "unsupported version", JSON.stringify(value.xeip));
+    }
+    assert.equal((await post(base, makeMessage())).status, 202);
+  });
+});
+
+test("WebSocket send reports the same distinct unsupported-version error", async () => {
+  const server = createRelay({ token: TOKEN });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = "http://127.0.0.1:" + server.address().port;
+  let client;
+  try {
+    client = await openWebSocket(base, TOKEN);
+    for (const [label, xeip, distinct] of [["9.9", "9.9", true], ["0.2", "0.2", true], ["empty", "", false], ["long form", "0.1.0", false]]) {
+      client.send({ type: "send", message: makeMessage({ xeip }) });
+      await client.waitFor(() => client.messages.length > 0, "websocket error " + label);
+      const reply = client.messages.shift();
+      assert.equal(reply.type, "error", label);
+      assert.equal(reply.status, 422, label);
+      if (distinct) assert.equal(reply.error, "unsupported version", label);
+      else assert.notEqual(reply.error, "unsupported version", label);
+    }
+    const missing = makeMessage();
+    delete missing.xeip;
+    client.send({ type: "send", message: missing });
+    await client.waitFor(() => client.messages.length > 0, "websocket error missing");
+    const reply = client.messages.shift();
+    assert.equal(reply.type, "error");
+    assert.equal(reply.status, 422);
+    assert.notEqual(reply.error, "unsupported version");
+  } finally {
+    client?.close();
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test("routes live messages only to the selected session and recipient", async () => {

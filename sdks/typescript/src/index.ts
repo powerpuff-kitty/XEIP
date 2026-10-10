@@ -2,12 +2,18 @@
  * Experimental XEIP v0.1 TypeScript reference SDK.
  * Validation is structural only; sender strings are not verified identities.
  */
-import { validateEnvelope, validateEntity, validateSession, validateCapability, requireUri } from "./validation.js";
+import { validateEnvelope, validateEntity, validateSession, validateCapability, requireUri, XEIP_SUPPORTED_VERSIONS } from "./validation.js";
 import { SseParser } from "./sse.js";
 
 export * from "./identity.js";
 
 export const XEIP_VERSION = "0.1" as const;
+
+/**
+ * Wire versions this SDK can read. The relay advertises the same list from
+ * `GET /health` as `protocolVersions`. See `spec/versioning.md`.
+ */
+export { XEIP_SUPPORTED_VERSIONS };
 
 export type EntityKind = "human" | "agent" | "machine" | "service";
 export type MessageKind = "message" | "event" | "command" | "receipt";

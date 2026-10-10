@@ -1,5 +1,11 @@
 /** Dependency-free wire validation shared by the SDK, browser console and local relay. */
 export const XEIP_VERSION = "0.1";
+/**
+ * Wire versions this implementation can read. Advertising and negotiation are
+ * defined by `spec/versioning.md`; the base schema pins `xeip` to `"0.1"`.
+ * @type {readonly string[]}
+ */
+export const XEIP_SUPPORTED_VERSIONS = Object.freeze(["0.1"]);
 const kinds = ["human", "agent", "machine", "service"];
 const transports = ["http-sse", "http", "websocket", "local", "webrtc", "a2a", "mcp"];
 /** @param {unknown} value @param {string} label @returns {Record<string, unknown>} */
@@ -19,9 +25,14 @@ function string(value, label, min = 1, max = Infinity) {
   const length = Array.from(value).length;
   if (length < min || length > max) throw new TypeError(label + " has invalid length");
 }
+// A version is well-formed when it is a `MAJOR.MINOR` pair of decimal integers.
+// Well-formed but unsupported versions get a distinct error from malformed ones.
+const versionPattern = /^\d+\.\d+$/;
 /** @param {unknown} value */
 function version(value) {
-  if (value !== XEIP_VERSION) throw new TypeError("unsupported XEIP version");
+  if (typeof value !== "string") throw new TypeError("xeip must be a string");
+  if (!versionPattern.test(value)) throw new TypeError("malformed xeip version");
+  if (!XEIP_SUPPORTED_VERSIONS.includes(value)) throw new TypeError("unsupported version");
 }
 /** @param {unknown} value @param {readonly string[]} allowed @param {string} label */
 function member(value, allowed, label) {
