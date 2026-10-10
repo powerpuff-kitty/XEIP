@@ -112,7 +112,7 @@ human / AI agent / machine / service
 | Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in first slice; checksummed append-only log with persisted sequence; no multi-process locking/encryption |
 | Opt-in request-rate and connection/subscription limits (`xeip.local-limits/0.1`) | Local prototype; per-principal token bucket with `Retry-After`, not production rate limiting |
 | Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder/decoder in JS and Rust (`tools/derive-keyid.mjs`, `crates/xeip-identity`) with shared vectors; signing/verification pending |
-| Detached Ed25519 signed envelopes | Reference sign/verify in JS + Rust over shared vectors; verifier-side only, not wired into the relay |
+| Detached Ed25519 signed envelopes | Sign/verify in JS, Rust and TypeScript over shared vectors; opt-in relay enforcement (`createRelay({ signatures: {} })`) rejects spoofed/unsigned |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |
