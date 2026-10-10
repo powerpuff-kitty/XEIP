@@ -35,6 +35,11 @@ use std::fmt;
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde_json::{json, Map, Value};
+// SHA-256 for the chain `previous` link digest. `sha2 0.10.9` is already a
+// transitive dependency of the pinned `ed25519-dalek` and is the crate named by
+// ADR 0007; it is used directly here so the digest matches
+// `tools/key-document.mjs` byte for byte.
+use sha2::{Digest, Sha256};
 
 /// Multicodec code `0xed01` (`ed25519-pub`) written as an unsigned LEB128
 /// varint. `0xed01` is greater than `0x7f`, so the varint needs two bytes.
@@ -1021,10 +1026,13 @@ pub fn verify_signed_envelope_text(text: &str) -> Result<(), SignedEnvelopeError
 // ---------------------------------------------------------------------------
 // Signed key documents: `xeip.keydoc/0.1`
 //
-// The first testable slice of `spec/identity-keys.md` / ADR 0010. This is
-// single-document verification only: chain, rollback and trust-store
-// resolution are deliberately out of scope. The grammar and the stable reasons
-// are byte-identical to `tools/key-document.mjs` and the shared vectors under
+// The testable slice of `spec/identity-keys.md` / ADR 0010. This covers
+// single-document verification and, on top of it, per-entity chain verification
+// (`KeyDocumentChain`): genesis, `generation`/`previous` linking (the SHA-256 of
+// the full signed predecessor), rollback rejection, fork/equivocation detection
+// and gap detection. Trust-store resolution and revocation remain out of scope.
+// The grammar and the stable reasons are byte-identical to
+// `tools/key-document.mjs` and the shared vectors under
 // `conformance/fixtures/identity-keydoc/`.
 // ---------------------------------------------------------------------------
 
@@ -1045,7 +1053,12 @@ const KEYDOC_FIELDS: [&str; 9] = [
     "signatures",
 ];
 
-/// Reasons a signed key document can be rejected by [`verify_key_document`].
+/// Reasons a signed key document can be rejected by [`verify_key_document`] or
+/// [`KeyDocumentChain::ingest`].
+///
+/// The first seven variants are the single-document reasons; the last three
+/// (`Rollback`, `Fork`, `ChainGap`) are produced only by chain verification,
+/// after the candidate has already passed single-document verification.
 ///
 /// The [`fmt::Display`] spelling of each variant matches the stable `reason`
 /// strings of the JavaScript reference (`tools/key-document.mjs`), so
@@ -1069,6 +1082,15 @@ pub enum KeyDocumentError {
     WeakKey,
     /// The canonical bytes do not verify under any listed root key.
     SignatureMismatch,
+    /// Chain only: the candidate generation is less than or equal to the
+    /// highest generation already accepted for the entity.
+    Rollback,
+    /// Chain only: a distinct document at the accepted generation
+    /// (equivocation / double-signing).
+    Fork,
+    /// Chain only: a generation jump (`generation > prev + 1`) or a `previous`
+    /// that does not match the accepted document's digest.
+    ChainGap,
 }
 
 impl fmt::Display for KeyDocumentError {
@@ -1081,6 +1103,9 @@ impl fmt::Display for KeyDocumentError {
             Self::UnknownSigner => "unknown signer",
             Self::WeakKey => "weak key",
             Self::SignatureMismatch => "signature mismatch",
+            Self::Rollback => "rollback",
+            Self::Fork => "fork",
+            Self::ChainGap => "chain gap",
         };
         f.write_str(reason)
     }
@@ -1342,6 +1367,138 @@ pub fn verify_key_document(document: &Value) -> Result<(), KeyDocumentError> {
 pub fn verify_key_document_text(text: &str) -> Result<(), KeyDocumentError> {
     let document = strict_parse(text).map_err(|_| KeyDocumentError::MalformedDocument)?;
     verify_key_document(&document)
+}
+
+/// `previous` link digest: lowercase hex SHA-256 of the RFC 8785 canonical form
+/// of `document` **including** its `signatures` member, so each generation
+/// commits to the exact signed predecessor. This is the definition of
+/// `previous` in [`KeyDocumentChain`] and in `spec/plans/identity-keydoc.md`, and
+/// it matches `keyDocumentChainDigest` in `tools/key-document.mjs`.
+///
+/// It is deliberately different from the single-document signing-input digest
+/// (which excludes `signatures`): a chain links signed documents, not unsigned
+/// drafts.
+pub fn key_document_chain_digest(document: &Value) -> String {
+    let canonical = canonicalize_json(document);
+    hex_lower(&Sha256::digest(canonical.as_bytes()))
+}
+
+/// Lowercase hex encoding. This is a base conversion, not a cryptographic
+/// primitive, and exists only so the chain digest can be rendered without a
+/// `hex` dependency.
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(char::from_digit(u32::from(byte >> 4), 16).expect("a nibble is a hex digit"));
+        out.push(char::from_digit(u32::from(byte & 0x0f), 16).expect("a nibble is a hex digit"));
+    }
+    out
+}
+
+/// The highest key document accepted for an entity, kept only as the state a
+/// [`KeyDocumentChain`] needs to enforce the next link.
+#[derive(Debug, Clone)]
+struct AcceptedKeyDocument {
+    generation: i64,
+    digest: String,
+}
+
+/// Stateful, per-`entity` chain verifier for `xeip.keydoc/0.1`.
+///
+/// [`KeyDocumentChain::ingest`] first runs [`verify_key_document`] on the
+/// candidate (so every structural and signature rule still applies) and only
+/// then enforces the chain rules against the highest document already accepted
+/// for that entity. It never panics for a well-formed call:
+///
+/// - a genesis document (`generation == 1`, no `previous`) starts the chain;
+/// - a successor must have `generation == prev.generation + 1` and
+///   `previous == key_document_chain_digest(prev)` (the full signed
+///   predecessor);
+/// - a candidate whose `generation <=` the accepted generation is
+///   [`KeyDocumentError::Rollback`], except that a *distinct* document at the
+///   accepted generation is [`KeyDocumentError::Fork`] (equivocation);
+/// - a generation jump (`generation > prev.generation + 1`) or a `previous` that
+///   does not match the accepted document is [`KeyDocumentError::ChainGap`].
+///
+/// Re-ingesting the exact accepted document is rejected as
+/// [`KeyDocumentError::Rollback`] (it is not newer); a caller that needs
+/// at-least-once delivery must treat `rollback` as "already known". Trust-store
+/// resolution and revocation stay out of scope.
+#[derive(Debug, Default)]
+pub struct KeyDocumentChain {
+    entities: std::collections::HashMap<String, AcceptedKeyDocument>,
+}
+
+impl KeyDocumentChain {
+    /// Create an empty chain with no accepted documents.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Verify and add `document` to the chain for its `entity`.
+    ///
+    /// This accepts a pre-parsed value and therefore skips the strict pre-parse
+    /// gate; use [`KeyDocumentChain::ingest_text`] for wire bytes.
+    pub fn ingest(&mut self, document: &Value) -> Result<(), KeyDocumentError> {
+        verify_key_document(document)?;
+
+        let object = document
+            .as_object()
+            .expect("verify_key_document accepts only objects");
+        let entity = object["entity"]
+            .as_str()
+            .expect("verify_key_document guarantees an entity string")
+            .to_string();
+        // Single-document verification guarantees an integer `>= 1` within the
+        // safe range, so the cast is lossless.
+        let generation = object["generation"]
+            .as_f64()
+            .expect("verify_key_document guarantees a numeric generation")
+            as i64;
+        let previous = object.get("previous").and_then(Value::as_str);
+
+        match self.entities.get(&entity) {
+            None => {
+                if generation != 1 || previous.is_some() {
+                    return Err(KeyDocumentError::ChainGap);
+                }
+                self.accept(entity, document, generation);
+                Ok(())
+            }
+            Some(accepted) => {
+                if generation < accepted.generation {
+                    return Err(KeyDocumentError::Rollback);
+                }
+                if generation == accepted.generation {
+                    if key_document_chain_digest(document) == accepted.digest {
+                        return Err(KeyDocumentError::Rollback);
+                    }
+                    return Err(KeyDocumentError::Fork);
+                }
+                if generation != accepted.generation + 1 {
+                    return Err(KeyDocumentError::ChainGap);
+                }
+                if previous != Some(accepted.digest.as_str()) {
+                    return Err(KeyDocumentError::ChainGap);
+                }
+                self.accept(entity, document, generation);
+                Ok(())
+            }
+        }
+    }
+
+    /// Verify and add key-document *JSON text*: strict-parse and then run
+    /// [`KeyDocumentChain::ingest`].
+    pub fn ingest_text(&mut self, text: &str) -> Result<(), KeyDocumentError> {
+        let document = strict_parse(text).map_err(|_| KeyDocumentError::MalformedDocument)?;
+        self.ingest(&document)
+    }
+
+    fn accept(&mut self, entity: String, document: &Value, generation: i64) {
+        let digest = key_document_chain_digest(document);
+        self.entities
+            .insert(entity, AcceptedKeyDocument { generation, digest });
+    }
 }
 
 #[cfg(test)]

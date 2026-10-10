@@ -1,0 +1,275 @@
+{
+  "documents": {
+    "genesis.gen1": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+        }
+      ]
+    },
+    "rotation.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "mcKtltQqz_qSau1f-XDk07Pw0y9-JzLx_Uo0OR3eVq6vuISR832ImNXbGE01lpzw4ANJpXE5jAVYpetD31_JAw"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "KIS5c-he2mWTXA3DyDouW_i5EaVIrM1q7bJTJQB_wxbtYT02zBxYzU1gJV50vy6-m8Wx35rR1OWJRwuLw1CKCA"
+        }
+      ]
+    },
+    "rotation.gen3": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 3,
+      "issuedAt": "2026-10-12T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "dd4ad5cdf12127770f96220c24cbb7208fe57e2a8b1b5f94b216e28984efb152",
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "EozFe3bif1vNY5TTlNZMFhzX1P8dJ2288gRcnEB2Z--5M5tTk84vZLFN8PUczKvPWYzYYoW0_b61KXUKz7yyAA"
+        }
+      ]
+    },
+    "fork.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T12:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+      ],
+      "devices": [],
+      "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "paGU2WkfttOLZBNGCz8d3afcozanemATjTsh2dJAmpBXr8s8c48Ye1mqih1B4pkjmNE8mXu6-hpfYpJJXc0_Cw"
+        }
+      ]
+    },
+    "gap.gen3": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 3,
+      "issuedAt": "2026-10-13T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "8jHd70cGaHF7IlxWFAeJuqbFgz8HIPWcZ2AyagzscC3gMNwwZ4jIru5NLvsgS252iAB0krWB5nMk9RuYqVS3Bw"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "f31KWvpFKyhMrhdBTt2KEcUIGMcy2W9QJSKf2KmP3zZK8-MC72KJro6co7I_6VmRLbGMNjNDb1jrx0w0_3VkBw"
+        }
+      ]
+    },
+    "bad-signature.gen2": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 2,
+      "issuedAt": "2026-10-11T00:00:00Z",
+      "roots": [
+        "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [
+        "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+      ],
+      "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d",
+      "signatures": [
+        {
+          "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "sig": "AcKtltQqz_qSau1f-XDk07Pw0y9-JzLx_Uo0OR3eVq6vuISR832ImNXbGE01lpzw4ANJpXE5jAVYpetD31_JAw"
+        },
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "AIS5c-he2mWTXA3DyDouW_i5EaVIrM1q7bJTJQB_wxbtYT02zBxYzU1gJV50vy6-m8Wx35rR1OWJRwuLw1CKCA"
+        }
+      ]
+    }
+  },
+  "chains": [
+    {
+      "name": "chain.valid",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true
+        },
+        {
+          "name": "rotation.gen3",
+          "document": "rotation.gen3",
+          "valid": true
+        }
+      ]
+    },
+    {
+      "name": "chain.rollback",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true
+        },
+        {
+          "name": "genesis.gen1-again",
+          "document": "genesis.gen1",
+          "valid": false,
+          "reason": "rollback"
+        },
+        {
+          "name": "rotation.gen2-again",
+          "document": "rotation.gen2",
+          "valid": false,
+          "reason": "rollback"
+        }
+      ]
+    },
+    {
+      "name": "chain.fork",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true
+        },
+        {
+          "name": "fork.gen2",
+          "document": "fork.gen2",
+          "valid": false,
+          "reason": "fork"
+        },
+        {
+          "name": "rotation.gen3",
+          "document": "rotation.gen3",
+          "valid": true
+        }
+      ]
+    },
+    {
+      "name": "chain.gap-jump",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "gap.gen3",
+          "document": "gap.gen3",
+          "valid": false,
+          "reason": "chain gap"
+        }
+      ]
+    },
+    {
+      "name": "chain.gap-previous",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": true
+        },
+        {
+          "name": "gap.gen3",
+          "document": "gap.gen3",
+          "valid": false,
+          "reason": "chain gap"
+        }
+      ]
+    },
+    {
+      "name": "chain.no-genesis",
+      "steps": [
+        {
+          "name": "rotation.gen2",
+          "document": "rotation.gen2",
+          "valid": false,
+          "reason": "chain gap"
+        }
+      ]
+    },
+    {
+      "name": "chain.single-document-failure",
+      "steps": [
+        {
+          "name": "genesis.gen1",
+          "document": "genesis.gen1",
+          "valid": true
+        },
+        {
+          "name": "bad-signature.gen2",
+          "document": "bad-signature.gen2",
+          "valid": false,
+          "reason": "signature mismatch"
+        }
+      ]
+    }
+  ]
+}

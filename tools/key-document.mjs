@@ -80,6 +80,11 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 /**
  * Structural reasons a key document can be rejected. The `reason` strings are
  * the stable cross-language contract shared with `crates/xeip-identity`.
+ *
+ * The final three reasons are produced only by chain verification
+ * ({@link KeyDocumentChain}); every document must first pass single-document
+ * verification, so a chain reason is only ever returned after the structural
+ * reasons above have been cleared.
  */
 export const KEYDOC_REASONS = Object.freeze({
   MALFORMED: "malformed document",
@@ -89,6 +94,9 @@ export const KEYDOC_REASONS = Object.freeze({
   UNKNOWN_SIGNER: "unknown signer",
   WEAK_KEY: "weak key",
   SIGNATURE_MISMATCH: "signature mismatch",
+  ROLLBACK: "rollback",
+  FORK: "fork",
+  CHAIN_GAP: "chain gap",
 });
 
 function isPlainObject(value) {
@@ -133,13 +141,32 @@ export function keyDocumentSigningInput(document) {
 }
 
 /**
- * `previous` digest: lowercase hex SHA-256 of the canonical signing input of
- * `document` (the document without `signatures`). Chain verification is out of
- * scope for this slice; this helper exists so a caller can produce the
- * `previous` link a later generation would carry.
+ * Signing-input digest: lowercase hex SHA-256 of the canonical signing input of
+ * `document` (the document **without** `signatures`). This is the digest used by
+ * the standalone single-document rotation vector; it deliberately excludes the
+ * signatures so a dual-signed document and an unsigned draft share a digest.
+ *
+ * Chain verification commits to the *signed* predecessor instead: use
+ * {@link keyDocumentChainDigest}, which hashes the whole document including
+ * `signatures`. A `previous` link in a verified chain is a
+ * {@link keyDocumentChainDigest} value, never this one.
  */
 export function keyDocumentDigest(document) {
   return createHash("sha256").update(keyDocumentSigningInput(document), "utf8").digest("hex");
+}
+
+/**
+ * `previous` link digest for chain verification: lowercase hex SHA-256 of the
+ * RFC 8785 canonical form of `document` **including** its `signatures` member.
+ *
+ * A successor document carries this value in `previous`, so each generation
+ * commits to the exact signed predecessor (including its signature set). This is
+ * the definition of `previous` in [`KeyDocumentChain`] and in
+ * `spec/plans/identity-keydoc.md`.
+ */
+export function keyDocumentChainDigest(document) {
+  if (!isPlainObject(document)) throw new TypeError("key document must be an object");
+  return createHash("sha256").update(canonicalize(document), "utf8").digest("hex");
 }
 
 /**
@@ -283,6 +310,87 @@ export function verifyKeyDocument(document) {
 
   if (!sawRootSigner) return { valid: false, reason: KEYDOC_REASONS.UNKNOWN_SIGNER };
   return { valid: false, reason: KEYDOC_REASONS.SIGNATURE_MISMATCH };
+}
+
+/**
+ * Stateful, per-`entity` chain verifier for `xeip.keydoc/0.1`.
+ *
+ * `ingest` first runs {@link verifyKeyDocument} on the candidate (so every
+ * structural and signature rule still applies) and only then enforces the chain
+ * rules against the highest document already accepted for that entity. It never
+ * throws for a well-formed call and returns `{ valid: true }` or
+ * `{ valid: false, reason }`:
+ *
+ * - a genesis document (`generation == 1`, no `previous`) starts the chain;
+ * - a successor must have `generation == prev.generation + 1` and
+ *   `previous == keyDocumentChainDigest(prev)` (the full signed predecessor);
+ * - a candidate whose `generation <=` the accepted generation is `rollback`,
+ *   except that a *distinct* document at the accepted generation is `fork`
+ *   (equivocation);
+ * - a generation jump (`generation > prev.generation + 1`) or a `previous` that
+ *   does not match the accepted document is `chain gap`.
+ *
+ * Acceptance is idempotent only in the sense that re-ingesting the exact accepted
+ * document is rejected as `rollback` (it is not newer): a caller that needs
+ * at-least-once delivery must treat `rollback` as "already known", not as an
+ * error. Trust-store resolution and revocation stay out of scope.
+ */
+export class KeyDocumentChain {
+  #accepted = new Map();
+
+  /**
+   * Verify and add `document` (a parsed object or JSON text) to the chain for
+   * its `entity`.
+   *
+   * @returns {{ valid: true } | { valid: false, reason: string }}
+   */
+  ingest(document) {
+    let value = document;
+    if (typeof document === "string") {
+      try {
+        value = strictParse(document);
+      } catch {
+        return malformed();
+      }
+    }
+
+    const single = verifyKeyDocument(value);
+    if (!single.valid) return single;
+
+    const accepted = this.#accepted.get(value.entity);
+    if (accepted === undefined) {
+      if (value.generation !== 1 || value.previous !== undefined) {
+        return { valid: false, reason: KEYDOC_REASONS.CHAIN_GAP };
+      }
+      this.#accept(value);
+      return { valid: true };
+    }
+
+    if (value.generation < accepted.generation) {
+      return { valid: false, reason: KEYDOC_REASONS.ROLLBACK };
+    }
+    if (value.generation === accepted.generation) {
+      if (keyDocumentChainDigest(value) === accepted.digest) {
+        return { valid: false, reason: KEYDOC_REASONS.ROLLBACK };
+      }
+      return { valid: false, reason: KEYDOC_REASONS.FORK };
+    }
+    if (value.generation !== accepted.generation + 1) {
+      return { valid: false, reason: KEYDOC_REASONS.CHAIN_GAP };
+    }
+    if (value.previous !== accepted.digest) {
+      return { valid: false, reason: KEYDOC_REASONS.CHAIN_GAP };
+    }
+    this.#accept(value);
+    return { valid: true };
+  }
+
+  #accept(value) {
+    this.#accepted.set(value.entity, {
+      generation: value.generation,
+      digest: keyDocumentChainDigest(value),
+    });
+  }
 }
 
 function printUsage() {

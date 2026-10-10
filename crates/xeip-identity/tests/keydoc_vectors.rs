@@ -21,7 +21,8 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::Value;
 use xeip_identity::{
-    sign_key_document, verify_key_document, verify_key_document_text, ED25519_SEED_LENGTH,
+    key_document_chain_digest, sign_key_document, verify_key_document, verify_key_document_text,
+    KeyDocumentChain, ED25519_SEED_LENGTH,
 };
 
 /// Deterministic RFC 8032 seeds shared with the JavaScript reference and the
@@ -44,6 +45,11 @@ struct Vector {
 fn vectors_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../conformance/fixtures/identity-keydoc/keydoc.vectors.json")
+}
+
+fn chain_vectors_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/fixtures/identity-keydoc/keydoc-chain.vectors.json")
 }
 
 fn load_vectors() -> Vec<Vector> {
@@ -197,4 +203,118 @@ fn sign_reproduces_the_committed_genesis_and_rotation() {
         "dual-signing must reproduce the committed rotation document"
     );
     assert_eq!(verify_key_document(&re_signed_rotation), Ok(()));
+}
+
+/// A chain-vector file: a shared registry of documents plus ordered chains whose
+/// every step carries the expected `valid`/`reason` result.
+#[derive(Debug, Deserialize)]
+struct ChainFile {
+    documents: std::collections::HashMap<String, Value>,
+    chains: Vec<ChainVector>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChainVector {
+    name: String,
+    steps: Vec<ChainStep>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChainStep {
+    name: String,
+    document: String,
+    valid: bool,
+    reason: Option<String>,
+}
+
+fn load_chain_file() -> ChainFile {
+    let raw = std::fs::read_to_string(chain_vectors_path()).expect("read chain vectors");
+    serde_json::from_str(&raw).expect("parse chain vectors")
+}
+
+#[test]
+fn chain_digest_commits_to_the_signed_predecessor() {
+    let file = load_chain_file();
+    let genesis = &file.documents["genesis.gen1"];
+    let rotation = &file.documents["rotation.gen2"];
+
+    assert_eq!(
+        rotation["previous"]
+            .as_str()
+            .expect("rotation carries previous"),
+        key_document_chain_digest(genesis),
+        "`previous` is the chain digest of the signed predecessor"
+    );
+
+    // The digest covers `signatures`: dropping them changes the digest.
+    let mut without_signatures = genesis.clone();
+    without_signatures
+        .as_object_mut()
+        .expect("genesis is an object")
+        .remove("signatures");
+    assert_ne!(
+        key_document_chain_digest(genesis),
+        key_document_chain_digest(&without_signatures)
+    );
+}
+
+#[test]
+fn every_chain_vector_yields_its_documented_per_step_result() {
+    let file = load_chain_file();
+    assert!(
+        file.chains.len() >= 4,
+        "at least four chains are required (valid, rollback, fork, gap)"
+    );
+
+    let mut names = HashSet::new();
+    let mut reasons = HashSet::new();
+    let mut valid_steps = 0usize;
+
+    for chain in &file.chains {
+        assert!(
+            names.insert(chain.name.clone()),
+            "duplicate chain name: {}",
+            chain.name
+        );
+        let mut verifier = KeyDocumentChain::new();
+        for step in &chain.steps {
+            let document = file
+                .documents
+                .get(&step.document)
+                .unwrap_or_else(|| panic!("{}/{}: unknown document", chain.name, step.name));
+            let result = verifier.ingest(document);
+            if step.valid {
+                assert_eq!(
+                    result,
+                    Ok(()),
+                    "step must verify: {}/{}",
+                    chain.name,
+                    step.name
+                );
+                valid_steps += 1;
+            } else {
+                let expected = step
+                    .reason
+                    .as_deref()
+                    .expect("a negative step carries a reason");
+                let error = result.expect_err("a negative step must be rejected");
+                assert_eq!(
+                    error.to_string(),
+                    expected,
+                    "reason mismatch: {}/{}",
+                    chain.name,
+                    step.name
+                );
+                reasons.insert(expected.to_string());
+            }
+        }
+    }
+
+    assert!(
+        valid_steps >= 3,
+        "the valid chain accepts its genesis and rotations"
+    );
+    for reason in ["rollback", "fork", "chain gap"] {
+        assert!(reasons.contains(reason), "missing chain reason: {reason}");
+    }
 }

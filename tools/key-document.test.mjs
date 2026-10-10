@@ -8,7 +8,10 @@ import { join } from "node:path";
 import { encodeKeyId, entityUrn } from "./derive-keyid.mjs";
 import { ed25519PrivateKeyFromSeed } from "./signed-envelope.mjs";
 import {
+  KEYDOC_REASONS,
   KEYDOC_VERSION,
+  KeyDocumentChain,
+  keyDocumentChainDigest,
   keyDocumentDigest,
   keyDocumentSigningInput,
   signKeyDocument,
@@ -30,6 +33,12 @@ const VECTORS_URL = new URL(
   import.meta.url,
 );
 const vectors = JSON.parse(readFileSync(VECTORS_URL, "utf8"));
+
+const CHAIN_VECTORS_URL = new URL(
+  "../conformance/fixtures/identity-keydoc/keydoc-chain.vectors.json",
+  import.meta.url,
+);
+const chainVectors = JSON.parse(readFileSync(CHAIN_VECTORS_URL, "utf8"));
 
 const byName = (name) => {
   const vector = vectors.find((candidate) => candidate.name === name);
@@ -239,6 +248,102 @@ test("entity binding ties the document to the genesis key", () => {
 
 test("signKeyDocument rejects a malformed signer kid", () => {
   assert.throws(() => signKeyDocument({}, { privateKey: hexBytes(SEED_A), kid: "not-a-kid" }));
+});
+
+test("keyDocumentChainDigest commits to the full signed document", () => {
+  const genesis = byName("genesis.valid").document;
+  const digest = keyDocumentChainDigest(genesis);
+  assert.match(digest, /^[0-9a-f]{64}$/);
+  // Unlike the signing-input digest, the chain digest includes `signatures`.
+  assert.notEqual(digest, keyDocumentDigest(genesis));
+  const withoutSignatures = structuredClone(genesis);
+  delete withoutSignatures.signatures;
+  assert.notEqual(digest, keyDocumentChainDigest(withoutSignatures));
+  assert.equal(digest, keyDocumentChainDigest(structuredClone(genesis)));
+});
+
+test("every chain vector yields its documented per-step result", () => {
+  assert.ok(chainVectors.documents, "the chain file carries a documents registry");
+  assert.ok(Array.isArray(chainVectors.chains), "the chain file carries chains");
+  assert.ok(chainVectors.chains.length >= 4, "at least four chains are required");
+
+  const names = new Set();
+  const reasons = new Set();
+  let validSteps = 0;
+  for (const chain of chainVectors.chains) {
+    assert.ok(!names.has(chain.name), `duplicate chain name: ${chain.name}`);
+    names.add(chain.name);
+    const verifier = new KeyDocumentChain();
+    for (const step of chain.steps) {
+      assert.ok(
+        Object.hasOwn(chainVectors.documents, step.document),
+        `${chain.name}/${step.name}: unknown document ${step.document}`,
+      );
+      const document = chainVectors.documents[step.document];
+      const result = verifier.ingest(document);
+      if (step.valid === true) {
+        assert.deepEqual(result, { valid: true }, `${chain.name}/${step.name}`);
+        validSteps += 1;
+      } else {
+        assert.equal(result.valid, false, `${chain.name}/${step.name}`);
+        assert.equal(result.reason, step.reason, `${chain.name}/${step.name}`);
+        reasons.add(result.reason);
+      }
+    }
+  }
+
+  assert.ok(validSteps >= 3, "the valid chain must accept its genesis and rotations");
+  for (const reason of ["rollback", "fork", "chain gap"]) {
+    assert.ok(reasons.has(reason), `a chain vector with reason ${reason} is required`);
+  }
+});
+
+test("the chain commits to the signed predecessor", () => {
+  const genesis = chainVectors.documents["genesis.gen1"];
+  const rotation = chainVectors.documents["rotation.gen2"];
+  assert.equal(rotation.previous, keyDocumentChainDigest(genesis));
+  const verifier = new KeyDocumentChain();
+  assert.deepEqual(verifier.ingest(genesis), { valid: true });
+  assert.deepEqual(verifier.ingest(rotation), { valid: true });
+});
+
+test("KeyDocumentChain rejects a non-genesis first document as a gap", () => {
+  const rotation = chainVectors.documents["rotation.gen2"];
+  const verifier = new KeyDocumentChain();
+  assert.deepEqual(verifier.ingest(rotation), { valid: false, reason: "chain gap" });
+});
+
+test("KeyDocumentChain tracks per-entity state independently", () => {
+  const genesisA = chainVectors.documents["genesis.gen1"];
+  const rotationA = chainVectors.documents["rotation.gen2"];
+  const genesisB = signKeyDocument(
+    {
+      xeip: KEYDOC_VERSION,
+      entity: entityUrn(kidB),
+      genesis: kidB,
+      generation: 1,
+      issuedAt: "2026-10-10T00:00:00Z",
+      roots: [kidB],
+      devices: [],
+    },
+    { privateKey: hexBytes(SEED_B), kid: kidB },
+  );
+  const verifier = new KeyDocumentChain();
+  assert.deepEqual(verifier.ingest(genesisA), { valid: true });
+  assert.deepEqual(verifier.ingest(rotationA), { valid: true });
+  assert.deepEqual(verifier.ingest(genesisB), { valid: true });
+  // B's genesis does not advance or reset A's chain.
+  assert.deepEqual(verifier.ingest(rotationA), { valid: false, reason: "rollback" });
+});
+
+test("KeyDocumentChain reuses single-document verification first", () => {
+  const verifier = new KeyDocumentChain();
+  const bad = byName("doc.bad-signature").document;
+  assert.deepEqual(verifier.ingest(bad), { valid: false, reason: "signature mismatch" });
+  assert.deepEqual(verifier.ingest("{ not json"), {
+    valid: false,
+    reason: KEYDOC_REASONS.MALFORMED,
+  });
 });
 
 test("CLI verify reports the structured result and exits by validity", () => {

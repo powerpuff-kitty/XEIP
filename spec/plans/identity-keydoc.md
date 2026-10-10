@@ -1,15 +1,19 @@
 # Identity key document plan and record
 
-Scope: implement the **first testable slice** of the identity key-lifecycle
+Scope: implement the signed **key-document** slice of the identity key-lifecycle
 design in [../identity-keys.md](../identity-keys.md) and
-[ADR 0010](../decisions/0010-identity-key-lifecycle.md): a *signed key document*
-and *single-document verification* in JavaScript and Rust, with shared vectors.
-This is a deliberately narrow slice. Chain verification, rollback rejection,
-trust-store resolution, revocation/status, device rotation statements and
-bounded overlap are **not** implemented here and remain deferred. It reuses the
+[ADR 0010](../decisions/0010-identity-key-lifecycle.md) in JavaScript and Rust,
+with shared vectors. This covers *single-document verification* and, on top of
+it, *per-entity chain verification*: genesis anchoring, `generation`/`previous`
+linking, rollback rejection, fork/equivocation detection and gap detection.
+Trust-store resolution, revocation/status documents, device-rotation statements
+and bounded `overlapUntil` are still deferred (see below). It reuses the
 implemented key-ID codec (`tools/derive-keyid.mjs`, `crates/xeip-identity`) and
 the RFC 8785 + Ed25519 signing primitives of the signed-envelope slice; it adds
-no dependency and no hand-written primitive.
+no hand-written primitive. (`sha2 0.10.9`, already a transitive dependency of
+the pinned `ed25519-dalek` and the version named by ADR 0007, is now a direct
+dependency of `crates/xeip-identity` for the chain digest; no new crate version
+enters the lockfile.)
 
 ## Fixed document format (`xeip.keydoc/0.1`)
 
@@ -34,11 +38,15 @@ no dependency and no hand-written primitive.
 - `generation` is an integer `>= 1`.
 - `issuedAt` is an RFC 3339 instant in UTC (`...Z`, optional fractional second);
   offsets are rejected.
-- `previous` is optional. When present it is 64 lowercase hex characters (the
-  SHA-256 digest of the previous document's canonical signing input, produced by
-  the JS `keyDocumentDigest` helper when generating a vector). It is **recorded,
-  never chased** in this slice, and no chain digest is recomputed during
-  verification.
+- `previous` is optional. When present it is 64 lowercase hex characters: the
+  lowercase hex SHA-256 of the RFC 8785 canonical form of the predecessor key
+  document **including** its `signatures` member (`keyDocumentChainDigest` in JS,
+  `key_document_chain_digest` in Rust). A chain therefore commits to the *signed*
+  predecessor, not merely to its signing input. It is absent on the genesis
+  (`generation == 1`) document and required on every later generation.
+  (The single-document `rotation.dual-signed` vector carries the older
+  signing-input digest of its predecessor; it is only ever verified as a
+  standalone document, never chased, so it is unaffected.)
 - `roots` and `devices` are arrays of canonical key-ids.
 - `signatures` is the only member excluded from the signing input.
 
@@ -82,6 +90,36 @@ signature), so an unsigned or only-device-signed document fails closed. The
 parser builds objects with a null prototype / checked duplicate detection, and
 Ed25519 verification uses `verify_strict`, matching the signed-envelope slice.
 
+## Chain verification
+
+`KeyDocumentChain` (JS `tools/key-document.mjs`, Rust
+`crates/xeip-identity`) keeps, per `entity`, the highest key document it has
+accepted (its `generation` and its full-document digest). `ingest` first runs the
+whole single-document rule set above and only then applies the chain rules, so a
+structural or signature failure is always reported with its single-document
+reason before any chain reason. It never throws and returns `{ valid: true }` /
+`{ valid: false, reason }` (Rust `Ok(())` / `Err(KeyDocumentError)`):
+
+| Case | Condition | Rejection reason |
+| --- | --- | --- |
+| Genesis | no accepted document for the entity and `generation == 1`, no `previous` | *accepted* |
+| No genesis | no accepted document and (`generation != 1` or `previous` present) | `chain gap` |
+| Successor | `generation == prev.generation + 1` and `previous == digest(prev)` | *accepted* |
+| Rollback | `generation <` the accepted generation | `rollback` |
+| Rollback | `generation ==` the accepted generation and the same digest | `rollback` |
+| Fork | `generation ==` the accepted generation and a different digest | `fork` |
+| Gap | `generation > prev.generation + 1` | `chain gap` |
+| Gap | `generation == prev.generation + 1` but `previous != digest(prev)` | `chain gap` |
+
+The digest compared against `previous` is the **full signed predecessor**
+including `signatures` (see `previous` above). Re-ingesting the exact accepted
+document is `rollback` (it is not newer); a caller that needs at-least-once
+delivery treats `rollback` as "already known". Fork detection is only as strong
+as what a verifier has already accepted for that `entity`: it rejects a distinct
+document at the accepted generation, not a fork the verifier has never seen.
+Trust-store resolution and revocation are out of scope, so the chain has no
+notion of a pinned anchor, `max_generation` or a conflict store.
+
 ## Cross-language vectors
 
 `conformance/fixtures/identity-keydoc/keydoc.vectors.json` is generated
@@ -104,23 +142,48 @@ the Rust strict-parse entry point. Both the JS test and the Rust test re-sign
 the positive documents from the reference seeds and require byte-identical
 signatures, proving identical signing input across languages.
 
+Chain vectors live beside them in
+`conformance/fixtures/identity-keydoc/keydoc-chain.vectors.json`, generated
+deterministically from the same seed plus the successor/device seeds. The file
+has a shared `documents` registry and a list of `chains`, each an ordered list of
+`{ name, document, valid, reason? }` steps consumed by both
+`tools/key-document.test.mjs` and `crates/xeip-identity/tests/keydoc_vectors.rs`:
+
+- `chain.valid` — genesis (generation 1) → rotation (generation 2, dual-signed)
+  → rotation (generation 3);
+- `chain.rollback` — re-ingesting an older or already-accepted generation;
+- `chain.fork` — a distinct, single-document-valid generation-2 document, after
+  which the accepted branch continues (generation 3 still verifies);
+- `chain.gap-jump` / `chain.gap-previous` — a generation jump and an exact
+  successor whose `previous` does not match the accepted digest;
+- `chain.no-genesis` — a non-genesis first document;
+- `chain.single-document-failure` — an invalid signature, proving the
+  single-document check runs first.
+
+The existing single-document `keydoc.vectors.json` is unchanged and still carries
+its own positive and negative cases.
+
 ## Deferred (explicitly out of scope)
 
-- Chain verification: `previous` digest matching, `generation == prev + 1`,
-  per-entity rollback rejection, fork/equivocation detection.
 - Trust roots: pinned anchor, bounded TOFU, inline bootstrap, `max_generation`,
-  pinned digests; resolving a `kid` to a trusted document.
-- Rotation semantics: retiring/successor signature rules, pre-endorsed
-  successors, bounded `overlapUntil`, post-overlap rejection.
+  pinned digests; resolving a `kid` to a trusted document. Chain verification
+  here is stateful but anchor-less: the caller decides which genesis to start
+  from.
+- Rotation semantics beyond generation/digest linking: the retiring/successor
+  signature rules of `spec/identity-keys.md` §5.2, pre-endorsed successors,
+  bounded `overlapUntil`, post-overlap rejection and `issuedAt` monotonicity.
 - Revocation/status documents, serial rollback, staleness, live-stream effects.
 - Device rotation statements and device validity windows (`notBefore`/
   `notAfter`); endorsed devices are validated structurally only.
+- Durable fork evidence: a conflict store that remembers forks a verifier has
+  seen, beyond rejecting a distinct document at the accepted generation.
 - Short-lived credentials and recovery.
 
 ## Verification (all passing)
 
-- `node --test tools/key-document.test.mjs` — 11 tests.
+- `node --test tools/key-document.test.mjs` — 17 tests (11 single-document, 6
+  chain).
 - `npm run validate:fixtures` — key-document vectors included.
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
-  `cargo test --workspace --all-targets --locked`.
+  `cargo test --workspace --all-targets --locked` — 4 `keydoc_vectors` tests.
 - `npm run check:js`.

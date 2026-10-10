@@ -16,6 +16,11 @@ publish = false
 # `rust-version = 1.85`, which breaks the 1.81 MSRV. Signing is deterministic
 # from a 32-byte RFC 8032 seed, so the RNG and allocation are unnecessary.
 ed25519-dalek = { version = "=2.2.0", default-features = false }
+# SHA-256 for the key-document chain `previous` link digest. Already a
+# transitive dependency of the pinned `ed25519-dalek` and the exact version
+# named by ADR 0007 (`=0.10.9`); declaring it directly adds no new crate to the
+# lockfile, only the dependency edge. 0.11 requires Rust 1.85 and is rejected.
+sha2 = "=0.10.9"
 # The public API canonicalizes and verifies `serde_json::Value` envelopes, so
 # serde_json is a runtime dependency (it is also used by the conformance test).
 serde_json = "1.0"
