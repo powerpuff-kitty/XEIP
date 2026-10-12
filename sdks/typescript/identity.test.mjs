@@ -299,3 +299,36 @@ test("strictParse mirrors the reference pre-parse gate", () => {
   assert.throws(() => strictParse("9007199254740992"), /outside the safe range/);
   assert.deepEqual({ ...strictParse('{"a":1}') }, { a: 1 });
 });
+
+test("strictParse preserves long strings across escape and Unicode boundaries", () => {
+  const run = "alpha".repeat(70000);
+  for (const value of [
+    run,
+    run + '"\\\n\t/' + run,
+    run + "😀" + run,
+    "𝄞" + run + "\b\f\r",
+  ]) {
+    assert.equal(strictParse(JSON.stringify(value)), value);
+    assert.equal(
+      Object.keys(strictParse("{" + JSON.stringify(value) + ":1}"))[0],
+      value,
+    );
+  }
+  assert.equal(
+    strictParse('"' + run + "\\uD83D\\uDE00" + run + '"'),
+    run + "😀" + run,
+  );
+  for (const bad of [
+    '"' + run + '\\q"',
+    '"' + run + '\\u00zz"',
+    '"' + run + '\\uD800"',
+    '"' + run + '\\uDC00"',
+    '"' + run + String.fromCharCode(0) + '"',
+    '"' + run + String.fromCharCode(0xd800) + '"',
+    '"' + run + String.fromCharCode(0xdc00) + '"',
+    '"' + run,
+    '"' + run + String.fromCharCode(92),
+    '{"name":1,"na\\u006de":2}',
+  ])
+    assert.throws(() => strictParse(bad));
+});

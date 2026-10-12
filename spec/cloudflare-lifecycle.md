@@ -1,0 +1,38 @@
+# Explicit Cloudflare organization lifecycle
+
+Status: experimental dependency of the deployable Worker, within the approved native exploration. Preserve the single-organization Keycloak workflow and all workload/recovery targets. No deployment or adoption is authorized here.
+
+## Design
+
+The organization owns one `OrganizationService` per live object. It owns one trust adapter, authority, ledger, MCP connector and bounded Fetch handler. `open(storage, configuration)` only reads an existing lifecycle marker; an empty XEIP namespace remains uninitialized, while unexplained prior data or a missing/corrupt completed marker fails closed. Only an explicit owner `initialize(authorityConfiguration)` can create schema/state. Public requests cannot invoke owner operations. The eventual Worker exposes them only through a private service-bound owner entrypoint, not URL routing.
+
+Persist a version-4 lifecycle singleton with immutable runtime configuration, initial public authority configuration, integrity checksum and phase `initializing` → `initialized`. Pin organization, HTTPS origin, gateway, trust freshness and public MCP target definitions including revision/endpoints/resource/issuer/scope/client ID. Secrets are runtime-only and excluded from the marker. Reject runtime drift rather than silently repointing previously approved targets; a future explicit migration must handle such changes. Credential rotation with unchanged public configuration is permitted on a fresh instance.
+
+Initialize validates configuration before mutation, writes/synchronizes the immutable intent, creates empty trust, creates the initial authority, then commits/synchronizes completion. Public actions and readiness remain unavailable until completion; empty trust still denies authorization afterward. Owner retries must supply exactly the same initial authority configuration. Resume can create only the missing component of an `initializing` intent, and must verify any existing component against the recorded bootstrap state. Action/audit rows must remain empty both before loading components and before committing completion. A complete marker never permits missing trust or authority to be recreated. No delete/reset operation is provided. An initialized retry is read-only and cannot overwrite later owner updates. Existing pre-lifecycle data requires a separate explicit migration/adoption decision; never pretend it is a fresh organization.
+
+Owner `refreshTrust(provisioning, {expectedRevision})` accepts a complete signed replacement using the existing verifier/checkpoint history. Owner `updateAuthority(configuration, {expectedRevision})` retains existing expected-revision and pinned identity-domain rules, and may only reference configured MCP target tuples (id/revision/recipient/tools). Invalid input preserves usable state; revisions avoid stale writes. Trust refresh is separate from bootstrap so expired initial status cannot strand a partially initialized organization. Serializing owner mutations avoids interleaved bootstrap/refresh/policy writes; in-flight action guards still observe current authority revisions. A persistence/sync fault quarantines the service and its authority until a fresh verified object instance opens it. Closing prevents any pending operation from reactivating authority.
+
+Readiness requires initialized lifecycle, ready/fresh nonempty trust, usable ledger and authority, and the existing pinned provider readiness probe. Capture and recheck authority revision across the probe. Readiness cannot initialize state or invoke a tool. It does not guarantee MCP reachability or hosted recovery. Public liveness is distinct and remains available when the service is empty or unready. All public actions continue through the signed controller and durable execution claim; final pre-send authorization combines current authority and controller guards with initialized service and healthy ledger checks before and after asynchronous guards. Ledger integrity quarantine blocks any pending effect that has not passed this final boundary. Internal finish is never replaced by retrying an effect.
+
+## Interfaces and limits
+
+`OrganizationService.open(storage, {organization, origin, gateway, trust, targets, introspectionClientSecret, timeoutMs?})` returns a service even when uninitialized/failed, exposing `fetch(request, lifetime?)`, `status()`, `initialize(configuration)`, `refreshTrust(provisioning,{expectedRevision})`, `updateAuthority(configuration,{expectedRevision})`, `close()`. Invalid runtime configuration throws before storage. Public target configuration is derived by removing each target's clientSecret; raw credentials never enter SQL or responses. Runtime constructors retain existing literal-loopback fixture allowances, but deployable packaging must reject them. Runtime identity/target configuration is immutable for an initialized namespace; no route migration is introduced here.
+
+Use the existing configuration/JSON, target, trust, ledger and request limits. Lifecycle intent is bounded to 2 MiB; synchronize with a bounded timeout. Owner methods are internal APIs for an IAM-protected binding; they are not safe to expose directly as public HTTP endpoints. Administrative actor attribution/export and a concrete operator invocation/refresh runner remain part of the deployable control plane, not claims of this adapter.
+
+## Threat model
+
+| Threat | Risk and control | Residual acceptance |
+| --- | --- | --- |
+| Public request resets missing state | High impact; public open is read-only until an intact marker authorizes normal adapter open; no auto-bootstrap | Test empty, partial, corrupt and missing-state paths |
+| Interrupted setup replaces prior trust | High impact; immutable intent, exact retry, component validation and terminal completion prevent reset | Inject failure at each persisted phase and restart |
+| Deployment silently changes target | High impact; persisted public runtime fingerprint rejects mismatched endpoints/revisions | Explicit route migration remains separate work |
+| Stale owner update overwrites newer state | High impact; exclusive mutation and expected revision; signed checkpoints retain rollback history | Race policy/trust changes with provider awaits |
+| Secrets leak into state/status | High impact; separate runtime credentials; exact public configuration validation and redacted errors | Assert SQL/status contain no fixture secrets |
+| Provider outage reports ready | Medium/high impact; bounded pinned readiness probe and late revision recheck | Test outage/redirect and concurrent updates |
+| Account/deployment owner compromised | High impact; bindings are privileged account capabilities, not human identity | Least-privilege IAM and independent operational review before deployment |
+| Restore loses acknowledged claims/trust | High impact; no local marker proves external history | Independent recovery fencing/reconciliation and hosted drills remain open |
+
+Alternatives rejected: environment-driven auto-initialization can recreate deleted trust during ordinary traffic; a public administrator bearer endpoint adds a bootstrap attack surface when private service bindings suffice. Keeping bootstrap and signed refresh separate makes partial initialization resumable without weakening trust freshness.
+
+Platform basis: [private named RPC entrypoints](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/), [binding development support](https://developers.cloudflare.com/workers/local-development/bindings-per-env/), [Durable Object state and constructor gating](https://developers.cloudflare.com/durable-objects/api/state/). Local conformance is not hosted IAM, recovery or capacity evidence.

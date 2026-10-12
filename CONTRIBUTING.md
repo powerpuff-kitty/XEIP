@@ -6,15 +6,21 @@ XEIP is an experimental specification. Contributions to schemas, test vectors, R
 
 - Node.js 22+ for the dependency-free relay demo and Node tests.
 - Rust 1.81+ for `cargo test --workspace --all-targets --locked` and the interoperability harness.
-- Run `npm ci --ignore-scripts` to install the locked TypeScript compiler and JSON Schema development tools.
+- Run `npm ci --ignore-scripts` to install locked dependencies, including the separate organization service's JOSE and PostgreSQL libraries.
 
-Run `npm run typecheck`, `npm run build:ts`, `npm test`, `npm run test:ts`, `npm run validate:fixtures`, `npm run demo:admission`, `npm run demo:replay`, `npm run demo:delivery`, `npm run demo:receipts`, `npm run demo:durable`, `npm run demo:limits`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `npm run test:interop` before submitting a PR. CI checks both Rust 1.81 and the pinned newer toolchain, including cross-language HTTP/SSE exchange in shared-token, local-admission and local-replay modes. Update lockfiles intentionally when changing dependencies. See [RELEASING.md](RELEASING.md) before proposing a versioned release.
+Run `npm run typecheck`, `npm run typecheck:relay`, `npm run typecheck:identity`, `npm run build:ts`, `npm test`, `npm run test:ts`, `npm run validate:fixtures`, `npm run demo:admission`, `npm run demo:replay`, `npm run demo:delivery`, `npm run demo:receipts`, `npm run demo:durable`, `npm run demo:limits`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `npm run test:interop` before submitting a PR. CI checks both Rust 1.81 and the pinned newer toolchain, including cross-language HTTP/SSE exchange in shared-token, local-admission and local-replay modes. Update lockfiles intentionally when changing dependencies. See [RELEASING.md](RELEASING.md) before proposing a versioned release.
 
 `conformance/vectors.json` applies top-level patches/removals to each schema's golden fixture and specifies the expected acceptance result. Add valid and invalid cases here when changing validation. The same cases run against JSON Schema, both SDKs, and the relay's message endpoint. Ajv independently checks structure, dates and lengths; its URI format uses the JavaScript reference syntax checker, while Rust implements URI checks independently. The fixture CLI also accepts `--fixtures-dir PATH` to validate another fixture directory.
 
 ## Coverage
 
+For organization service changes, build the SDK and run `npm run typecheck:organization` and `npm run test:organization`. Docker-backed `npm run test:keycloak`, `npm run test:postgres`, `npm run test:organization:integration` and `npm run coverage:organization` require the pinned images documented in [the service README](services/organization/README.md). Organization coverage combines unit tests with real PostgreSQL and a signed HTTPS/MCP fixture; it uses the same 90/82/88 floors. CI also exercises the complete path with real Keycloak. The optional `npm run test:organization:load` imports 700 simulated principals and measures the selected five-minute workload. Do not point conformance tests at a real organization's database or realm.
+
 Run `npm run coverage` to execute the relay and tools test suites with Node's built-in coverage (`node --test --experimental-test-coverage`). It prints a per-file and total summary. Coverage is **gated**: the script sets floor thresholds of 90% lines, 82% branches and 88% functions (`--test-coverage-lines`, `--test-coverage-branches`, `--test-coverage-functions`), and `node --test` exits non-zero when the totals fall below them, so the CI coverage step fails the build on a regression. The thresholds sit several points below current totals to avoid flaky failures. It excludes the TypeScript SDK (`test:ts`) and the Rust-backed interop suite, which require a build.
+
+## JavaScript policy types
+
+`npm run typecheck:relay` uses strict TypeScript checking over JSDoc contracts in `primitives.mjs`, `replay.mjs` and `limits.mjs`. The explicit allowlist is an incremental boundary, not a claim that the entire relay is typechecked. Expand it as modules acquire complete contracts; do not disable strictness to add files. `npm run check:js` still syntax-checks tracked JavaScript. Node types are a pinned development-only dependency; the browser SDK excludes Node ambient types.
 
 ## Protocol changes
 
@@ -30,7 +36,9 @@ Open a GitHub issue with: motivating use case, affected entity/message/schema fi
 
 ## Dependencies
 
-Cryptographic and canonicalization choices are recorded in [ADR 0007](spec/decisions/0007-crypto-dependencies.md). Until those libraries are added, the rules below govern every dependency PR.
+Cryptographic and canonicalization choices are recorded in [ADR 0007](spec/decisions/0007-crypto-dependencies.md).
+
+The organization service's JOSE, database and MCP dependencies are documented in [ADR 0013](spec/decisions/0013-keycloak-authentication.md), [ADR 0014](spec/decisions/0014-organization-action-ledger.md) and [ADR 0015](spec/decisions/0015-signed-organization-service.md). The rules below continue to apply to every dependency change.
 
 - **Audited and standards-based.** Prefer maintained, permissively licensed libraries with clear advisories and independent review. Implement only standards (Ed25519, JWS/JWK, RFC 8785 JCS, TLS); never hand-roll cryptographic primitives or bespoke signature/JOSE/JCS encoders.
 - **Pinned.** Add exact versions (`=` in Cargo, exact strings in npm) and re-verify the library's `rust-version` against the 1.81 MSRV. Do not float a new dependency on `^`.
@@ -40,3 +48,5 @@ Cryptographic and canonicalization choices are recorded in [ADR 0007](spec/decis
 - **Supply-chain checks.** Dependency PRs must state the crate/package, exact version, license, advisories cleared, native/build-script dependencies, and the maintenance/audit evidence. Expect `cargo-deny`, `cargo audit`, `npm audit` and SHA-pinned CI actions as these profiles are implemented.
 
 Code of conduct: be constructive and respectful. Security reports should be sent privately according to SECURITY.md.
+
+`npm run typecheck:identity` applies strict checking and unchecked-index protection to the Node key-ID and signed-envelope implementations. Its explicit boundary is documented in [packages/identity](packages/identity/README.md); untrusted inputs still require their runtime validation.

@@ -133,3 +133,19 @@ test("bounds credential history without replacing the current credential on exha
   assert.equal(policy.authenticate("Bearer " + latest), current);
   assert.equal(policy.isCurrent(current), true);
 });
+
+test("bound key survives credential rotation and can be replaced explicitly", () => {
+  const kid = 'z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG';
+  const other = 'z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd';
+  const first = secret(), second = secret(), third = secret();
+  const policy = new LocalAdmission({ credentials: [{ entity: a, token: first, kid }], sessions: [] });
+  const old = policy.authenticate('Bearer ' + first);
+  assert.equal(old.kid, kid);
+  policy.rotateCredential(a, second);
+  assert.equal(policy.isCurrent(old), false);
+  assert.equal(policy.authenticate('Bearer ' + second).kid, kid);
+  assert.throws(() => policy.rotateCredential(a, third, { kid: 'bad' }));
+  assert.equal(policy.authenticate('Bearer ' + second).kid, kid);
+  policy.rotateCredential(a, third, { kid: other });
+  assert.equal(policy.authenticate('Bearer ' + third).kid, other);
+});

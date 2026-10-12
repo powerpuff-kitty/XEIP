@@ -1,0 +1,73 @@
+{
+  "date": "2026-10-12",
+  "scope": "Local task5 owner workflow; not SQL security acceptance, A12 closure or production certification",
+  "baseCommit": "1dcfdec51b179ac548ce83ef80dbddf95f6fe53c",
+  "verified": {
+    "nativeOrganization": {
+      "node": "26.8.1",
+      "passed": 322,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "linuxOrganization": {
+      "node": "22.23.3",
+      "passed": 322,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "strictOrganizationTypes": "pass on native and pinned Linux",
+    "actualPostgres": {
+      "result": "pass",
+      "controlEvents": 2,
+      "freshDatabaseEnrolled": true,
+      "populatedLegacyDatabaseRefused": true,
+      "removedEntityRecordsPreserved": true,
+      "legacyCheckpointUnchanged": true,
+      "runtimeOwnerOperationsDenied": true,
+      "activeRuntimeExcludesOwner": true,
+      "staleHeadRefused": true,
+      "interruptedCommandNoPublication": true,
+      "headInspectionWithoutProvisioning": true,
+      "protectedCliVerifiedTls": true,
+      "scope": "actual owned PostgreSQL, protected CLI over verified TLS and programmatic interruption/role tests; physical recovery and operator acceptance remain open"
+    },
+    "artifact": "pass: immutable non-root inventory, runtime/owner imports, isolated workers and redacted refusal",
+    "linuxImageManifestList": "sha256:da57845ad9f1b25bb900f1cbf23b6deab4c34f906d40c13d864c9ecd217646fc",
+    "ownerScopedReview": "no important code findings; reviewer independently passed69 focused tests"
+  },
+  "pending": [
+    "P2 restricted SQL retained-history integrity finding: model acceptance reproduced; actual-PG exploit reproduction and comprehensive correction pending",
+    "combined physical control/action recovery and full offline historical verification",
+    "infrastructure fencing and independent backup custody",
+    "real organization/provider/tool, hosted workload/recovery and operator/security acceptance"
+  ],
+  "sourceSha256": {
+    "services/organization/configuration.mjs": "82d9480c7658ad80762a62f417b25c45bdd1e61b8bf13982bb1d44cb31c94f06",
+    "services/organization/legacy-checkpoint.mjs": "e570c75fe82eff07db8a557e0cc8fc71dc7565169a2102be4ed117ffa6b21467",
+    "services/organization/legacy-checkpoint.test.mjs": "05c2b7b4e93a210edb086e7a195e42496b427be098b9e3646cd77f0b4c289ca6",
+    "services/organization/control-maintenance.mjs": "d513621aa878b8e4f047c211cf0bf134e16a0792311534e4bdeef2e00eb18164",
+    "services/organization/control-maintenance.test.mjs": "de2e6a14b2c6f5ff976778ebd42d7a0e7c81e5bd7336e33ad71094e7c20deafd",
+    "services/organization/control-store.mjs": "99084f6c1e8eb38ee6760249deb829d27cabf2bb6fb7c6f44ff0a57fa7c56e6b",
+    "services/organization/control-store.test.mjs": "1d2a7040c1b0646389b571dbce9383a837dc27309437f8aff22bd7d14f8718ec",
+    "services/organization/main.test.mjs": "8ddea6e60186e7fe47e3f73b6d3cec6d2200396cd45bf71cee1d97ccceb794e0",
+    "services/organization/tsconfig.json": "6d8c1b3d836a1b51a12a1f3aeeba77fde58e1ffbfe7a5daba617afaa6d12b507",
+    "conformance/organization-control-maintenance.mjs": "91e667f3092108a98f10dec869b30a0e8c899c923a21d4e17c3fff738ea5af22",
+    "conformance/organization-artifact.mjs": "9114afa4d1c15aa35a2f728e25f831592b18f92bcfcbde11f878d85e733ed647",
+    "deploy/organization.Dockerfile": "49640c04fd25052852fb11c6f65e8849ef420c885659f464e27b5e0cf8f2af01",
+    "package.json": "7fb8efe230b6edb6ae3f0afe20b9e79c19b8b7fd4ce3a931f337d2fadf5554de",
+    ".github/workflows/ci.yml": "0cf518a11cd47fdb9fdc45df285c6b3d9d250c163f01da01815f5c2cb1a90325"
+  },
+  "logSha256": {
+    "/tmp/xeip-owner-command-organization.log": "c8b46bf5abc140d11e7ccd9dbf63f5a16d5f83f135765beb147249dfba2db87a",
+    "/tmp/xeip-owner-command-linux.log": "9b9b95134f67428704b395756c529d30dcdea8285cf48ceca82521165a3f77aa",
+    "/tmp/xeip-owner-command-pg-final.log": "3ab71b76d1491894ce8a9ebfd2c28080a7cc97df8d074ae009c89e8e199c9b34",
+    "/tmp/xeip-owner-command-artifact.log": "507f950af35235eaa4253e067fa742608d7bf778c1495ada311007c500022997",
+    "/tmp/xeip-owner-command-image.log": "b9084adc879b11712a0c2c9518e7cbc55f5c54e86f0c0274cb728aff45edb3ad",
+    "/tmp/xeip-owner-command-types-final.log": "82f373e746ed45755cc71d530790d3da2600e0470e1a66933b493a2f1c56c86a",
+    "/tmp/xeip-owner-command-close-red.log": "ff9f3e8bb99b3b475266d11315332e523bca43de56b772bb6fd1413084616eee",
+    "/tmp/xeip-owner-command-focused.log": "f427799b155678c13c3a210e47ace7ed3ca5911540c7d095b233e49ffcf0aecf"
+  },
+  "logRetention": "Raw logs are local /tmp artifacts; this record preserves summaries and fingerprints."
+}

@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node",
+      "@cloudflare/workers-types"
+    ],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "schema.mjs",
+    "admin-audit.mjs",
+    "store.mjs",
+    "trust.mjs",
+    "authority.mjs",
+    "http.mjs",
+    "service.mjs",
+    "contracts.d.ts",
+    "profile.mjs",
+    "refresh.mjs",
+    "worker.mjs",
+    "scheduler.mjs",
+    "build.mjs",
+    "owner.mjs",
+    "archive.mjs",
+    "action-archive.mjs",
+    "recovery-journal.mjs",
+    "recovery-client.mjs",
+    "recovery-http.mjs",
+    "recovery-archive.mjs",
+    "recovery-action-archive.mjs",
+    "recovery-archive-command.mjs",
+    "action-restore.mjs",
+    "organization-bundle.mjs",
+    "organization-restore.mjs",
+    "organization-export.mjs",
+    "organization-export-wire.mjs",
+    "organization-export-command.mjs"
+  ]
+}

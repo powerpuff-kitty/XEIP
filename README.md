@@ -10,6 +10,8 @@
 
 XEIP describes *who* an entity is, *what* it can do, *how* to reach it, *which session* an interaction belongs to, and *what* authorization is needed. It does **not** replace IP, TLS, WebRTC, MCP, A2A, or an existing federated messenger.
 
+For the evidence-backed audit and the self-hosted production path, see [the audit](spec/audits/2026-10-10-repository-and-market.md), [production readiness gates](PRODUCTION_READINESS.md), and [the active hardening plan](spec/plans/production-hardening.md).
+
 ## Try the local proof of concept
 
 Requirements: Node.js >=22. The demo has **no npm dependencies** and binds to loopback only.
@@ -37,9 +39,9 @@ Run `npm run demo:replay` to additionally suppress identical retries within a bo
 
 Run `npm run demo:delivery` to assign a per-session sequence, resume a disconnected subscriber from a cursor, receive an explicit gap when older messages aged out, and reject an invalid cursor. [The local delivery profile](spec/local-delivery.md) is in-memory and bounded; a new process or an out-of-window cursor cannot recover the backlog.
 
-Run `npm run demo:receipts` to record an authenticated recipient acknowledgment against a retained delivery, see idempotent duplicate handling, and observe ineligible-recipient and unknown-target denials. [The local receipts profile](spec/local-receipts.md) requires admission and delivery, is bounded and in-memory, and is advisory — never proof of processing or exactly-once execution.
+Run `npm run demo:receipts` to record an authenticated recipient acknowledgment against a retained delivery, see idempotent duplicate handling, and observe ineligible-recipient and unknown-target denials. [The local receipts profile](spec/local-receipts.md) requires admission and a delivery backend, supports optional digest-only persistence with the durable backend, and is advisory — never proof of processing or exactly-once execution.
 
-Run `npm run demo:durable` to persist accepted messages to a directory, restart the relay, and resume across the restart with an explicit gap when older messages aged out. [The local durable profile](spec/local-durable.md) is a bounded, checksummed append-only store; it is not a production queue and still lacks multi-process locking and at-rest encryption.
+Run `npm run demo:durable` to persist accepted messages to a directory, restart the relay, and resume across the restart with an explicit gap when older messages aged out. [The local durable profile](spec/local-durable.md) is a bounded, checksummed append-only store; it includes compaction, exclusive single-writer locking and optional durable receipts. Concurrent writers and at-rest encryption are not supported; it is not a production queue.
 
 Run `npm run demo:limits` to see the opt-in [local limits profile](spec/local-limits.md) return `429` with `Retry-After` after a burst, refill over time, and enforce a connection/subscription cap. These are advisory local bounds, not production rate limiting.
 
@@ -75,6 +77,7 @@ human / AI agent / machine / service
 - **Normative draft:** [spec/core.md](spec/core.md), [spec/security.md](spec/security.md), [schemas](schemas/).
 - **Identity design:** [spec/identity.md](spec/identity.md).
 - **Signed envelopes (verification slice, reference):** [spec/local-signed-envelopes.md](spec/local-signed-envelopes.md).
+- **Entity/device signing with protected extensions (experimental):** [spec/entity-signed-envelopes.md](spec/entity-signed-envelopes.md).
 - **Identity key lifecycle (partially implemented):** [spec/identity-keys.md](spec/identity-keys.md).
 - **Receipts profile:** [spec/local-receipts.md](spec/local-receipts.md) (opt-in local prototype).
 - **Durable delivery (first slice implemented):** [spec/local-durable.md](spec/local-durable.md).
@@ -105,24 +108,27 @@ human / AI agent / machine / service
 | Rust core models and validation | Implemented starter |
 | TypeScript models, validation and HTTP/SSE client | Implemented starter |
 | Authenticated, loopback HTTP/SSE broadcast demo | Implemented; development only |
-| Loopback WebSocket transport (shared routing, bounded queues, close codes, in-memory cursor resume) | Partial v0.2 slice; no durable resume or production hardening; reference Rust client example |
+| Loopback WebSocket transport (shared routing, bounded queues, close codes, in-memory cursor resume) | Partial v0.2 slice; shares in-memory/durable delivery backend; no production hardening; reference Rust client example |
 | Per-entity local credentials, closed memberships and live revocation | Opt-in local admission prototype; no portable cryptographic identities |
 | Bounded suppression of authenticated retries | Opt-in local replay prototype; fixed window, no durable delivery |
 | Bounded per-session sequencing and reconnect resume | Opt-in local delivery prototype; in-memory window, explicit gap signal |
-| Bounded per-principal recipient receipts | Opt-in local receipts prototype; in-memory, advisory, not proof of processing |
-| Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in first slice; checksummed append-only log with persisted sequence; no multi-process locking/encryption |
+| Bounded per-principal recipient receipts | Opt-in local receipts prototype; in-memory or digest-only durable persistence; advisory, not proof of processing |
+| Restart-surviving durable store (`xeip.local-durable/0.1`) | Opt-in segmented store with persisted sequence, compaction, exclusive writer lock and durable receipts; no concurrent writers or encryption |
 | Opt-in request-rate and connection/subscription limits (`xeip.local-limits/0.1`) | Local prototype; per-principal token bucket with `Retry-After`, not production rate limiting |
-| Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented encoder/decoder in JS and Rust (`tools/derive-keyid.mjs`, `crates/xeip-identity`) with shared vectors; signing/verification pending |
+| Self-certifying key-ID encoding (`urn:xeip:entity:<key-id>`) | Implemented codec in JS, Rust and TypeScript with shared vectors; detached signing is a separate implemented profile |
 | Detached Ed25519 signed envelopes | Sign/verify in JS, Rust and TypeScript over shared vectors; opt-in relay enforcement (`createRelay({ signatures: {} })`) rejects spoofed/unsigned |
 | Signed key documents + chain/rollback + trust anchors | `xeip.keydoc/0.1` in JS/Rust with shared vectors; fail-closed anchors; not yet wired into identity provisioning |
 | Signed revocation/status documents (`xeip.status/0.1`) | JS/Rust verify with monotonic serial + staleness; optional relay kid-revocation enforcement |
-| Signed device-rotation statements (`xeip.device-rotation/0.1`) | JS/Rust with bounded overlap; root-rotation rules and distribution pending |
+| Signed device-rotation statements (`xeip.device-rotation/0.1`) | JS/Rust with bounded overlap; key-document root-rotation verification also implemented; operational rotation/distribution pending |
 | Shared Rust/TypeScript/schema validation vectors | Implemented |
 | Rust ↔ TypeScript HTTP/SSE fixture exchange | Automated harness; external client review remains planned |
 | Local threat model and message/session semantics review | Internal review with regression tests; production controls remain planned |
-| Cryptographic identities | Planned |
-| Production messaging, offline persistence, groups, federation | Planned |
-| MCP/A2A/Matrix bridges, service surfaces and media | Planned |
+| Stable entity identity across endorsed devices | Experimental opt-in 0.2 signing in JS/TS/Rust; pinned current chain, fresh status, protected extensions and relay restart checkpoints and owner-driven live refresh/revocation; no production certification |
+| Keycloak organization authentication | Experimental [service module](services/organization/README.md); pinned JWT/JWKS verification, explicit identity mapping and real-provider revocation test |
+| Exact action approval and audit | Experimental signed HTTPS/PostgreSQL path; separate approver, scoped tools, single-use claims, durable results and real-Keycloak integration |
+| Approved MCP tool execution | Experimental official SDK adapter; pinned OAuth resource/issuer, one tool call per durable claim, independent server fixture; production target/pilot pending |
+| Production messaging and federation | Planned; bounded local persistence and closed session membership already exist |
+| A2A/Matrix bridges, other service surfaces and media | Planned |
 
 **Important:** The shared-token demo does not bind senders to distinct identities. The optional admission profile binds bearer credentials to locally provisioned entities and membership, but still requires a trusted workstation and provisioner. Neither mode supports public deployment. See [SECURITY.md](SECURITY.md).
 

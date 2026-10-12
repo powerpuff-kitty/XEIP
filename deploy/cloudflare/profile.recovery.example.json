@@ -1,0 +1,31 @@
+{
+  "organization": "example-org",
+  "origin": "https://xeip.example",
+  "gateway": "urn:xeip:entity:z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+  "trust": {
+    "maxAgeSeconds": 300
+  },
+  "targets": [
+    {
+      "id": "internal",
+      "revision": "1",
+      "recipient": "urn:xeip:entity:z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+      "tools": [
+        "lookup"
+      ],
+      "endpoint": "https://mcp.example/mcp",
+      "resourceMetadataUrl": "https://mcp.example/resource",
+      "issuer": "https://mcp.example",
+      "tokenEndpoint": "https://mcp.example/token",
+      "clientId": "xeip-connector",
+      "scope": "tools:lookup"
+    }
+  ],
+  "recovery": {
+    "url": "https://journal.example/v1/recovery",
+    "stream": "8f310e3a-c4c8-4ef2-b42c-4660251c89aa",
+    "maxEntries": 1000000,
+    "maxBytes": 1073741824,
+    "timeoutMs": 5000
+  }
+}

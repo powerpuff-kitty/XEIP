@@ -18,11 +18,13 @@ export class LimitPolicy {
   #maxConnections;
   #maxSubscriptions;
   #keyBy;
-  #buckets = new BoundedMap(MAX_TRACKED_KEYS); // key -> { tokens, at }, least-recently-used first
+  /** @type {BoundedMap<string, {tokens: number, at: number}>} */
+  #buckets = new BoundedMap(MAX_TRACKED_KEYS); // least-recently-used first
   #connections = 0;
   #subscriptions = 0;
   #elapsed = 0;
 
+  /** @param {unknown} configuration */
   constructor(configuration = {}) {
     requireOptions(configuration, FIELDS, "invalid limits configuration");
     this.#requestsPerSecond = boundedOption(configuration, "requestsPerSecond", { default: 50, min: 1, max: MAX_VALUE, message: "invalid limits configuration" });
@@ -54,9 +56,11 @@ export class LimitPolicy {
    * `peer` keys shared-token/native mode; `principal` requires an authenticated
    * entity and otherwise falls back to the peer so a token-less request still
    * gets a usable bucket instead of sharing a null key.
+   * @param {unknown} principal
+   * @param {unknown} peer
    */
   keyFor(principal, peer) {
-    const entity = principal && typeof principal === "object" ? principal.entity : undefined;
+    const entity = principal && typeof principal === "object" && "entity" in principal ? principal.entity : undefined;
     if (this.#keyBy === "principal" && typeof entity === "string" && entity.length > 0) {
       return "principal\u0000" + entity;
     }
@@ -68,6 +72,7 @@ export class LimitPolicy {
    * caller supplies a string key (see `keyFor`) and may inject a monotonic
    * elapsed time for tests. When denied, `retryAfter` is the whole number of
    * seconds to wait for the next token (at least 1).
+   * @param {string} key
    */
   take(key, elapsedMs = performance.now()) {
     if (typeof key !== "string" || key.length === 0) throw new TypeError("limit key must be a non-empty string");

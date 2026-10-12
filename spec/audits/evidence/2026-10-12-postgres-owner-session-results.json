@@ -1,0 +1,128 @@
+{
+  "date": "2026-10-12",
+  "scope": "Local runtime ownership and same-session schema maintenance; not complete task5, A12 closure or production acceptance",
+  "baseCommit": "1dcfdec51b179ac548ce83ef80dbddf95f6fe53c",
+  "worktree": "uncommitted; source fingerprints below identify the tested slice",
+  "verified": {
+    "nativeOrganization": {
+      "node": "26.8.1",
+      "tests": 300,
+      "passed": 300,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "command": "npm run test:organization"
+    },
+    "linuxOrganization": {
+      "node": "22.23.3",
+      "tests": 300,
+      "passed": 300,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "durationMs": 70794.197226,
+      "strictTypes": "pass",
+      "image": "node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402",
+      "harness": "read-only root/source; non-root; network none; no capabilities; 2 CPUs/2GiB; executable temporary storage for private test shims; sequential test files"
+    },
+    "nativeStrictOrganizationTypes": "pass: node node_modules/typescript/bin/tsc -p services/organization/tsconfig.json",
+    "leaseUnitTests": 14,
+    "actualPostgresOwnership": {
+      "result": "pass",
+      "workPoolMax": 1,
+      "workQueryCompleted": true,
+      "competingOwnerAndRuntimeRefused": true,
+      "observedBackendLossInvalidates": true,
+      "simultaneousAcquisitionWinners": 1,
+      "maintenanceExcludesRuntime": true,
+      "mutationSharesLeaseBackend": true,
+      "terminatedOwnerMutationRolledBack": true,
+      "scope": "session coordination in owned PostgreSQL; external fencing and owner command integration remain open"
+    },
+    "actualPostgresLauncher": {
+      "result": "pass",
+      "staleStartupRefused": true,
+      "listenersBeforeCurrentInputs": 0,
+      "revocationPreserved": true,
+      "approvedUnconsumedActions": 1,
+      "syntheticEffects": 0,
+      "filesystemCheckpointCreated": false,
+      "currentStartupReady": true,
+      "workPoolMax": 1,
+      "maintenanceExcludesStartup": true,
+      "observedLeaseLossStopsRuntime": true,
+      "scope": "actual PostgreSQL and launcher TLS listener; provider readiness synthetic; runtime lease verified; owner commands and combined recovery remain open"
+    },
+    "artifact": "pass: non-root immutable inventory, runtime/maintenance imports, isolated identity/control workers, redacted CLI refusal",
+    "linuxImageManifestList": "sha256:566828850f1ae68696896d1a7db781ac39ead96f34e109eab595f1aa7ff78875",
+    "linuxImageConfig": "sha256:6d5351833f008fbb3bcd633c2f2729e2bd805acea786b5b014234d555a36ecbe",
+    "scopedReview": {
+      "cancellationFinding": "P2 closed by independent reviewer after real pg/TCP regression and fix",
+      "sameSessionIntegration": "no Important/Critical findings; reviewer ran 23 focused tests",
+      "minorFluentHandleEscape": "reproduced RED; proxy now preserves guarded handle on fluent return; 14 lease tests and both full 300-case suites pass"
+    }
+  },
+  "regressions": [
+    {
+      "failure": "Cancellation during pg authentication closes socket but leaves connect promise pending",
+      "fix": "Race connection/lock acquisition against lease failure notification and retain opening-state checks",
+      "transport": "real pg client and loopback TCP fixture; no PostgreSQL server required"
+    },
+    {
+      "failure": "Schema maintenance succeeds while another runtime holds its ownership lease",
+      "fix": "Migrate and grant on the exclusive lease session; lock persists across both transactions",
+      "proof": "actual PostgreSQL contention and successful maintenance after runtime close"
+    },
+    {
+      "failure": "Fluent client.on return escapes released-handle guard",
+      "fix": "Map delegated return of original Client back to the guarded proxy",
+      "proof": "focused RED/GREEN plus full native/Linux suites"
+    }
+  ],
+  "pending": [
+    "explicit owner control enrollment/change CLI",
+    "complete protected legacy checkpoint import",
+    "combined physical control/action recovery",
+    "broader independent SQL review",
+    "external infrastructure fencing and independent backup custody",
+    "real organization/provider/tool acceptance",
+    "hosted workload and recovery targets",
+    "security/release/operator acceptance"
+  ],
+  "sourceSha256": {
+    "services/organization/control-lease.mjs": "7840b0f8d7d7dda2ba724ccbcc6d652d8e457edbc6ba24a3ac9bcc364007254f",
+    "services/organization/control-lease.test.mjs": "7ef6011c099bbaa217bfb1b3400e1c6752214a5d2b13a04e8b8372ba92eaec87",
+    "services/organization/transactions.mjs": "0678ceb836ea593b42b0144e0b7c992f69d29e02cfaa415677e1d7b2585b1939",
+    "services/organization/control-store.mjs": "83747cf2b6af431c0575bdce9f4dfdc8c91027758cd90278a770be6c3092ff90",
+    "services/organization/store.mjs": "45f38332e76859973b2eb93a6063dcb28ec7c3058fd6db53797cb2f370dea9e6",
+    "services/organization/database.mjs": "e405b85a1c2b64280ce0d3c46ba0a6bcdcde17decb942e96c7a113fc636a6b99",
+    "services/organization/maintenance.mjs": "6850a04cd88591a4abc6bd4b5d6dfa550243a8d2a1e93ac611c0e0ce3c646e89",
+    "services/organization/main.mjs": "6a39341d6932ef954f404c7c9d716b14e04a9ea73f8f21e331fe122471256031",
+    "services/organization/runtime.test.mjs": "693ebf88c0b97dfa4c326a347d98922998bbb76aa635207df3384ad404d237b6",
+    "services/organization/telemetry.mjs": "8a26e8654f5214bacf6af57f2b9b1630d2f99e4ca22bb068716a81fef0c53d8c",
+    "services/organization/tsconfig.json": "aefa5caf105a07b59134b14f3243f75df440162b86d0b117b1aaa07e5ccb5b7e",
+    "conformance/organization-control-lease.mjs": "f5d43cd688e44717279c356edb05f1c1fa4116fb1ad684e299b0ba631b2c6f9e",
+    "conformance/organization-postgres-trust.mjs": "7cb667ca605031b75405146999c6b8e8eccec51636496e7287653bcf8139d054",
+    "deploy/organization.Dockerfile": "0b5a0bed97294f1a58b7126703bd1ce73480a3e81a961bc68d667deb8bc28fa9",
+    "package.json": "7ac6c9a1a3ca69ecab6f8a4e84d0b6e07d097f2495f0478f78fe6fd6f9715595",
+    ".github/workflows/ci.yml": "c17b1a82c327fac56d63fac59d8fe3b5f009b30f22660e1f17332548a67daebc"
+  },
+  "logSha256": {
+    "/tmp/xeip-control-lease-connect-red.log": "16e9e8863b25544a3f123591677978086f48a5a15c8b443747bbf4ba889c0cb4",
+    "/tmp/xeip-control-lease-connect-green.log": "e6e53d437ad64da3bed92cf2fc32ba8d712715cf377302890658633140e8f92c",
+    "/tmp/xeip-owner-session-red.log": "485bbf2fdf30d0ea982a4ca041519fda7007bc1ef34a34185f907783f045c9eb",
+    "/tmp/xeip-owner-session-green.log": "b8110fa635041c1a2642edce60a220f1ea52989063a3f0d2eb763aaaf6c4ec0f",
+    "/tmp/xeip-owner-session-pg-red.log": "87fa4db0be3a43868f1e5493692f8519ad157df271409539869213de8ed0e54c",
+    "/tmp/xeip-owner-session-pg-green.log": "cfe8b175ff9ff59c119d8e376e782980f9c5f8d0fa963b160ef4958995559407",
+    "/tmp/xeip-owner-session-fluent-red.log": "376745a6a08778c2e167687f6010f1fc125a3f39c7d23918286d02a34f571335",
+    "/tmp/xeip-owner-session-fluent-green.log": "daa8aeeba16fbeef29aa359aab7196fc7430b5d856e3e68875c236ca379c2d33",
+    "/tmp/xeip-owner-session-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/xeip-owner-session-organization.log": "a6710cac20f1a02c0ccb51bab9e537eb3643cb1671f821fe3309f83558fa2bd3",
+    "/tmp/xeip-owner-session-linux.log": "4d87b0453a32adf7473f0e0c2641ad131c5425fa2a748367cc1969af2933eb15",
+    "/tmp/xeip-owner-session-pg-final.log": "cfe8b175ff9ff59c119d8e376e782980f9c5f8d0fa963b160ef4958995559407",
+    "/tmp/xeip-owner-session-runtime-final.log": "63c64f59a7b7376abf4059325aeebde2f67229e498fa2caf8cef28c178283dcb",
+    "/tmp/xeip-owner-session-image.log": "db6aa24c5fdfa8ba52d355c7739c27556904dab0bc2d52c6766e4fd1aadb04d0",
+    "/tmp/xeip-owner-session-artifact.log": "99873ad48d82577a9195b3dcfa99234ea81cfb3f59c0973500076250c2e58464"
+  },
+  "logRetention": "Raw logs are local /tmp artifacts; this repository record preserves result summaries and fingerprints, not raw log contents."
+}

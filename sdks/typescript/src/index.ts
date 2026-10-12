@@ -7,6 +7,7 @@ import { SseParser } from "./sse.js";
 
 export * from "./identity.js";
 export * from "./keydoc.js";
+export * from "./entity-envelope.js";
 
 export const XEIP_VERSION = XEIP_SUPPORTED_VERSIONS[0]!;
 
@@ -127,6 +128,19 @@ export interface ReceiptAcceptance {
   duplicate: boolean;
 }
 
+/** Delivery metadata belongs to the transport, not the signed envelope. */
+export type DeliveryEvent =
+  | { type: "message"; message: Envelope; seq?: number }
+  | { type: "gap"; session: string; from: number };
+
+/** The envelope-only iterator cannot safely skip missing history. */
+export class DeliveryGapError extends Error {
+  constructor(public readonly session: string, public readonly from: number) {
+    super("XEIP delivery gap: history is incomplete; retained history starts at sequence " + from);
+    this.name = "DeliveryGapError";
+  }
+}
+
 export class XeipHttpSseClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -240,6 +254,18 @@ export class XeipHttpSseClient {
    * and an optional `after` sequence to resume within the local delivery window.
    */
   async *events(session: string, entity: string, signal?: AbortSignal, after?: number): AsyncGenerator<Envelope> {
+    for await (const event of this.deliveryEvents(session, entity, signal, after)) {
+      if (event.type === "gap") throw new DeliveryGapError(event.session, event.from);
+      yield event.message;
+    }
+  }
+
+  /**
+   * Yields messages with received sequence IDs and explicit history gaps.
+   * Checkpoint a sequence only after the application's processing succeeds.
+   * A gap is not a message and must be reconciled before assuming continuity.
+   */
+  async *deliveryEvents(session: string, entity: string, signal?: AbortSignal, after?: number): AsyncGenerator<DeliveryEvent> {
     requireUri(session, "session");
     requireUri(entity, "entity");
     const headers: Record<string, string> = {
@@ -262,21 +288,39 @@ export class XeipHttpSseClient {
       throw new TypeError("XEIP events require text/event-stream content type");
     }
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
     const parser = new SseParser();
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) { decoder.decode(); break; }
         for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+          if (frame.event === "xeip.gap") {
+            const gap = requireRecord(JSON.parse(frame.data), "delivery gap");
+            if (gap.session !== session || !Number.isSafeInteger(gap.from) || (gap.from as number) < 0) {
+              throw new TypeError("invalid delivery gap");
+            }
+            yield { type: "gap", session, from: gap.from as number };
+            continue;
+          }
           if (frame.event !== "xeip.message") continue;
           const message: unknown = JSON.parse(frame.data);
           assertEnvelope(message);
-          yield message;
+          if (message.session !== session) throw new TypeError("unexpected delivery session");
+          const event: DeliveryEvent = { type: "message", message };
+          if (frame.id !== undefined) {
+            const seq = Number(frame.id);
+            if (!/^[0-9]+$/.test(frame.id) || !Number.isSafeInteger(seq) || seq < 0) {
+              throw new TypeError("invalid delivery sequence");
+            }
+            event.seq = seq;
+          }
+          yield event;
         }
       }
     } finally {
       await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
 }

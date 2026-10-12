@@ -74,18 +74,34 @@ export class ReceiptLedger {
     const pairKey = principalKey + "\u0000" + sessionKey;
     const key = pairKey + "\u0000" + seq;
     const existing = this.#entries.get(key);
-    if (existing) {
-      existing.expiresAt = now + this.#windowMs;
-      this.#touch(existing);
-      this.#persist(existing);
-      return { duplicate: true };
+    const record = existing ? { ...existing, expiresAt: now + this.#windowMs } :
+      { key, principalKey, sessionKey, pairKey, id: digestHex(id), seq, expiresAt: now + this.#windowMs };
+    const outcome = this.#appendBackend(record);
+    // A full append may require compaction to persist anything. Preserve the
+    // bounded ledger before tentative insertion/eviction in case that I/O fails.
+    const previous = outcome === "full" ? [...this.#entries.values()].map(value => ({ ...value })) : null;
+    try {
+      if (existing) {
+        existing.expiresAt = record.expiresAt;
+        this.#touch(existing);
+      } else {
+        this.#entries.set(key, record);
+        this.#bucket(this.#pairs, pairKey, this.#maxPerSession).set(key, record);
+        this.#bucket(this.#principals, principalKey, this.#maxPerPrincipal).set(key, record);
+      }
+      this.#maintainBackend(outcome);
+    } catch (error) {
+      if (previous !== null) {
+        this.#entries = new BoundedMap(Infinity);
+        this.#pairs.clear();
+        this.#principals.clear();
+        for (const prior of previous) {
+          this.#adopt(prior.principalKey, prior.sessionKey, prior.id, prior.seq, prior.expiresAt);
+        }
+      }
+      throw error;
     }
-    const record = { key, principalKey, sessionKey, pairKey, id: digestHex(id), seq, expiresAt: now + this.#windowMs };
-    this.#entries.set(key, record);
-    this.#bucket(this.#pairs, pairKey, this.#maxPerSession).set(key, record);
-    this.#bucket(this.#principals, principalKey, this.#maxPerPrincipal).set(key, record);
-    this.#persist(record);
-    return { duplicate: false };
+    return { duplicate: existing !== undefined };
   }
 
   // Reloads the unexpired, bounded set from the backend at construction. The
@@ -117,15 +133,16 @@ export class ReceiptLedger {
     }
     // Rebase the append-only log to the bounded live set so duplicate refreshes
     // and expired records do not accumulate on disk across restarts. While the
-    // process runs, `#persist` compacts online on the same bounded trigger.
+    // process runs, `#maintainBackend` compacts online on the same bounded trigger.
     if (Array.isArray(persisted) && persisted.length > 0) this.#compactBackend();
   }
 
   // Rewrites the backend to exactly the current bounded live set. Wall expiries
   // are reconstructed from the monotonic remaining lifetime. Best-effort: a
-  // failed compaction leaves the prior log intact and the ledger still holds the
-  // records in memory.
-  #compactBackend() {
+  // failed compaction leaves the ledger in memory and the backend requires
+  // recovery. If acceptance depends on this write after a full append, errors
+  // propagate so the caller can restore the ledger and report unavailability.
+  #compactBackend(required = false) {
     if (!this.#backend || typeof this.#backend.compact !== "function") return;
     const wallNow = Date.now();
     const records = [];
@@ -134,7 +151,10 @@ export class ReceiptLedger {
         expiresAt: wallNow + (record.expiresAt - this.#elapsed) });
     }
     try { this.#backend.compact(records); }
-    catch { return; /* best-effort: the prior log and in-memory records remain */ }
+    catch (error) {
+      if (required) throw error;
+      return; // best-effort only when no pending acceptance relies on this write
+    }
     // Record the live size this rewrite captured, and clear the drop counter, so
     // the next saturated append can detect when capacity has since freed.
     this.#compactMarker = this.#entries.size;
@@ -158,7 +178,7 @@ export class ReceiptLedger {
   // is meaningful across a restart. When the backend reports its append-line or
   // byte budget is reached the live set is rewritten online so duplicate
   // refreshes cannot grow the log without bound between restarts.
-  #persist(record) {
+  #appendBackend(record) {
     if (!this.#backend) return;
     const backend = this.#backend;
     const outcome = backend.append({
@@ -168,6 +188,15 @@ export class ReceiptLedger {
       seq: record.seq,
       expiresAt: Date.now() + this.#windowMs
     });
+    if (outcome === "closed") throw new Error("receipt storage unavailable; reopen required");
+    return outcome;
+  }
+
+  // Maintenance follows memory commit so compaction includes the new receipt
+  // and the effects of bounded eviction. An append failure never reaches here.
+  #maintainBackend(outcome) {
+    if (!this.#backend) return;
+    const backend = this.#backend;
     const full = outcome === "full";
     const saturated = typeof backend.saturated === "function" && backend.saturated();
     const due = typeof backend.shouldCompact === "function" && backend.shouldCompact();
@@ -182,7 +211,7 @@ export class ReceiptLedger {
       this.#saturatedDrops += 1;
       retry = this.#entries.size < this.#compactMarker || this.#saturatedDrops >= COMPACT_RETRY;
     }
-    if ((full && !saturated) || due || retry) this.#compactBackend();
+    if ((full && !saturated) || due || retry) this.#compactBackend(full);
   }
 
   #bucket(map, key, max) {

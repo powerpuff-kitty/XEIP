@@ -6,6 +6,7 @@ import addFormats from "ajv-formats";
 import { requireUri } from "../sdks/typescript/src/validation.js";
 import { encodeKeyId, entityUrn, deviceUrn, decodeKeyId } from "./derive-keyid.mjs";
 import { canonicalize, verifySignedEnvelope } from "./signed-envelope.mjs";
+import { verifyEntityEnvelope } from "../packages/identity/entity-envelope.mjs";
 import { verifyKeyDocument } from "./key-document.mjs";
 import { StatusTracker, verifyStatusDocument } from "./identity-status.mjs";
 import {
@@ -84,6 +85,13 @@ for (const vector of signedVectors) {
   } else if (result.valid !== false || result.reason !== vector.reason) {
     throw new Error("signed-envelope vector " + vector.name + ": expected reason " +
       JSON.stringify(vector.reason) + " but received " + JSON.stringify(result));
+  }
+}
+const entityVectors = readJson(new URL("../conformance/fixtures/entity-envelope/vectors.json", import.meta.url)).vectors;
+for (const vector of entityVectors) {
+  const result = verifyEntityEnvelope(vector.envelope, vector.options);
+  if (result.valid !== vector.valid || (!result.valid && result.reason !== vector.reason)) {
+    throw new Error("entity-envelope vector " + vector.name + ": unexpected result " + JSON.stringify(result));
   }
 }
 const canonicalVectors = readJson(new URL("../conformance/fixtures/identity-canonical/canonical.vectors.json", import.meta.url));
@@ -202,6 +210,6 @@ for (const tracker of rotationFile.trackers) {
 }
 console.log("XEIP JSON Schema conformance: " + fixtureCount + " fixtures and " + vectors.length +
   " vectors passed (draft 2020-12, formats enforced); " + keyidVectors.length + " key-id vectors, " +
-  signedVectors.length + " signed-envelope vectors, " + canonicalVectors.length +
+  signedVectors.length + " signed-envelope vectors, " + entityVectors.length + " entity-envelope vectors, " + canonicalVectors.length +
   " canonicalization vectors, " + keydocVectors.length + " key-document vectors, " +
   statusStepCount + " status steps and " + rotationStepCount + " rotation steps passed");

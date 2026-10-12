@@ -1,0 +1,25 @@
+# Single-organization authentication boundary
+
+Implementation scope for G2, following [live entity trust](live-entity-trust.md). User selected self-hosted Keycloak on 11 October 2026. The intended first workflow is human approval of an agent calling an internal MCP tool. This document specifies authentication; persistent action approval/consumption follows as a separate stage before any command execution is enabled.
+
+## Boundary and defaults
+
+Build a separate organization service, leaving the demonstration relay loopback-only and legacy-compatible. Its authentication module verifies Keycloak access tokens and returns immutable principals; it does not interpret an authenticated user as permission to perform an action. No shared development-token fallback. No public deployment is performed by this implementation work.
+
+Configuration pins one HTTPS issuer URL, one API audience, an explicit list of allowed authorized client IDs, and explicit mappings from Keycloak subject to entity/key ID. Claims cannot enroll new entities or keys. Production uses Keycloak authorization code with PKCE for people and client credentials for service agents; the service never collects user passwords. A deliberately named insecure-loopback test option may permit literal `127.0.0.1`/`[::1]` HTTP for local fixtures only; the later production CLI must reject it.
+
+Use the maintained `jose` implementation with an exact dependency version. Accept RS256 access tokens from the issuer's configured realm certificate endpoint; require issuer, audience, subject, authorized party, issuance, expiration and unique token ID. Require Keycloak's access-token marker (`typ: Bearer`) and reject ID tokens. Require nonnegative integer times, lifetime no longer than the configured bound (default 300 seconds, allowed 30–900), no future issuance and no expiration grace. Bound bearer length and remote JWKS response size/time; reject redirects. The caller cannot choose the issuer/JWKS URL from token headers.
+
+Use confidential-client token introspection after cryptographic verification, with no positive active-token cache. A token must still be active at the provider before authorization proceeds. Explicit inactive/invalid tokens are unauthenticated; provider outage or malformed provider data is unavailable, never authenticated. Credentials go only to the pinned issuer endpoint over TLS, are never returned in a principal, and must not appear in logs. The confidential introspection client is a separate operator-supplied credential.
+
+Require both the API audience and introspection-client audience in access tokens. Configure both audience mappers in Keycloak and preserve its audience enforcement: [Keycloak 26.8.0's introspection implementation](https://github.com/keycloak/keycloak/blob/26.8.0/services/src/main/java/org/keycloak/protocol/oidc/AccessTokenIntrospectionProvider.java) denies introspection clients absent from the audience. The adapter checks this locally as well; an issuer-signed token with only the API audience remains unauthenticated under this profile.
+
+A principal contains subject, entity, key ID, authorized client, API-client roles and expiry, without bearer or client secrets. Restrict roles to the configured API's `resource_access` entry. Retain tokens privately only as required to revalidate a held connection, with expiration and connection cleanup. Authentication must support use-time revalidation after asynchronous request reads and during long-lived streams. Entity trust, membership and action policy must subsequently accept the principal independently.
+
+## Verification
+
+Use a local HTTP fixture with real generated RSA keys, signed tokens and controlled JWKS/introspection responses. Cover correct token; wrong issuer/audience/client; ID token; absent/invalid required claims; expired/future/overlong lifetime; unconfigured subject; forged signature/algorithm; unknown and rotated keys; inactive introspection; redirect/timeout/oversize/malformed responses; claim mutation and secret-free principals. Exercise a real locally isolated Keycloak realm before claiming provider integration. An HTTP mock proves only the adapter boundary, not a deployed Keycloak system.
+
+## Source evidence
+
+Keycloak documents its realm certificate and confidential-client introspection endpoints, authorization-code flow, client credentials and the prohibition on password grants in its [OIDC integration guide](https://www.keycloak.org/securing-apps/oidc-layers). JWT and JWKS verification use the upstream [`jwtVerify`](https://github.com/panva/jose/blob/main/docs/jwt/verify/functions/jwtVerify.md) and [`createRemoteJWKSet`](https://github.com/panva/jose/blob/main/docs/jwks/remote/functions/createRemoteJWKSet.md) APIs. Exact installed API compatibility must be checked before implementation. Consult [Keycloak production configuration](https://www.keycloak.org/server/configuration-production) for the later deployment stage; a development-mode container is only an integration fixture.

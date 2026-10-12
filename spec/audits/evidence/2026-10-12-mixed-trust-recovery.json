@@ -1,0 +1,30 @@
+{
+  "classification": "historical reproduced defect, not acceptance pass",
+  "date": "2026-10-12",
+  "command": "node spec/audits/evidence/2026-10-12-mixed-trust-recovery.mjs",
+  "exitCode": 0,
+  "node": "v26.8.1",
+  "gitHead": "1dcfdec51b179ac548ce83ef80dbddf95f6fe53c",
+  "worktree": "uncommitted; source digests identify observed files",
+  "result": {
+    "finding": "stale-trust-restore-reactivates-revoked-device",
+    "intactCheckpointRejectsRollback": true,
+    "revokedClaimDenied": true,
+    "databaseUnchangedByRevocation": true,
+    "restoredOldTrustAllowsDevice": true,
+    "syntheticEffects": 1,
+    "scope": "real disposable PostgreSQL and signed trust; provider revalidation stub; no HTTP/MCP/network effect; not an acceptance pass"
+  },
+  "sourceSha256": {
+    "spec/audits/evidence/2026-10-12-mixed-trust-recovery.mjs": "bc6558be49b0a5d2c6f200d3b52a96ef898c2c36efb83796c23ea10efb2fc764",
+    "conformance/postgres.mjs": "2b893925c7fa9b2cb72c4ec2ef1a996595eb0efb6666e59d1ac24751ea42fa7f",
+    "services/organization/main.mjs": "67d69815f010bebc5fd02d3e04291e929bf22c609878cb2d728f67074ca67d1d",
+    "services/organization/configuration.mjs": "198460a55fe2de343c544c9e1c61aa349d974b51c15127695e7fd6ec3834bf6e",
+    "services/organization/authorization.mjs": "945fa38d8b4c129a531afbdd126ca5d3b087c0a98667f2b23621bd7abcb880cc",
+    "services/organization/store.mjs": "c4053ca16a4c904b2a2228cbfcd05a65371f3913a35d47a22371d23bbbbfe3d3",
+    "services/organization/execution.mjs": "351eea4c5acb163f7d237a0bee89a8cd2625f0d8618c95f00830ce53cf1c12b4",
+    "services/relay/entity-trust.mjs": "0e49a4faf933a433a70926128f0e5e76caf4ecc7cdd7ea338bade01cf1ba28aa",
+    "services/relay/trust-checkpoint.mjs": "6a7c6ac92dc57191369c90d72d6e91b7067b6b55707ed72782111046a8f1bd18",
+    "packages/identity/trust-state.mjs": "bd601260d68928a303ce8a72cd2249550817ab27b4eece5d45aba8fec16a96a8"
+  }
+}

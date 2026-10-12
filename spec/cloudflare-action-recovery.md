@@ -1,0 +1,29 @@
+# Durable action acknowledgements and recovery fencing
+
+The accepted target is no loss of acknowledged actions and no repeated external tool effects after source database restoration. This increment connects the independent journal storage contract to the action store and service lifecycle. Hosting remains an explicit injected adapter: no production binding, provider choice or deployment is inferred. Keycloak, source trust/authority recovery, complete restore tooling, retention and hosted acceptance remain required.
+
+## Design choice
+
+Use deterministic per-transition recovery records reconstructed from the existing immutable action audit and exact historical row projection. Full-database snapshots per action would duplicate unrelated history and exceed bounded envelopes. A best-effort asynchronous export would leave an acknowledged-loss window. The chosen boundary synchronizes the local action transaction, appends its recoverable transition to the configured journal, validates the receipt, and only then returns success or an execution claim.
+
+Schema7 adds an immutable singleton source binding to journal identity/caps/genesis. Enrollment is explicit, allowed only with an empty action ledger and an already initialized empty journal. An enrolled source cannot open without the matching adapter/options; there is no disable/reset API. Existing unconfigured installations retain their experimental behavior and make no recovery guarantee. The service pins the public recovery descriptor in its lifecycle intent and awaits reconciliation before constructing an active controller. Adapter credentials/capabilities are injected separately, never persisted or exposed to public requests.
+
+## Records and startup
+
+One journal entry corresponds to one globally contiguous source audit sequence, starting at1. Payload `xeip.action-recovery/1` contains organization, sequence and complete fixed-cut `{row,history}` for the action changed by that audit event. Validate canonical action fields, transition history and that its final event is exactly this sequence. Existing action evidence bounds apply. The entry UUID is deterministically derived from a versioned SHA256 domain plus payload digest (UUID version8 layout); journal checksum additionally binds its predecessor and cumulative bytes. Historical proposal/approval/claim/outcome fields retain exact canonical source strings. Records are data, not permission to execute a tool.
+
+On open, validate every source transition and derive the expected journal chain. Compare remote scope/head and every committed entry header. Exact equal histories activate. Remote ahead of source, a fork, gap, changed scope/caps, malformed receipt, absent binding or more than one unpublished local transition fences the source. One locally committed transition beyond the remote head is an interrupted, unacknowledged operation: publish its deterministic record and synchronize before activation, without returning any old claim or invoking any effect. A remotely committed tail with lost response is recognized on reopen by equality; no replay occurs.
+
+An entire source+journal rollback remains undetectable without an independent witness. This design does not select or certify storage independence. The configured journal must remain outside the accepted source failure boundary. A malicious adapter/database owner is outside hash checks; accepted transport/IAM remains required.
+
+## Live ordering
+
+Recovery-enabled action operations serialize admission across authorization, local mutation/synchronization and remote receipt verification. New public work conflicts; reads/archives cannot advertise pending source state. Already-issued execution authorization and internal completion use a bounded FIFO (32 waiters; admission deadline equals journal timeout), with ownership reserved before wakeup. Timeout/close cancels a waiter without late execution. This retains known outcomes through ordinary concurrent traffic and rechecks authority/recovery before effects, without replaying external calls. Before an operation, compare remote head against the validated local witness. After the existing source synchronization, allow either no new transition or exactly one; append the latter with expected predecessor. Validate the complete returned header and recheck the remote head. Any storage, deadline, receipt or continuity failure quarantines the source; a late response or service close cannot reactivate it.
+
+The existing late authorization check remains after the new recovery await. A revoked/expired requester or approver never receives a usable claim. Internal completion can still preserve an already-sent outcome without renewed caller credentials, but cannot acknowledge until its recovery record is durable. Returning a claim is the final boundary before existing effect authorization; consumed claims recovered during startup never become fresh execution capabilities. The single process retains one store/fault owner and request facades cannot bypass it.
+
+## Verification and remaining scope
+
+Use actual local source and journal SQLite Durable Objects. Prove proposal/decision/claim/completion receipt ordering, duplicate operations, concurrency, malformed/forked receipts, lost remote responses, local sync faults, startup reconciliation, source rollback fencing, missing-adapter refusal, late revocation/close, and zero effects on uncertain claims. Preserve schema6 migration data/catalog checksums and old-executable refusal of schema7; failed DDL migration rolls back fully. Full native/types and exact Worker/Linux packaging remain required.
+
+This provides a code-level acknowledgement fence when configured. It does not restore source rows, recover trust/authority/admin state, enroll existing history, provision a hosted adapter or certify the two-second/one-hour targets. Those remain explicit production gates, not reasons to weaken this boundary.

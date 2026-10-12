@@ -229,3 +229,24 @@ test("enforces status revocation over WebSocket send", async t => {
   client.close();
   await target.close();
 });
+
+test("HTTP and WebSocket stop accepting sends when configured status freshness expires", async t => {
+  let now = Date.parse(status("status.revoke.1").issuedAt);
+  t.mock.method(Date, "now", () => now);
+  const { base, post } = await setup(t, { signatures: {},
+    keyDocuments: [{ document: trusted, anchor: ANCHOR_A }],
+    statusDocuments: [{ document: status("status.revoke.1"), maxAgeSeconds: 1 }] });
+  const client = await openWebSocket(base, { token: TOKEN });
+  try {
+    const first = await post(signedWith(privateKeyA, KID_A, ENTITY_A));
+    assert.equal(first.status, 202); await first.body.cancel();
+    client.send({ type: "send", message: signedWith(privateKeyA, KID_A, ENTITY_A) });
+    await waitFor(() => client.messages.some(value => value.type === "accepted"), "fresh WebSocket send");
+    now += 1001;
+    const expired = await post(signedWith(privateKeyA, KID_A, ENTITY_A));
+    assert.equal(expired.status, 403); await expired.body.cancel();
+    client.send({ type: "send", message: signedWith(privateKeyA, KID_A, ENTITY_A) });
+    await waitFor(() => client.messages.some(value => value.type === "error"), "expired WebSocket send");
+    assert.equal(client.messages.find(value => value.type === "error").status, 403);
+  } finally { client.close(); }
+});

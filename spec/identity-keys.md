@@ -7,7 +7,7 @@
 - `xeip.device-rotation/0.1` root-endorsed device rotation with a bounded overlap and a `DeviceRotationTracker` (`tools/identity-device-rotation.mjs`, `crates/xeip-identity`) — [plans/identity-device-rotation.md](plans/identity-device-rotation.md).
 - The reference relay resolves a signed envelope's `kid` against trusted key documents and rejects revoked kids (`createRelay({ signatures, keyDocuments, statusDocuments })`).
 
-Still **design-only**: root-rotation signature rules and recovery, revocation/status distribution and live-stream termination, directory discovery, durable fork/equivocation evidence, and independent review.
+Root-rotation signature rules are implemented in the JS/Rust/TypeScript key-document chain verifiers with shared vectors. The opt-in [entity-bound signing profile](entity-signed-envelopes.md) now implements stable parent/device envelope binding, protected extensions, mandatory fresh status and relay restart checkpoints in JS/TS/Rust. The [live trust API](live-entity-trust.md) adds owner-driven refresh and device-bound stream revocation/expiry. Still **design-only**: operational root rotation and recovery, automated revocation/status distribution, directory discovery, durable fork/equivocation evidence, and independent review.
 
 It builds on, and does not replace, three things that already exist:
 
@@ -315,7 +315,9 @@ accepting it.
 
 ## 8. Binding a signed envelope's `kid` to an entity
 
-The composition rule for an envelope signed under
+**Unresolved composition constraint:** signed-envelope 0.1 requires the sender to equal the signing key-derived URN. An endorsed device therefore cannot sign as its stable parent entity, even with a trusted key document. Steps 3–6 below are proposed design and do not resolve that conflict. A separately versioned profile is required; see [the migration requirements](../PRODUCTION_READINESS.md#identity-and-extension-migration).
+
+The proposed composition rule for an envelope signed under
 [local-signed-envelopes.md](local-signed-envelopes.md):
 
 1. Parse the envelope under the strict pre-parse gate.
@@ -562,8 +564,9 @@ addresses the criteria that the signed-envelope slice left open.
 | Rust + TS identity-binding conformance | New `identity-keydoc` vectors consumed by `tools/*`, `crates/xeip-identity` and the future SDK identity layer, on top of the existing key-ID and signed-envelope vectors | New vectors and cross-language harness cases; the current harness only proves local bearer enforcement, key-ID encoding and signed-envelope verification |
 | No custom crypto | Key documents use Ed25519 + RFC 8785 + the existing key-ID codec; the audited-library and strict pre-parse rules of [ADR 0007](decisions/0007-crypto-dependencies.md) apply unchanged | Review checklist and dependency audit proving only audited libraries are used |
 
-None of this is implemented. Issue #1 remains incomplete until the profile is
-implemented, tested across both languages and reviewed, as
+The reference slices listed at the top and the separate entity-signing profile
+implement portions of these criteria. Issue #1 remains incomplete until the full
+lifecycle and operational controls are implemented, tested and reviewed, as
 [security.md](security.md) requires.
 
 ## 17. Open questions

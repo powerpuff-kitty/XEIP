@@ -5,8 +5,8 @@
  *
  * It mirrors the in-memory DeliveryLog method shapes (append, since, lookup,
  * lookupAllById, limits) so the relay can use either store. It is NOT a queue
- * with exactly-once semantics: a reserved-but-unappended sequence is a
- * permanent hole, interior corruption fails closed, and only a torn tail is
+ * with exactly-once semantics: a persisted reserved-but-unappended sequence is
+ * a hole, interior corruption fails closed, and only a torn tail is
  * recovered. Bounded compaction reclaims evicted bytes crash-safely. An
  * exclusive `<dir>/LOCK` file serialises writers: a stale lock left by a
  * crashed process must be removed by the operator (it is never stolen). At-rest
@@ -40,6 +40,34 @@ const RECEIPT_LOG = "receipts.log";
 const LOCK = "LOCK";
 const SEGMENT_PATTERN = /^segment-([0-9]+)\.log$/;
 const COMPACT_FAULTS = ["after-write", "after-manifest", "torn"];
+
+// A successful write may consume fewer bytes than requested. Never publish a
+// record or manifest until the entire buffer has reached the file descriptor.
+function writeAll(fd, data) {
+  const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (written <= 0) throw new Error("durable store: write made no progress");
+    offset += written;
+  }
+}
+
+function syncDirectory(dir) {
+  let fd;
+  try {
+    fd = fs.openSync(dir, "r");
+    fs.fsyncSync(fd);
+  } catch (error) {
+    // Tolerate an explicitly unsupported directory operation, never a disk
+    // failure such as EIO/ENOSPC. Windows may forbid opening directories.
+    const unsupported = ["EINVAL", "ENOTSUP", "ENOSYS"].includes(error.code) ||
+      (process.platform === "win32" && ["EISDIR", "EPERM"].includes(error.code));
+    if (!unsupported) throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
 
 const sha256 = value => createHash("sha256").update(value).digest();
 const encodeRecord = raw => {
@@ -121,6 +149,7 @@ export class ReceiptLog {
   #fsyncs = 0;
   #saturated = false;
   #closed = false;
+  #faulted = false;
 
   constructor(configuration = {}) {
     if (!configuration || typeof configuration !== "object" || Array.isArray(configuration) ||
@@ -148,7 +177,12 @@ export class ReceiptLog {
     fs.mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
     this.#records = this.#load();
     this.#fd = fs.openSync(this.#file, "a", 0o600);
-    this.#bytes = fs.fstatSync(this.#fd).size;
+    try { this.#bytes = fs.fstatSync(this.#fd).size; }
+    catch (error) {
+      try { fs.closeSync(this.#fd); } catch { /* preserve the initialization error */ }
+      this.#fd = undefined;
+      throw error;
+    }
   }
 
   /** "ok", "recovered" (torn tail dropped) or "degraded" (corrupt, failed closed). */
@@ -169,13 +203,20 @@ export class ReceiptLog {
    */
   append(record) {
     if (this.#closed) return "closed";
+    if (this.#faulted) throw new Error("receipt storage unavailable; reopen required");
     const encoded = encodeRecord(Buffer.from(JSON.stringify(record), "utf8"));
     if (this.#bytes + encoded.length > this.#maxBytes) return "full";
-    fs.writeSync(this.#fd, encoded);
+    try {
+      writeAll(this.#fd, encoded);
+      if (this.#fsync === "always") this.#sync();
+      else if (this.#fsync === "batch" && ++this.#pending >= BATCH_FSYNC) this.#sync();
+    } catch (error) {
+      this.#faulted = true;
+      this.#status = "degraded";
+      throw error;
+    }
     this.#bytes += encoded.length;
     this.#appended += 1;
-    if (this.#fsync === "always") this.#sync();
-    else if (this.#fsync === "batch" && ++this.#pending >= BATCH_FSYNC) this.#sync();
     return "ok";
   }
 
@@ -188,11 +229,21 @@ export class ReceiptLog {
   /** Atomically replaces the log with exactly `records` (temp + fsync + rename). */
   compact(records) {
     if (this.#closed) return;
+    if (this.#faulted) throw new Error("receipt storage unavailable; reopen required");
+    try { this.#replace(records); }
+    catch (error) {
+      this.#faulted = true;
+      this.#status = "degraded";
+      throw error;
+    }
+  }
+
+  #replace(records) {
     const data = Buffer.concat(records.map(record => encodeRecord(Buffer.from(JSON.stringify(record), "utf8"))));
     const tmp = this.#file + ".tmp";
     const fd = fs.openSync(tmp, "w", 0o600);
     try {
-      fs.writeSync(fd, data);
+      writeAll(fd, data);
       if (this.#fsync !== "never") { fs.fsyncSync(fd); this.#fsyncs += 1; }
     } finally { fs.closeSync(fd); }
     fs.renameSync(tmp, this.#file);
@@ -225,9 +276,7 @@ export class ReceiptLog {
 
   #load() {
     if (!fs.existsSync(this.#file)) return [];
-    let buffer;
-    try { buffer = fs.readFileSync(this.#file); }
-    catch { this.#status = "degraded"; return []; }
+    const buffer = fs.readFileSync(this.#file);
     let result;
     try { result = readRecords(buffer); }
     catch {
@@ -239,7 +288,7 @@ export class ReceiptLog {
     }
     if (result.torn) {
       this.#status = "recovered";
-      try { fs.truncateSync(this.#file, result.validBytes); } catch { /* reported as recovered regardless */ }
+      fs.truncateSync(this.#file, result.validBytes);
     }
     const records = [];
     for (const { record } of result.records) {
@@ -257,22 +306,14 @@ export class ReceiptLog {
   }
 
   // Moves the unreadable or poisoned log aside so the next append starts a clean
-  // file. Best-effort: a failed rename still reports "degraded".
+  // file. A failed quarantine must abort opening instead of appending behind
+  // corrupt bytes that recovery will discard on the next restart.
   #quarantine() {
-    try { fs.renameSync(this.#file, this.#file + ".corrupt"); } catch { /* best-effort */ }
+    fs.renameSync(this.#file, this.#file + ".corrupt");
   }
 
   #fsyncDir() {
-    let fd;
-    try {
-      fd = fs.openSync(this.#dir, "r");
-      fs.fsyncSync(fd);
-    } catch {
-      // A directory fsync is not supported on every platform; the rename is
-      // still atomic and the file itself was fsynced above.
-    } finally {
-      if (fd !== undefined) fs.closeSync(fd);
-    }
+    syncDirectory(this.#dir);
   }
 }
 
@@ -372,7 +413,7 @@ export class DurableStore {
   get fsync() { return this.#fsync; }
 
   /** "ok", or "recovered" after a torn tail was dropped or a counter reconstructed. */
-  status() { return this.#status; }
+  status() { return this.#receiptLog?.status === "degraded" ? "degraded" : this.#status; }
 
   /**
    * Creates (once) and returns the digest-only receipt log that shares this
@@ -397,13 +438,14 @@ export class DurableStore {
   }
 
   /**
-   * Reserves and persists a strictly increasing per-session sequence BEFORE the
-   * record is written, then appends the verbatim envelope and returns the seq.
-   * A crash between the two leaves a hole: the sequence is never reused. A
-   * reserved seq whose record is evicted immediately is likewise never reused.
+   * Reserves a strictly increasing per-session sequence, then appends the
+   * verbatim envelope and returns the seq. With fsync:"always" the counter is
+   * persisted first, so an interrupted record write leaves a reserved hole.
+   * Batch/never only preserve counter advances recoverable from manifest/log.
    */
   append(session, message, receivedAt = Date.now()) {
     if (this.#closed) throw new Error("durable store is closed");
+    if (this.#faulted) throw new Error("durable storage unavailable; reopen required");
     if (typeof session !== "string" || session.length === 0) throw new TypeError("invalid durable session");
     if (message === undefined || message === null) throw new TypeError("invalid durable message");
     const at = this.#tick(receivedAt);
@@ -419,18 +461,28 @@ export class DurableStore {
     const seq = state.nextSeq++;
     const raw = Buffer.from(JSON.stringify({ session, seq, at, message }), "utf8");
     const entry = { seq, at, message, raw, bytes: RECORD_HEADER + raw.length };
+    // Persist the manifest state before the record so an interrupted append
+    // cannot reuse the seq. "batch"/"never" throttle this rewrite (see
+    // #maybeWriteManifest); recovery reconstructs nextSeq from the records.
+    try {
+      const segmentsBefore = this.#segments.length;
+      this.#rollIfNeeded(entry.bytes);
+      this.#maybeWriteManifest(this.#segments.length !== segmentsBefore);
+      this.#appendRecord(entry);
+      this.#syncSegment(false);
+    } catch (error) {
+      // A write/fsync failure has an uncertain on-disk outcome. Do not append
+      // behind a possibly torn record or compact memory over the disk evidence.
+      // Reopening runs the existing checksummed recovery path under the lock.
+      this.#faulted = true;
+      this.#status = "degraded";
+      throw error;
+    }
+    // Only committed writes enter the readable window or evict older messages.
     state.entries.push(entry);
     state.lastAccess = at;
     this.#totalBytes += entry.bytes;
     this.#enforce(state, entry, at);
-    // Persist the manifest state before the record so an interrupted append
-    // cannot reuse the seq. "batch"/"never" throttle this rewrite (see
-    // #maybeWriteManifest); recovery reconstructs nextSeq from the records.
-    const segmentsBefore = this.#segments.length;
-    this.#rollIfNeeded(entry.bytes);
-    this.#maybeWriteManifest(this.#segments.length !== segmentsBefore);
-    this.#appendRecord(entry);
-    this.#syncSegment(false);
     // Reclaim bytes evicted by capacity/retention once they dominate the budget.
     if (this.#deadBytes() > this.#maxBytes / 2) this.#compactBestEffort();
     return seq;
@@ -438,8 +490,8 @@ export class DurableStore {
 
   /**
    * Retained entries with seq strictly greater than `after`, oldest first.
-   * `gap` is true when sequences between the cursor and the oldest retained
-   * entry were dropped (eviction, retention or a reserved hole); `from` is the
+   * `gap` is true when any sequence after the cursor is unavailable
+   * (eviction, retention or a reserved hole); `from` is the
    * oldest retained seq (or the next seq when nothing is retained).
    */
   since(session, after, now = Date.now()) {
@@ -458,9 +510,19 @@ export class DurableStore {
     }
     state.lastAccess = time;
     const oldest = state.entries[0].seq;
+    const entries = state.entries.filter(entry => entry.seq > after);
+    let expected = after + 1;
+    let gap = false;
+    for (const entry of entries) {
+      if (entry.seq !== expected) gap = true;
+      expected = entry.seq + 1;
+    }
+    // A reserved-but-unwritten tail is also a discontinuity, even before a
+    // later append makes it an interior hole. Do this before recipient filtering.
+    if (expected < state.nextSeq) gap = true;
     return {
-      entries: state.entries.filter(entry => entry.seq > after).map(toEntry),
-      gap: after < oldest - 1,
+      entries: entries.map(toEntry),
+      gap,
       from: oldest
     };
   }
@@ -491,13 +553,15 @@ export class DurableStore {
   /** Flushes, reclaims dead segments and releases the active segment. Idempotent. */
   close() {
     if (this.#closed) return;
-    // After an injected compaction crash the process is considered dead: it must
+    // After an uncertain write or injected compaction crash it must
     // not rewrite the manifest or compact, or the crash state under test would be
     // erased. The lock is still released so a recovery store can open.
     if (!this.#faulted) {
       if (this.#deadBytes() > 0) this.#compactBestEffort();
       // Persist the latest reservations on close even in "batch" mode.
-      try { this.#writeManifest(true); } catch { /* best-effort flush on close */ }
+      if (!this.#faulted) {
+        try { this.#writeManifest(true); } catch { /* best-effort flush on close */ }
+      }
     }
     this.#closed = true;
     if (this.#activeFd !== undefined) {
@@ -520,6 +584,7 @@ export class DurableStore {
    */
   compact(options) {
     if (this.#closed) throw new Error("durable store is closed");
+    if (this.#faulted) throw new Error("durable storage unavailable; reopen required");
     let fault;
     if (options !== undefined) {
       if (!options || typeof options !== "object" || Array.isArray(options)) {
@@ -535,7 +600,7 @@ export class DurableStore {
 
   #compactBestEffort() {
     try { this.#compact(); }
-    catch { /* a failed compaction leaves the previous generation intact */ }
+    catch { /* the already-written append stands; the writer now requires recovery */ }
   }
 
   #deadBytes() { return this.#diskBytes - this.#totalBytes; }
@@ -553,6 +618,17 @@ export class DurableStore {
   }
 
   #compact(fault) {
+    try { this.#compactGeneration(fault); }
+    catch (error) {
+      // The active generation may have changed before a failed manifest swap.
+      // No subsequent append or close may commit that uncertain in-memory state.
+      this.#faulted = true;
+      this.#status = "degraded";
+      throw error;
+    }
+  }
+
+  #compactGeneration(fault) {
     // Freeze the current generation: sync and close the active fd so every
     // appended byte is durable before the live set is rewritten.
     if (this.#activeFd !== undefined) {
@@ -584,7 +660,7 @@ export class DurableStore {
       const file = path.join(this.#dir, names[index]);
       const fd = fs.openSync(file, "w", 0o600);
       try {
-        fs.writeSync(fd, outputs[index]);
+        writeAll(fd, outputs[index]);
         if (this.#fsync !== "never") fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
@@ -697,7 +773,7 @@ export class DurableStore {
         // segment, so nothing valid can follow a torn tail. Truncating the tail
         // keeps later appends from writing behind the bad bytes.
         this.#status = "recovered";
-        try { fs.truncateSync(file, validBytes); } catch { /* reported as recovered regardless */ }
+        fs.truncateSync(file, validBytes);
         this.#segments = this.#segments.slice(0, index + 1);
         break;
       }
@@ -755,7 +831,7 @@ export class DurableStore {
 
   #appendRecord(entry) {
     const record = encodeRecord(entry.raw);
-    fs.writeSync(this.#activeFd, record);
+    writeAll(this.#activeFd, record);
     this.#activeBytes += record.length;
     this.#diskBytes += record.length;
     this.#pending += 1;
@@ -765,7 +841,8 @@ export class DurableStore {
   // rewrite only when a segment rolls (the manifest records #segments, so a new
   // segment MUST be referenced before it can be authoritative) or every
   // BATCH_FSYNC appends; close/compact/load force it. Recovery reconstructs
-  // nextSeq from records, so a skipped write never reuses a sequence.
+  // nextSeq from surviving records. Loss of an unsynced record and counter can
+  // reuse that sequence in batch/never mode; those modes are not crash-durable.
   #maybeWriteManifest(rolled) {
     if (this.#fsync === "always" || rolled || this.#manifestPending + 1 >= BATCH_FSYNC) {
       this.#writeManifest();
@@ -787,7 +864,7 @@ export class DurableStore {
     const sync = this.#fsync === "always" || (forceFsync && this.#fsync !== "never");
     const fd = fs.openSync(tmp, "w", 0o600);
     try {
-      fs.writeSync(fd, data);
+      writeAll(fd, data);
       if (sync) fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
@@ -804,10 +881,11 @@ export class DurableStore {
   #acquireLock() {
     try {
       const fd = fs.openSync(this.#lockPath, "wx", 0o600);
-      try { fs.writeSync(fd, String(process.pid) + "\n"); }
-      finally { fs.closeSync(fd); }
       this.#lockHeld = true;
+      try { writeAll(fd, String(process.pid) + "\n"); }
+      finally { fs.closeSync(fd); }
     } catch (error) {
+      this.#releaseLock();
       if (error && error.code === "EEXIST") {
         throw new Error("durable store is locked (another process holds " + this.#dir + ")");
       }
@@ -831,16 +909,7 @@ export class DurableStore {
 
   #syncDir() {
     if (this.#fsync === "never") return;
-    let fd;
-    try {
-      fd = fs.openSync(this.#dir, "r");
-      fs.fsyncSync(fd);
-    } catch {
-      // A directory fsync is not supported on every platform; the rename is
-      // still atomic and the manifest itself was fsynced above.
-    } finally {
-      if (fd !== undefined) fs.closeSync(fd);
-    }
+    syncDirectory(this.#dir);
   }
 
   #retire(state, now) {

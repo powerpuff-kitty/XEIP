@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "database": {
+    "host": "postgres.example.internal",
+    "port": 5432,
+    "name": "xeip",
+    "user": "xeip_owner",
+    "passwordFile": "/etc/xeip-maintenance/secrets/database-owner-password",
+    "caFile": "/etc/xeip-maintenance/database-ca.pem",
+    "max": 1
+  }
+}

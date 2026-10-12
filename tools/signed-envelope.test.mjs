@@ -155,6 +155,39 @@ test("strictParse rejects malformed input and never mutates prototypes", () => {
   assert.equal(Object.getPrototypeOf({}), Object.prototype);
 });
 
+test("strictParse preserves long strings across escape and Unicode boundaries", () => {
+  const run = "alpha".repeat(70000);
+  for (const value of [
+    run,
+    run + '"\\\n\t/' + run,
+    run + "😀" + run,
+    "𝄞" + run + "\b\f\r",
+  ]) {
+    assert.equal(strictParse(JSON.stringify(value)), value);
+    assert.equal(
+      Object.keys(strictParse("{" + JSON.stringify(value) + ":1}"))[0],
+      value,
+    );
+  }
+  assert.equal(
+    strictParse('"' + run + "\\uD83D\\uDE00" + run + '"'),
+    run + "😀" + run,
+  );
+  for (const bad of [
+    '"' + run + '\\q"',
+    '"' + run + '\\u00zz"',
+    '"' + run + '\\uD800"',
+    '"' + run + '\\uDC00"',
+    '"' + run + String.fromCharCode(0) + '"',
+    '"' + run + String.fromCharCode(0xd800) + '"',
+    '"' + run + String.fromCharCode(0xdc00) + '"',
+    '"' + run,
+    '"' + run + String.fromCharCode(92),
+    '{"name":1,"na\\u006de":2}',
+  ])
+    assert.throws(() => strictParse(bad));
+});
+
 test("ed25519 key conversion matches the standard seed/public-key pair", () => {
   const privateKey = ed25519PrivateKeyFromSeed(hexBytes(SEED_HEX));
   const raw = createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(-32);

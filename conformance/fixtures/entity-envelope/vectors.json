@@ -1,0 +1,2216 @@
+{
+  "seed": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+  "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+  "envelope": {
+    "xeip": "0.1",
+    "id": "urn:test:entity-message",
+    "kind": "command",
+    "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+    "session": "urn:test:session",
+    "timestamp": "2026-10-10T00:00:00Z",
+    "body": {
+      "contentType": "application/json",
+      "data": {
+        "action": "inspect",
+        "target": "camera"
+      }
+    },
+    "extensions": {
+      "app.action": {
+        "approved": true
+      }
+    }
+  },
+  "criticalExtensions": [
+    "app.action"
+  ],
+  "signed": {
+    "xeip": "0.1",
+    "id": "urn:test:entity-message",
+    "kind": "command",
+    "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+    "session": "urn:test:session",
+    "timestamp": "2026-10-10T00:00:00Z",
+    "body": {
+      "contentType": "application/json",
+      "data": {
+        "action": "inspect",
+        "target": "camera"
+      }
+    },
+    "extensions": {
+      "app.action": {
+        "approved": true
+      },
+      "xeip.sig": {
+        "v": "0.2",
+        "alg": "EdDSA",
+        "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+        "crit": [
+          "app.action"
+        ],
+        "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+      }
+    }
+  },
+  "signingInput": "XEIP entity-bound envelope v0.2\n{\"envelope\":{\"body\":{\"contentType\":\"application/json\",\"data\":{\"action\":\"inspect\",\"target\":\"camera\"}},\"extensions\":{\"app.action\":{\"approved\":true}},\"id\":\"urn:test:entity-message\",\"kind\":\"command\",\"sender\":\"urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd\",\"session\":\"urn:test:session\",\"timestamp\":\"2026-10-10T00:00:00Z\",\"xeip\":\"0.1\"},\"proof\":{\"alg\":\"EdDSA\",\"crit\":[\"app.action\"],\"kid\":\"z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG\",\"v\":\"0.2\"}}",
+  "vectors": [
+    {
+      "name": "endorsed device as parent",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "edited application extension",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": false
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "signature mismatch"
+    },
+    {
+      "name": "edited payload",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "delete",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "signature mismatch"
+    },
+    {
+      "name": "edited sender",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:test:other",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "signature mismatch"
+    },
+    {
+      "name": "edited critical metadata",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "signature mismatch"
+    },
+    {
+      "name": "unknown critical extension",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": []
+      },
+      "valid": false,
+      "reason": "unsupported critical extension"
+    },
+    {
+      "name": "duplicate critical extension",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action",
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "malformed signature"
+    },
+    {
+      "name": "missing critical payload",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "malformed signature"
+    },
+    {
+      "name": "unknown carrier field",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA",
+            "extra": true
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "malformed signature"
+    },
+    {
+      "name": "legacy downgrade",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.1",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "sig": "zoWVkmD-t5xsd0Va9tPSZa1K28M6dxzKWYgh11x39bqTC1ne0UNgyFyUAtlr2fqFWVJn3sUaZ2762WYQiA-WBQ"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "unsupported profile"
+    },
+    {
+      "name": "missing signature",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "malformed signature"
+    },
+    {
+      "name": "wrong anchor",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "empty anchor",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {},
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "missing chain",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "revoked device",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [
+            {
+              "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+              "generation": 1
+            }
+          ],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "uQ1bjRgNIgytw7LGloKNYH5gH-xNx6V-MEzkTlb16cPw8OFyw0RarsY6zH9QotvRionJrJrHRdWG7_DamPzwDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "revoked key"
+    },
+    {
+      "name": "stale status",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590461,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "stale status"
+    },
+    {
+      "name": "future status",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:01Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            },
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "9M8lsraDtRxIQ-9NUhMvXkJ8v0QbZrNilbj2Rs3x3k-VGMnJZ8OL_AJ0tn-lKGtpUnNwy95602Bw4CKZrAPJBA"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "stale status"
+    },
+    {
+      "name": "missing maximum age",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "stale status"
+    },
+    {
+      "name": "invalid reference time",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": -1,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "stale status"
+    },
+    {
+      "name": "removed device",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          },
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 2,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              },
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "ShdS36MO0pF5ol-NqyM_2zUVGlMUmXMtPInpqIg1HFEIaojUbjXdC5UVOepZAWisQ_wDyPIMR7zzMPB3sH3BDw"
+              }
+            ],
+            "previous": "07e4e14817cfddcf20e459a09352fa14115c1fc41f46ac67c458a4f2ee55ec8d"
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "unauthorized key"
+    },
+    {
+      "name": "invalid status signature",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "invalid signature",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "signature mismatch"
+    },
+    {
+      "name": "signed unrelated sender",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:test:unrelated",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zHeiqN_wrkZmN5K1FA6vP_O2wwr1BTC7J1JEUl-ZGgrEjfUn-CQcXFxLSnzJvQa3pza9r-fJuAaY9jIQg26FCg"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "missing status",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": null,
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "untrusted identity"
+    },
+    {
+      "name": "unsupported algorithm",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "none",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "unsupported profile"
+    },
+    {
+      "name": "invalid signature encoding",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "***"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "malformed signature"
+    },
+    {
+      "name": "invalid issuance calendar",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "app.action": {
+            "approved": true
+          },
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [
+              "app.action"
+            ],
+            "sig": "zkQKdUCq74XiCDWbJheYyCCP-jGI6VOr0YO4Ebo-ZW53gdoU5TyD6dSYoQdiSAyXExzdjkkzNfC3mzk9NFgvBA"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-02-30T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "DTrUGfq06Dz7-LD3lojd2svnN41K5Q9cP9nSpBBZ5pKnd9kahn9BHG57dEuLN7DcLUDA7tJWhF22LcfPPkxYAg"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": false,
+      "reason": "stale status"
+    },
+    {
+      "name": "unknown noncritical extension",
+      "envelope": {
+        "xeip": "0.1",
+        "id": "urn:test:entity-message",
+        "kind": "command",
+        "sender": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+        "session": "urn:test:session",
+        "timestamp": "2026-10-10T00:00:00Z",
+        "body": {
+          "contentType": "application/json",
+          "data": {
+            "action": "inspect",
+            "target": "camera"
+          }
+        },
+        "extensions": {
+          "note": "authenticated",
+          "xeip.sig": {
+            "v": "0.2",
+            "alg": "EdDSA",
+            "kid": "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+            "crit": [],
+            "sig": "pOeI1u2posrwsgbnqV13Un_GEsA_cdcrQzrsMtEQtkD8HvJflpm6djuaPyE1J1HZgANH2liUTMIwe1f3kbeICw"
+          }
+        }
+      },
+      "options": {
+        "keyDocuments": [
+          {
+            "xeip": "xeip.keydoc/0.1",
+            "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [
+              "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+            ],
+            "devices": [
+              "z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG"
+            ],
+            "signatures": [
+              {
+                "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                "sig": "KvT24QtfFEkEidEjGoJf4CPs8-HyRSx3ZgLteX3YGrFksZfY9Ito9LEwB2k0YcqmKA24meWgYDcZMANqVxgMBQ"
+              }
+            ]
+          }
+        ],
+        "anchor": {
+          "genesisKid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+        },
+        "statusDocument": {
+          "xeip": "xeip.status/0.1",
+          "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+          "serial": 1,
+          "issuedAt": "2026-10-10T00:00:00Z",
+          "revoked": [],
+          "signatures": [
+            {
+              "kid": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+              "sig": "wbd1HsEs0Afi_UNTAa5F0tXauNEsFcXLFvm0rD9AxN6Rknq4xZeqDEP2b2PSUgn3V1oy8xx0B1Kg1uWLjbwIDQ"
+            }
+          ]
+        },
+        "nowSeconds": 1791590400,
+        "maxAgeSeconds": 60,
+        "knownExtensions": [
+          "app.action"
+        ]
+      },
+      "valid": true
+    }
+  ]
+}

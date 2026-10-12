@@ -13,22 +13,23 @@ import { ReceiptLedger, LOCAL_RECEIPTS_PROFILE } from "./receipts.mjs";
 import { LimitPolicy, LOCAL_LIMITS_PROFILE } from "./limits.mjs";
 import { authorize, sseFrame, validateMessage, absoluteUri, MAX_FRAME } from "./http-util.mjs";
 import { XEIP_SUPPORTED_VERSIONS } from "../../sdks/typescript/src/validation.js";
-import { SIG_EXTENSION, strictParse, verifySignedEnvelope } from "../../tools/signed-envelope.mjs";
-import { KeyDocumentTrust } from "../../tools/key-document.mjs";
-import { StatusTracker, verifyStatusDocument } from "../../tools/identity-status.mjs";
+import { SIG_EXTENSION, verifySignedEnvelope } from "../../packages/identity/signed-envelope.mjs";
+import { buildKeyDocumentRegistry, buildStatusRegistry, isPlainObject } from "./trust.mjs";
+import { EntityTrustPolicy } from "./entity-trust.mjs";
+import { ENTITY_SIGNATURE_PROFILE } from "../../packages/identity/entity-envelope.mjs";
 
 /**
  * Opt-in signed-envelope enforcement. The carrier, canonical bytes and
  * `entityUrn(kid) === sender` binding are defined by
  * `spec/local-signed-envelopes.md`; verification is the reference
- * implementation in `tools/signed-envelope.mjs`, not re-implemented here.
+ * implementation in `packages/identity/signed-envelope.mjs`, not re-implemented here.
  */
 export const LOCAL_SIGNED_ENVELOPES_PROFILE = "xeip.local-signed-envelopes/0.1";
 
 /**
  * Opt-in trusted-key resolution. When `keyDocuments` is configured, a signed
  * envelope's `kid` must additionally be a *current* root or device key of a
- * trusted chain (verified at construction with `tools/key-document.mjs`), not
+ * trusted chain (verified at construction with `packages/identity/key-document.mjs`), not
  * merely self-certifying.
  */
 export const LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE = "xeip.local-trusted-key-documents/0.1";
@@ -41,167 +42,6 @@ export const LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE = "xeip.local-trusted-key-docum
  * valid. Requires `keyDocuments`, which supplies the entity's trusted roots.
  */
 export const LOCAL_STATUS_DOCUMENTS_PROFILE = "xeip.local-status-documents/0.1";
-
-// A status entry `{ kid, generation }` revokes `kid` for its recorded generation
-// and later (spec/plans/identity-status.md). This slice does not model a key's
-// key-document generation at the relay, so it treats any entry for a key as
-// revoking that key and asks the tracker with the maximum safe generation, which
-// is `>=` every recorded generation.
-const STATUS_GENERATION_ANY = Number.MAX_SAFE_INTEGER;
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function parseKeyDocument(document) {
-  if (typeof document === "string") {
-    try {
-      return strictParse(document);
-    } catch {
-      throw new TypeError("trusted key document is not valid JSON");
-    }
-  }
-  return document;
-}
-
-function parseStatusDocument(document) {
-  if (typeof document === "string") {
-    try {
-      return strictParse(document);
-    } catch {
-      throw new TypeError("status document is not valid JSON");
-    }
-  }
-  return document;
-}
-
-/**
- * Verify the trusted provisioning input at construction and build a per-entity
- * view of current root/device kids. Each entity's documents are ingested, in
- * order, through a {@link KeyDocumentTrust} pinned to the anchor supplied for
- * that entity: single-document verification, chain linking and anchor checks
- * all run here. Any invalid or untrusted document throws (fail closed), so no
- * relay is ever constructed around an untrusted chain.
- */
-function buildKeyDocumentRegistry(keyDocuments) {
-  if (!Array.isArray(keyDocuments) || keyDocuments.length === 0) {
-    throw new TypeError("keyDocuments must be a non-empty array");
-  }
-  const groups = new Map();
-  const entityOrder = [];
-  for (const entry of keyDocuments) {
-    if (!isPlainObject(entry)) throw new TypeError("each keyDocuments entry must be an object");
-    for (const key of Object.keys(entry)) {
-      if (key !== "document" && key !== "anchor") {
-        throw new TypeError(`unknown keyDocuments entry field: ${key}`);
-      }
-    }
-    if (!Object.hasOwn(entry, "document")) {
-      throw new TypeError("keyDocuments entry requires a document");
-    }
-    const document = parseKeyDocument(entry.document);
-    if (!isPlainObject(document) || typeof document.entity !== "string") {
-      throw new TypeError("trusted key document must carry a string entity");
-    }
-    let group = groups.get(document.entity);
-    if (group === undefined) {
-      group = { anchor: entry.anchor, documents: [] };
-      groups.set(document.entity, group);
-      entityOrder.push(document.entity);
-    } else if (group.anchor === undefined && entry.anchor !== undefined) {
-      group.anchor = entry.anchor;
-    }
-    group.documents.push(document);
-  }
-
-  const ownerByKid = new Map();
-  const kidsByEntity = new Map();
-  const trustedByEntity = new Map();
-  for (const entity of entityOrder) {
-    const group = groups.get(entity);
-    const anchor = group.anchor === undefined ? null : group.anchor;
-    let trust;
-    try {
-      trust = new KeyDocumentTrust({ entity, anchor });
-    } catch (error) {
-      throw new TypeError(`invalid trusted key document anchor for ${entity}: ${error.message}`);
-    }
-    let current;
-    for (const document of group.documents) {
-      const result = trust.ingest(document);
-      if (!result.valid) {
-        throw new Error(`untrusted key document for ${entity}: ${result.reason}`);
-      }
-      current = document;
-    }
-    // The latest accepted generation supplies the trusted `roots` against which
-    // a status document for the entity is verified.
-    trustedByEntity.set(entity, current);
-    const kids = new Set([...current.roots, ...current.devices]);
-    kidsByEntity.set(entity, kids);
-    for (const kid of kids) {
-      const existing = ownerByKid.get(kid);
-      if (existing !== undefined && existing !== entity) {
-        throw new Error(`key ${kid} is endorsed by multiple entities`);
-      }
-      ownerByKid.set(kid, entity);
-    }
-  }
-  return { ownerByKid, entityCount: kidsByEntity.size, trustedByEntity };
-}
-
-/**
- * Verify the trusted status provisioning input at construction. Each status
- * document is bound to a trusted key document for its entity (which supplies the
- * roots that must sign it) and run through a per-entity {@link StatusTracker}:
- * single-document verification plus serial-rollback and staleness rules. Any
- * invalid, rollback or stale document throws (fail closed), so a relay is never
- * constructed around a revoked-key list that fails closed. Status documents are
- * trusted provisioning input, not runtime wire input; runtime status refresh is
- * out of scope for this slice.
- */
-function buildStatusRegistry(statusDocuments, keyDocRegistry) {
-  if (!Array.isArray(statusDocuments) || statusDocuments.length === 0) {
-    throw new TypeError("statusDocuments must be a non-empty array");
-  }
-  const tracker = new StatusTracker();
-  const entities = new Set();
-  for (const entry of statusDocuments) {
-    if (!isPlainObject(entry)) throw new TypeError("each statusDocuments entry must be an object");
-    for (const key of Object.keys(entry)) {
-      if (key !== "document" && key !== "now" && key !== "maxAgeSeconds") {
-        throw new TypeError(`unknown statusDocuments entry field: ${key}`);
-      }
-    }
-    if (!Object.hasOwn(entry, "document")) {
-      throw new TypeError("statusDocuments entry requires a document");
-    }
-    const document = parseStatusDocument(entry.document);
-    const entity = isPlainObject(document) && typeof document.entity === "string"
-      ? document.entity
-      : null;
-    const trusted = entity === null ? undefined : keyDocRegistry.trustedByEntity.get(entity);
-    if (trusted === undefined) {
-      throw new Error(`status document for an entity with no trusted key document: ${entity ?? "missing"}`);
-    }
-    // Explicit single-document verification against the trusted key document,
-    // then the stateful tracker applies serial rollback and staleness.
-    const single = verifyStatusDocument(document, trusted);
-    if (!single.valid) {
-      throw new Error(`untrusted status document for ${entity}: ${single.reason}`);
-    }
-    const result = tracker.ingest(document, {
-      trustedKeyDocument: trusted,
-      now: entry.now,
-      maxAgeSeconds: entry.maxAgeSeconds
-    });
-    if (!result.valid) {
-      throw new Error(`untrusted status document for ${entity}: ${result.reason}`);
-    }
-    entities.add(entity);
-  }
-  return { tracker, entityCount: entities.size };
-}
 
 // The verified signature kid, or undefined. The carrier is authenticated by the
 // time this is read, but a defensive shape check keeps a malformed value from
@@ -227,7 +67,10 @@ const TOKEN_PRINCIPAL = Object.freeze({ token: true });
  * constructor run synchronously, so a misconfiguration throws here before any
  * transport is created.
  */
-export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments }) {
+export function createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, entitySignatures, keyDocuments, statusDocuments }) {
+  const entityProfile = entitySignatures !== undefined;
+  if (entityProfile && signatures !== undefined) throw new TypeError("choose one signature profile");
+  if (entityProfile && !(admission instanceof LocalAdmission)) throw new TypeError("entity signatures require local admission");
   // `signatures` is a bare opt-in. An empty object enables detached-signature
   // enforcement; null, arrays, primitives and any unknown member are rejected.
   // It is orthogonal to the authentication modes and needs no other profile.
@@ -236,7 +79,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
        Object.keys(signatures).length > 0)) {
     throw new TypeError("invalid signatures configuration");
   }
-  const signaturesEnabled = signatures !== undefined;
+  const signaturesEnabled = signatures !== undefined || entityProfile;
   // Trusted key resolution is a tightening of signed-envelope enforcement, so
   // it is meaningless (and rejected) without `signatures`. The documents are
   // verified here, before any transport exists, and fail closed.
@@ -250,8 +93,8 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   if (statusDocuments !== undefined && keyDocuments === undefined) {
     throw new TypeError("statusDocuments requires keyDocuments");
   }
-  const keyDocRegistry = keyDocuments === undefined ? null : buildKeyDocumentRegistry(keyDocuments);
-  const statusRegistry = statusDocuments === undefined
+  const keyDocRegistry = keyDocuments === undefined || entityProfile ? null : buildKeyDocumentRegistry(keyDocuments);
+  const statusRegistry = statusDocuments === undefined || entityProfile
     ? null
     : buildStatusRegistry(statusDocuments, keyDocRegistry);
   if (admission !== undefined) {
@@ -274,8 +117,9 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   // The durable store holds an exclusive `<dir>/LOCK` and an open fd. Every later
   // policy construction (receipts, limits) can throw on invalid configuration, so
   // close the store before rethrowing rather than leaking its lock or fd.
-  let store, receiptBackend, receiptLedger, limitPolicy;
+  let store, receiptBackend, receiptLedger, limitPolicy, entityTrust;
   try {
+    entityTrust = entityProfile ? new EntityTrustPolicy(entitySignatures, keyDocuments, statusDocuments) : null;
     store = durableStore ?? deliveryLog;
     // Receipts persist through the durable store's directory only when both
     // options are set; without a durable backend the ledger stays in-memory.
@@ -283,7 +127,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     receiptLedger = receipts === undefined ? null : new ReceiptLedger(receipts, receiptBackend);
     limitPolicy = limits === undefined ? null : new LimitPolicy(limits);
   } catch (error) {
-    durableStore?.close();
+    try { durableStore?.close(); } finally { entityTrust?.close(); }
     throw error;
   }
   // One token-bucket decision for the current request's rate-limit key, or null
@@ -324,7 +168,14 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     // still reported as 401; the signature is verified before any authorization,
     // replay recording or delivery.
     if (admission && !admission.isCurrent(principal)) return { status: 401, error: "unauthorized" };
-    if (signaturesEnabled) {
+    if (entityTrust) {
+      if (!entityTrust.allows(principal) || envelopeKid(raw) !== principal.kid) return { status: 403, error: "forbidden" };
+      const verified = entityTrust.verify(raw);
+      if (!verified.valid) {
+        const forbidden = ["untrusted identity", "unauthorized key", "stale status", "revoked key"].includes(verified.reason);
+        return { status: forbidden ? 403 : 422, error: forbidden ? "forbidden" : "invalid signature" };
+      }
+    } else if (signaturesEnabled) {
       let verified;
       try { verified = verifySignedEnvelope(raw); }
       catch { return { status: 422, error: "invalid signature" }; }
@@ -346,7 +197,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       const kid = envelopeKid(raw);
       const entity = keyDocRegistry.ownerByKid.get(kid);
       if (entity === undefined) return { status: 403, error: "forbidden" };
-      if (statusRegistry && statusRegistry.tracker.isRevoked(entity, kid, STATUS_GENERATION_ANY)) {
+      if (statusRegistry && !statusRegistry.allows(entity, kid)) {
         return { status: 403, error: "forbidden" };
       }
     }
@@ -356,20 +207,25 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     // emitted bytes compatible with both reference readers before routing,
     // reserving room for the id line and WebSocket wrapper added below.
     if (Buffer.byteLength(base) > MAX_FRAME - FRAME_OVERHEAD) return { status: 413, error: "serialized SSE frame too large" };
-    if (replayWindow) {
-      // Record accepted scope before any write, with no asynchronous gap in routing.
-      const decision = replayWindow.accept(raw);
-      if (decision.status === "duplicate") return { status: 202, body: { accepted: true, delivered: 0, duplicate: true } };
-      if (decision.status === "conflict") return { status: 409, error: "message ID conflict" };
-      if (decision.status === "full") return { status: 503, error: "replay window full", retryAfter: decision.retryAfter };
+    // Persist and commit replay acceptance in one synchronous operation before
+    // stream writes. Duplicate/conflict/full decisions never append to storage.
+    let seq;
+    const persist = () => { seq = store ? store.append(raw.session, raw) : undefined; };
+    try {
+      if (replayWindow) {
+        const decision = replayWindow.accept(raw, undefined, persist);
+        if (decision.status === "duplicate") return { status: 202, body: { accepted: true, delivered: 0, duplicate: true } };
+        if (decision.status === "conflict") return { status: 409, error: "message ID conflict" };
+        if (decision.status === "full") return { status: 503, error: "replay window full", retryAfter: decision.retryAfter };
+      } else persist();
+    } catch (error) {
+      if (durableStore) return { status: 503, error: "durable storage unavailable; reopen required" };
+      throw error;
     }
-    // Assign the delivery sequence in the same synchronous step as the writes so
-    // the per-session order equals acceptance order across both transports.
-    const seq = store ? store.append(raw.session, raw) : undefined;
     const frame = sseFrame(raw, seq);
     let written = 0;
     for (const subscriber of clientsFor(raw.session)) {
-      if (admission && !admission.canSubscribe(subscriber.principal, raw.session)) continue;
+      if (admission && !canSubscribe(subscriber.principal, raw.session)) continue;
       if (raw.recipient !== undefined && subscriber.entity !== raw.recipient) continue;
       if (!subscriber.alive()) continue;
       // A write to a current stream is not a delivery acknowledgment.
@@ -395,7 +251,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
     if (hasSeq && (!Number.isSafeInteger(seq) || seq < 0)) return { status: 400, error: "invalid seq" };
     if (hasId && !absoluteUri(id)) return { status: 400, error: "invalid id" };
     if (status !== undefined && status !== "received") return { status: 400, error: "invalid status" };
-    if (!admission.canSubscribe(principal, session)) return { status: 403, error: "forbidden" };
+    if (!canSubscribe(principal, session)) return { status: 403, error: "forbidden" };
     // Recipient eligibility is applied BEFORE ambiguity resolution so another
     // principal's messages can never make a valid id-only receipt ambiguous.
     const eligible = candidate => candidate.message.recipient === undefined || candidate.message.recipient === principal.entity;
@@ -411,8 +267,13 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       if (matches.length > 1) return { status: 409, error: "ambiguous target" };
       entry = matches[0];
     }
-    const { duplicate } = receiptLedger.record(principal, session, entry.seq, entry.message.id);
-    return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
+    try {
+      const { duplicate } = receiptLedger.record(principal, session, entry.seq, entry.message.id);
+      return { status: 202, body: { acknowledged: true, session, seq: entry.seq, duplicate } };
+    } catch (error) {
+      if (receiptBackend) return { status: 503, error: "receipt storage unavailable; reopen required" };
+      throw error;
+    }
   };
   const health = () => {
     const protocol = "xeip/" + XEIP_SUPPORTED_VERSIONS[0];
@@ -439,7 +300,11 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
       base.limitsProfile = LOCAL_LIMITS_PROFILE;
       base.limits = limitPolicy.limits;
     }
-    if (signaturesEnabled) base.signatureProfile = LOCAL_SIGNED_ENVELOPES_PROFILE;
+    if (signaturesEnabled) base.signatureProfile = entityTrust ? ENTITY_SIGNATURE_PROFILE : LOCAL_SIGNED_ENVELOPES_PROFILE;
+    if (entityTrust) {
+      base.entityTrust = entityTrust.status();
+      if (base.entityTrust.state !== "ready") base.status = "degraded";
+    }
     if (keyDocRegistry) {
       base.keyDocumentProfile = LOCAL_TRUSTED_KEY_DOCUMENTS_PROFILE;
       // Advertise only the count: no per-entity key ids or chain material.
@@ -454,7 +319,7 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   };
   const checkSubscriptions = () => {
     for (const [session, clients] of sessions) for (const client of clients) {
-      if (!admission.canSubscribe(client.principal, session)) client.destroy();
+      if (!canSubscribe(client.principal, session)) client.destroy();
     }
   };
   // Shared-token mode returns a truthy sentinel carrying no entity; admission
@@ -464,10 +329,13 @@ export function createRelayCore({ token, admission, replay, delivery, durable, r
   // Admission delegations. They are only called by callers already guarded by
   // admission mode, matching the original inline call sites.
   const isCurrent = principal => admission.isCurrent(principal);
-  const canSubscribe = (principal, session) => admission.canSubscribe(principal, session);
-  const sendAllowed = (principal, message) => admission.canSend(principal, message);
+  const trustAllows = principal => !entityTrust || entityTrust.allows(principal);
+  const canSubscribe = (principal, session) => admission.canSubscribe(principal, session) && trustAllows(principal);
+  const sendAllowed = (principal, message) => admission.canSend(principal, message) && trustAllows(principal);
   return {
     signaturesEnabled,
+    entityTrust,
+    trustAllows,
     keyDocRegistry,
     statusRegistry,
     authenticate,

@@ -1,0 +1,18 @@
+{
+  "organization": "example-org",
+  "origin": "https://xeip.example",
+  "gateway": "urn:xeip:entity:z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+  "trust": { "maxAgeSeconds": 300 },
+  "targets": [{
+    "id": "internal",
+    "revision": "1",
+    "recipient": "urn:xeip:entity:z6Mkgxj2R3HLtQRpPnvfvpuKEceSqf3tZHBjdmZ3fFz3JHGG",
+    "tools": ["lookup"],
+    "endpoint": "https://mcp.example/mcp",
+    "resourceMetadataUrl": "https://mcp.example/resource",
+    "issuer": "https://mcp.example",
+    "tokenEndpoint": "https://mcp.example/token",
+    "clientId": "xeip-connector",
+    "scope": "tools:lookup"
+  }]
+}

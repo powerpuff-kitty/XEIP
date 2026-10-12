@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { decodeKeyId } from "../../packages/identity/key-id.mjs";
 import { requireUri, validateSession } from "../../sdks/typescript/src/validation.js";
 
 export const LOCAL_ADMISSION_PROFILE = "xeip.local-admission/0.1";
@@ -28,11 +29,11 @@ export class LocalAdmission {
     if (!Array.isArray(credentials) || credentials.length < 1 || credentials.length > MAX_ENTITIES ||
         !Array.isArray(sessions) || sessions.length > MAX_SESSIONS) throw new TypeError("invalid credential/session count");
     for (const credential of credentials) {
-      requireRecord(credential, ["entity", "token"]);
-      const { entity, token } = credential;
+      requireRecord(credential, ["entity", "token", "kid"]);
+      const { entity, token, kid } = credential;
       requireUri(entity, "credential entity");
       if (this.#credentials.has(entity)) throw new TypeError("duplicate credential entity");
-      this.#installCredential(entity, token);
+      this.#installCredential(entity, token, kid);
     }
     for (const session of sessions) {
       const snapshot = this.#snapshot(session);
@@ -41,12 +42,13 @@ export class LocalAdmission {
     }
   }
 
-  #installCredential(entity, token) {
+  #installCredential(entity, token, kid) {
+    if (kid !== undefined) decodeKeyId(kid);
     requireToken(token);
     const hash = digest(token), key = hash.toString("hex");
     if (this.#history.has(key)) throw new TypeError("credential token was already issued");
     if (this.#history.size >= MAX_HISTORY) throw new RangeError("credential history limit reached");
-    const record = { principal: Object.freeze({ entity }), hash, active: true };
+    const record = { principal: Object.freeze({ entity, ...(kid === undefined ? {} : { kid }) }), hash, active: true };
     this.#history.add(key);
     this.#credentials.set(entity, record);
   }
@@ -96,9 +98,11 @@ export class LocalAdmission {
     if (record.active) { record.active = false; this.#changed(); }
   }
 
-  rotateCredential(entity, token) {
+  rotateCredential(entity, token, options = {}) {
+    requireRecord(options, ["kid"]);
     if (!this.#credentials.has(entity)) throw new TypeError("unknown credential entity");
-    this.#installCredential(entity, token);
+    const kid = options.kid ?? this.#credentials.get(entity).principal.kid;
+    this.#installCredential(entity, token, kid);
     this.#changed();
   }
 

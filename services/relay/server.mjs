@@ -16,12 +16,20 @@ import {
 } from "./http-util.mjs";
 import { openSubscription } from "./subscription.mjs";
 import { CLOSE, isWebSocketUpgrade, acceptWebSocket } from "./websocket.mjs";
-import { strictParse } from "../../tools/signed-envelope.mjs";
+import { strictParse } from "../../packages/identity/signed-envelope.mjs";
 
 /** Returns a Node HTTP server; caller must listen on 127.0.0.1 or ::1. */
-export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments }) {
-  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, keyDocuments, statusDocuments });
+export function createRelay({ token, admission, replay, delivery, durable, receipts, limits, signatures, entitySignatures, keyDocuments, statusDocuments }) {
+  const core = createRelayCore({ token, admission, replay, delivery, durable, receipts, limits, signatures, entitySignatures, keyDocuments, statusDocuments });
   const { limitPolicy, durableStore } = core;
+  const websockets = new Map();
+  const checkConnections = () => {
+    core.checkSubscriptions();
+    for (const [connection, principal] of websockets) {
+      if (core.entityTrust && (!core.isCurrent(principal) || !core.trustAllows(principal))) connection.close(CLOSE.policy, "authorization changed");
+    }
+  };
+  let trustSweep;
   const limitDecision = (req, principal) => core.limitDecision(principal, req.socket.remoteAddress);
   const server = createServer((req, res) => {
     // A store/disk failure must not become an unhandled rejection that kills the process.
@@ -188,16 +196,22 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
     if (!isWebSocketUpgrade(req)) return refuseUpgrade(socket, 400, "websocket upgrade required");
     const principal = core.authenticate(req.headers.authorization);
     if (!principal) return refuseUpgrade(socket, 401, "unauthorized");
+    if (!core.trustAllows(principal)) return refuseUpgrade(socket, 403, "forbidden");
     if (limitPolicy) {
       const decision = limitDecision(req, principal);
       if (!decision.allowed) return refuseUpgrade(socket, 429, "rate limit exceeded");
       if (!limitPolicy.acquireConnection()) return refuseUpgrade(socket, 429, "connection limit exceeded");
     }
     const connection = acceptWebSocket(req, socket, head, { maxFrame: MAX_FRAME, maxMessage: MAX_FRAME, maxPending: MAX_PENDING });
+    websockets.set(connection, principal);
     const ownSubscriptions = new Map(); // session -> client
     const control = value => connection.sendText(JSON.stringify(value));
     // Rate-limits one control frame; the reply is a 429 error control when denied.
     const allowControl = () => {
+      if (core.entityTrust && (!core.isCurrent(principal) || !core.trustAllows(principal))) {
+        connection.close(CLOSE.policy, "authorization changed");
+        return false;
+      }
       const decision = limitDecision(req, principal);
       if (decision && !decision.allowed) {
         control({ type: "error", status: 429, error: "rate limit exceeded" });
@@ -292,6 +306,7 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
       return control({ type: "error", status: 400, error: "unknown control type" });
     };
     connection.on("close", () => {
+      websockets.delete(connection);
       clearInterval(heartbeat);
       for (const opened of ownSubscriptions.values()) opened.close();
       ownSubscriptions.clear();
@@ -301,9 +316,23 @@ export function createRelay({ token, admission, replay, delivery, durable, recei
   let stopChanges;
   server.on("listening", () => {
     stopChanges?.();
-    stopChanges = admission?.onChange(core.checkSubscriptions);
+    stopChanges = admission?.onChange(checkConnections);
+    clearInterval(trustSweep);
+    if (core.entityTrust) {
+      trustSweep = setInterval(checkConnections, 1000);
+      trustSweep.unref();
+    }
   });
-  server.on("close", () => { stopChanges?.(); stopChanges = undefined; durableStore?.close(); });
+  server.on("close", () => {
+    stopChanges?.(); stopChanges = undefined;
+    clearInterval(trustSweep);
+    try { durableStore?.close(); } finally { core.entityTrust?.close(); }
+  });
+  server.updateEntityTrust = provisioning => {
+    if (!core.entityTrust) throw new Error("entity signing profile is not enabled");
+    try { core.entityTrust.update(provisioning); }
+    finally { checkConnections(); }
+  };
   return server;
 }
 

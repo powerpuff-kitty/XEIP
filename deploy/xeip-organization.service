@@ -1,0 +1,34 @@
+# Template pending artifact and operator-platform acceptance; not an installed service.
+[Unit]
+Description=XEIP organization action service
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=xeip
+Group=xeip
+WorkingDirectory=/opt/xeip
+ExecStart=/usr/bin/node /opt/xeip/services/organization/main.mjs serve --config /etc/xeip/organization.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillSignal=SIGTERM
+UMask=0077
+Environment=NODE_ENV=production
+StateDirectory=xeip
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/xeip
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

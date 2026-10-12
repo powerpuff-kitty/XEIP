@@ -11,7 +11,7 @@ XEIP is **experimental and pre-release**. There is no published SDK or relay rel
 ## Pre-release checklist
 
 1. **Clean tree and lockfiles.** `git status` is clean; `Cargo.lock` and `package-lock.json` are committed and intentional.
-2. **Full local verification passes:** `npm ci --ignore-scripts`, `npm run typecheck`, `npm run build:ts`, `npm run validate:fixtures`, `npm test`, `npm run test:ts`, `npm run test:interop`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and all `npm run demo:*`.
+2. **Full local verification passes:** `npm ci --ignore-scripts`, `npm run typecheck`, `npm run typecheck:relay`, `npm run typecheck:identity`, `npm run typecheck:organization`, `npm run test:organization`, `npm run test:organization:integration`, `npm run coverage:organization`, `npm run build:ts`, `npm run validate:fixtures`, `npm test`, `npm run test:ts`, `npm run test:interop`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and all `npm run demo:*`.
 3. **CI is green** on a fresh checkout for every job (Node, Rust lint, both Rust toolchains).
 4. **Schema/spec drift:** `conformance/vectors.json` passes against JSON Schema, the Rust core and the TypeScript SDK; changed wire shape has updated schemas, fixtures, spec text and negative tests.
 5. **Security truth:** `spec/security.md` and `spec/threat-model.md` describe the exact implemented scope and residual risk; no example is marked production-ready.
@@ -27,4 +27,8 @@ XEIP is **experimental and pre-release**. There is no published SDK or relay rel
 
 ## Not yet satisfied
 
-GitHub Actions are referenced by version tag rather than immutable SHA, there is no signed release provenance, and no independent security review or external-client interoperability has been completed. A v1.0 release additionally requires the exit criteria in [ROADMAP.md](ROADMAP.md).
+GitHub Actions are pinned by immutable SHA. Signed release provenance, independent security review and external-client interoperability have not been completed. A production release additionally requires the evidence in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md), and v1.0 requires the exit criteria in [ROADMAP.md](ROADMAP.md).
+
+## Organization artifact gate
+
+Build and inspect the experimental organization image as described in [reserved staging](deploy/STAGING.md). Require the `organization-artifact` CI job on the reviewed clean commit, record its image/base digests, inventory and checksums, and complete actual runtime/capacity/recovery acceptance. Local artifact preparation does not publish a supported release. The generated npm SBOM excludes OS packages; a release still needs complete image inventory/advisory assessment and signed provenance.

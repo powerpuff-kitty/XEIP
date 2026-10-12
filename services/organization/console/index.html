@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Review an action · XEIP</title>
+    <link rel="stylesheet" href="/console/app.css" />
+    <script type="module" src="/console/app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#review-workspace">Skip to action review</a>
+    <header class="masthead">
+      <a class="wordmark" href="/console/">XEIP<span>Human approval</span></a
+      ><span class="boundary">Your decision. One exact action.</span>
+    </header>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">Organization workspace</p>
+        <h1>Review before it runs.</h1>
+        <p>
+          Inspect the agent’s request, verify its destination and arguments,
+          then make an explicit decision.
+        </p>
+      </div>
+      <p id="notice" role="status" aria-live="polite">
+        Connecting to your organization…
+      </p>
+      <div class="workspace">
+        <aside aria-labelledby="account-heading">
+          <section class="panel">
+            <p class="eyebrow">01 · Your identity</p>
+            <h2 id="account-heading">Account &amp; device</h2>
+            <p id="account">Not signed in</p>
+            <div class="button-row">
+              <button id="sign-in" disabled>Sign in with Keycloak</button
+              ><button id="sign-out" class="quiet" hidden>Sign out</button>
+            </div>
+            <hr />
+            <h3>Browser signing key</h3>
+            <p id="device-status">
+              Sign in to check this browser’s device key.
+            </p>
+            <button id="create-device" class="secondary" hidden>
+              Create device key</button
+            ><label for="enrollment" id="enrollment-label" hidden
+              >Public enrollment request</label
+            ><textarea
+              id="enrollment"
+              rows="8"
+              readonly
+              hidden
+              spellcheck="false"
+            ></textarea
+            ><button id="check-enrollment" class="secondary" hidden>
+              Check enrollment
+            </button>
+            <p class="fine">
+              An operator must enroll this key before you can review actions.
+              Clearing browser storage removes your key.
+            </p>
+          </section>
+          <p class="aside-note">
+            Signing out does not withdraw an approval. Use
+            <strong>Revoke consent</strong> before execution to withdraw it.
+          </p>
+        </aside>
+        <section
+          id="review-workspace"
+          class="panel review-panel"
+          aria-labelledby="review-heading"
+        >
+          <p class="eyebrow">02 · The exact request</p>
+          <h2 id="review-heading">Find an action</h2>
+          <form id="inspect-form">
+            <fieldset id="lookup-fields" disabled>
+              <div class="lookup">
+                <div>
+                  <label for="session-id">Session ID</label
+                  ><input
+                    id="session-id"
+                    name="session"
+                    required
+                    maxlength="128"
+                    pattern="[A-Za-z0-9][A-Za-z0-9_.:\-]{0,127}"
+                    autocomplete="off"
+                  />
+                </div>
+                <div>
+                  <label for="action-id">Action ID</label
+                  ><input
+                    id="action-id"
+                    name="action"
+                    required
+                    maxlength="128"
+                    pattern="[A-Za-z0-9][A-Za-z0-9_.:\-]{0,127}"
+                    autocomplete="off"
+                  />
+                </div>
+                <button type="submit">Inspect action</button>
+              </div>
+            </fieldset>
+          </form>
+          <div id="empty-state">
+            <div class="empty-mark" aria-hidden="true">↗</div>
+            <h3>A request, with its full context.</h3>
+            <p>
+              Use the session and action IDs supplied by the requesting agent.
+              Inspection does not approve or execute the action.
+            </p>
+          </div>
+          <article id="review" hidden aria-labelledby="action-heading">
+            <div class="action-heading">
+              <h3 id="action-heading" tabindex="-1">Action details</h3>
+              <span id="action-state" class="state"></span>
+            </div>
+            <dl id="action-details"></dl>
+            <h4>Exact arguments</h4>
+            <pre id="arguments" tabindex="0"></pre>
+            <details>
+              <summary>Policy &amp; action digest</summary>
+              <dl id="proof-details"></dl>
+            </details>
+            <div id="result-section" hidden>
+              <h4>Recorded result</h4>
+              <pre id="result" tabindex="0"></pre>
+            </div>
+            <p id="decision-help"></p>
+            <div class="decisions">
+              <button id="approve" disabled>Approve this action</button
+              ><button id="reject" class="danger" disabled>Reject action</button
+              ><button id="revoke" class="secondary" disabled>
+                Revoke consent
+              </button>
+            </div>
+            <p class="fine">
+              Approval grants consent for these exact details until expiry. It
+              does not confirm that the tool has run. Changes require a new
+              request.
+            </p>
+          </article>
+        </section>
+      </div>
+    </main>
+    <footer>XEIP · Explicit authority for agent actions</footer>
+  </body>
+</html>

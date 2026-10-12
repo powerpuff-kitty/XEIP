@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "origin": "https://xeip.example.internal:8443",
+  "gateway": "urn:xeip:entity:REPLACE_WITH_GATEWAY_ROOT_KEY_ID",
+  "bind": { "host": "0.0.0.0", "port": 8443 },
+  "tls": {
+    "certificateFile": "/etc/xeip/tls/server-chain.pem",
+    "privateKeyFile": "/etc/xeip/secrets/server-key.pem"
+  },
+  "database": {
+    "host": "postgres.example.internal",
+    "port": 5432,
+    "name": "xeip",
+    "user": "xeip_runtime",
+    "passwordFile": "/etc/xeip/secrets/database-password",
+    "caFile": "/etc/xeip/tls/database-ca.pem",
+    "max": 6
+  },
+  "authentication": {
+    "issuer": "https://identity.example.internal/realms/organization",
+    "audience": "xeip-api",
+    "clientIds": ["internal-agent", "approval-console"],
+    "introspectionClientId": "xeip-introspection",
+    "introspectionClientSecretFile": "/etc/xeip/secrets/introspection-client-secret",
+    "bindings": [
+      {
+        "subject": "REPLACE_WITH_AGENT_PROVIDER_SUBJECT",
+        "entity": "urn:xeip:entity:REPLACE_WITH_AGENT_ROOT_KEY_ID",
+        "kid": "REPLACE_WITH_AGENT_SIGNING_KEY_ID"
+      },
+      {
+        "subject": "REPLACE_WITH_HUMAN_PROVIDER_SUBJECT",
+        "entity": "urn:xeip:entity:REPLACE_WITH_HUMAN_ROOT_KEY_ID",
+        "kid": "REPLACE_WITH_HUMAN_SIGNING_KEY_ID"
+      }
+    ]
+  },
+  "policy": {
+    "targets": [
+      {
+        "id": "internal",
+        "revision": "1",
+        "recipient": "urn:xeip:entity:REPLACE_WITH_TOOL_ROOT_KEY_ID",
+        "tools": ["lookup"]
+      }
+    ],
+    "sessions": [
+      {
+        "id": "urn:xeip:session:operations",
+        "agents": ["REPLACE_WITH_AGENT_PROVIDER_SUBJECT"],
+        "approvers": ["REPLACE_WITH_HUMAN_PROVIDER_SUBJECT"],
+        "targets": ["internal"]
+      }
+    ]
+  },
+  "targets": [
+    {
+      "id": "internal",
+      "revision": "1",
+      "recipient": "urn:xeip:entity:REPLACE_WITH_TOOL_ROOT_KEY_ID",
+      "tools": ["lookup"],
+      "endpoint": "https://tool.example.internal/mcp",
+      "resourceMetadataUrl": "https://tool.example.internal/.well-known/oauth-protected-resource/mcp",
+      "issuer": "https://identity.example.internal/realms/organization",
+      "tokenEndpoint": "https://identity.example.internal/realms/organization/protocol/openid-connect/token",
+      "clientId": "xeip-tool-connector",
+      "clientSecretFile": "/etc/xeip/secrets/tool-client-secret",
+      "scope": "mcp:tools"
+    }
+  ],
+  "trust": {
+    "directory": "/var/lib/xeip/trust",
+    "provisioningFile": "/etc/xeip/trust-provisioning.json",
+    "maxAgeSeconds": 300
+  },
+  "management": {
+    "host": "127.0.0.1",
+    "port": 9443,
+    "tokenFile": "/etc/xeip/secrets/metrics-token"
+  },
+  "shutdownMs": 30000
+}

@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-12",
+  "scope": "Local PostgreSQL action/dispatch fence; not production acceptance",
+  "verified": {
+    "nativeOrganizationTests": 285,
+    "rootTests": 385,
+    "scopedReviewerFocusedTests": 63,
+    "controlStoreTests": 26,
+    "organizationTypes": "pass",
+    "cloudflareTypes": "pass",
+    "restrictedPostgres": {
+      "result": "pass",
+      "actions": 4,
+      "consumedClaims": 2,
+      "syntheticEffects": 1,
+      "staleCacheRefused": true,
+      "publicationWaitsForAction": true,
+      "scope": "actual restricted PostgreSQL and runtime/executor; provider and tool effect synthetic; owner lease and physical recovery remain open"
+    },
+    "linuxArtifact": "pass: non-root immutable inventory, runtime/maintenance imports, isolated identity/control workers, redacted CLI refusal",
+    "linuxImageManifest": "sha256:597d3d76662471cdd8432d5f454ea25d3a9e879425a223cf5bb434e7610fd8cc",
+    "linuxImageConfig": "sha256:1d807606a2cc94667b4ac1188b97c61a6227ff965514152ea4a995a028557b42",
+    "realProviderIntegration": "pass: Keycloak JWT/JWKS/introspection/live revocation, signed HTTPS approval and MCP, restricted PG lifecycle, lost responses and recovery; existing service fixture is separate from the new composed-launcher startup fixture",
+    "finalRestrictedPostgresFence": "pass: 4 actions, 2 consumed claims, 1 pre-publication synthetic effect",
+    "composedLauncherRegression": "pass: stale startup rejected, 1 approved unconsumed action retained, 0 synthetic effects",
+    "replication": "pass: cancelled synchronous action/control publication/reopen acknowledgement refused; 8 actions and 4 consumed claims survive local failover; not hosted RPO/RTO acceptance",
+    "node22Linux": {
+      "version": "22.23.3",
+      "organizationTests": 285,
+      "failed": 0,
+      "strictOrganizationTypes": "pass",
+      "durationMs": 75852.547329,
+      "harness": "network-none; read-only root/source; non-root; no capabilities; 2 CPU/2GiB; executable tmpfs needed only for private test shim"
+    }
+  },
+  "pending": [
+    "task5 runtime/maintenance leases",
+    "task6 combined physical recovery",
+    "broader independent SQL review",
+    "external hosted/operator/security acceptance"
+  ],
+  "sourceSha256": {
+    "services/organization/store.mjs": "23fa0a458bc97e551d69c8223274725c144874e6214b4e208c73904ab19c320e",
+    "services/organization/store.test.mjs": "b53936ce6158e0a330053dc5fd6fc34d16ea899fddbe0b1d0af2866d7d471149",
+    "services/organization/postgres-trust.mjs": "3b00d79081d31f85c4322c3b9d375dffa8b5dea23721561f6c3c3561a6edb73d",
+    "services/organization/postgres-trust.test.mjs": "7f22c9db29ac767c39b661ec78b1de62afa1972b029d8964c2007da42e8e8f1b",
+    "services/organization/control-store.mjs": "d258b2abf6af4e6fb8e1228ba1f0380fc1af126a4d9bf20eff10f1ad7ba13c2c",
+    "services/organization/control-store.test.mjs": "8ecfc65703b0cf55b2319498d89f639242d6f52cce80847cf6ae577d7af37152",
+    "services/organization/execution.mjs": "9f368ea1cc7addbb88df9969bade30a58d3d899fdad00af2278e6ad97b7c21ba",
+    "services/organization/execution.test.mjs": "75ccb647a48d4c6db958d6f0087d88be6deb2e4b0e94cfd5d77690bbf6afc1ff",
+    "services/organization/controller.mjs": "31dc94698e1e74c648dd4a0e7e9cc22ce81b214ae35c179dd8d251f70b24b795",
+    "services/organization/main.mjs": "76415148c8134e8e6f0cc551f09d8fe3adef684fc3b8e7e0ad9f8750cd17428f",
+    "services/organization/mcp.mjs": "4ac02d5b737de65109f53ec88810f2cf440da7c107a2e06f515d01dc3c73c7a7",
+    "services/organization/mcp.test.mjs": "1a48d5db69af2e3de08966b69f8437fce0f3d5c2410d886587fc245fd1cd1de5",
+    "services/organization/contracts.d.ts": "4dc3b9ffa1a30f1e4fbf8bcd876f422ec523af94ff9961b1717b93f76ec8fd32",
+    "conformance/organization-control-fence.mjs": "f58f90c746fd206c10622c36ba42a2eeb7fd87d65de974e45c419c77461ef73c",
+    "conformance/organization-postgres-trust.mjs": "12b1d4cc36e548cdcdb904fa54008c44549ebeb093ffa3a49f8cb89548b3d460"
+  },
+  "logSha256": {
+    "/tmp/xeip-action-fence-organization-final.log": "3a728858be92c3d2fd204e20e8054e08890784f29658164ff34ecc2589d61b6f",
+    "/tmp/xeip-action-fence-root.log": "18f0d135530d67f70977c5b0344b9d2d232e8bcc68e4578510197ff2d2eb2a24",
+    "/tmp/xeip-action-fence-pg-first.log": "c4372f438022831df98dcff3273cfaa67793fdc4e823480d9001ec4c08cc0b14",
+    "/tmp/xeip-action-fence-control.log": "4f21bac2595b94514030893b0ad8754d397be0677ba76503ebe1e17e148e46a0",
+    "/tmp/xeip-dispatch-provider-red.log": "03daa40cc64aa099cf8f9e85fbf18dbcd51cc6f8f1beec7ebc41db7cd464ba6b",
+    "/tmp/xeip-dispatch-provider-green.log": "639f2ada25e690e84b9177769b1ee0b1215a114bc146b93458b91ab2bb4f8f53",
+    "/tmp/xeip-action-fence-red.log": "2af314aa727b014f131f87cd14422c96089cd1af917b42a359740bbb6ce042d8",
+    "/tmp/xeip-dispatch-fence-red.log": "fad3233db9bd1e5e7187b3caee9de181c46cc7e7b55661faa2caf344ed80e1dd",
+    "/tmp/xeip-execution-fence-red.log": "e90d08f386e98cbbfc5f5859cf18e00d25633774361b3f32e2426fef66e9449e",
+    "/tmp/xeip-action-fence-types-closed.log": "82f373e746ed45755cc71d530790d3da2600e0470e1a66933b493a2f1c56c86a",
+    "/tmp/xeip-action-fence-types-final.log": "43ed5d3e987300c3287501208ad2d41e156d32e55550de0127634927c6dd0593",
+    "/tmp/xeip-action-fence-image.log": "4e6bcd61c3eef018a9b3795086f98a85f82f372e6ba21d814cf3b59544107a0f",
+    "/tmp/xeip-action-fence-artifact.log": "eb6e11a4fe264af894b65f037bb49bbdfd18f19d35fb5ee23586d83b37f71296",
+    "/tmp/xeip-action-fence-integration.log": "2afd895027a52c050088fc1319c104ab4ecff80d5c192379e98b09adfef4af68",
+    "/tmp/xeip-action-fence-pg-final.log": "8e63521889285048e6fc9909afb6dc595451b2296faedaf38011d17b92f49861",
+    "/tmp/xeip-action-fence-trust-final.log": "a28b9ab93c3dfc9db04957e955dd26d563b384837c65c441d130396b31bee296",
+    "/tmp/xeip-action-fence-replication-final.log": "14b2e2a669704abca1f216576f008c06cf7643a4f2e9c384d6e38febfaa269c2",
+    "/tmp/xeip-action-fence-linux.log": "f617f66a6645bd8b2395595c15a7e8efc727c5aeb8d6e3a7fda09ede9d828452",
+    "/tmp/xeip-action-fence-linux-exec-probe.log": "e02e018e30c223c86f58098a2ae6dfbfc6a2a7067e9cc3d8d976f26086836213",
+    "/tmp/xeip-action-fence-linux-final.log": "6342779d8f51f65570d29fd865ce4b4b74c040a3d6f2c0efe922407fe4951a33"
+  },
+  "linuxInitialRun": {
+    "passed": 280,
+    "failed": 5,
+    "cause": "Harness /tmp was noexec; private Docker shim spawn returned EACCES before fixture creation",
+    "scope": "No application test failed; full corrected-harness run still required"
+  }
+}

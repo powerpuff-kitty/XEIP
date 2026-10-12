@@ -1,6 +1,6 @@
 # Security policy
 
-**XEIP is experimental and NOT safe for publicly exposed, untrusted or multi-tenant use.** The default demo relay uses one shared bearer token and no enforced group membership. The opt-in [local admission profile](spec/local-admission.md) adds locally provisioned per-entity bearer binding, membership checks and live revocation. Neither mode verifies portable cryptographic identities or provides a production trust system. Both must remain loopback-only.
+**XEIP is experimental and NOT safe for publicly exposed, untrusted or multi-tenant use.** The default demo relay uses one shared bearer token and no enforced group membership. The opt-in [local admission profile](spec/local-admission.md) adds locally provisioned per-entity bearer binding, membership checks and live revocation. An optional signed-envelope profile verifies key-bound signatures, and trusted key/status documents can restrict sending keys. The separately selected [entity-bound 0.2 profile](spec/entity-signed-envelopes.md) adds parent/device binding, authenticated extensions, mandatory status freshness and local restart checkpoints. A production trust lifecycle remains incomplete. All modes must remain loopback-only. See [production readiness](PRODUCTION_READINESS.md) for release gates.
 
 The optional [local replay extension](spec/local-replay.md) suppresses repeated authenticated acceptances within a bounded in-memory window. Expiry or a new relay instance loses that suppression; it cannot guarantee durable delivery or prevent duplicate application/command effects. No mode implements automatic recipient acknowledgments or exactly-once execution.
 
@@ -9,6 +9,15 @@ The optional [local replay extension](spec/local-replay.md) suppresses repeated 
 Please use GitHub's private **Report a vulnerability** feature (Security tab → Advisories) if enabled. If unavailable, open an issue that requests a private reporting channel **without disclosing exploit details or credentials**. Do not post sensitive evidence publicly.
 
 ## Supported versions
+
+When status enforcement is enabled, sends require an accepted status for the
+key's owning entity. Configured `maxAgeSeconds` is enforced at send time, and
+caller mutation cannot change verified provisioning snapshots. The local profile
+still permits an omitted age bound; production must require one. The separate 0.2 profile requires an age bound and persists rollback checkpoints.
+The trusted owner can refresh 0.2 provisioning atomically through an in-process
+API. Credentials in this profile require a bound `kid`; revoked/removed keys and
+stale status deny activity and close active streams. Automated status distribution,
+certified trust recovery and independent review remain release gates.
 
 No stable releases are supported yet. Changes are made on main until a versioned release and maintenance policy are established.
 

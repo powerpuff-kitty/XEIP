@@ -1,0 +1,13 @@
+# Co-located scrape process; metrics bind only to loopback.
+scrape_configs:
+  - job_name: xeip
+    scheme: https
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["127.0.0.1:9443"]
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/xeip-metrics-token
+    tls_config:
+      ca_file: /etc/prometheus/xeip-ca.pem
+      server_name: xeip.example.internal

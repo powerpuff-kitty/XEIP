@@ -4,19 +4,27 @@ import { advanceElapsed, boundedOption, digestHex, requireOptions } from "./prim
 export const LOCAL_REPLAY_PROFILE = "xeip.local-replay/0.1";
 const FIELDS = ["windowMs", "maxEntries"];
 
+/** @typedef {import("./policy-types.js").JsonValue} JsonValue */
+/** @typedef {import("./policy-types.js").ReplayEnvelope} ReplayEnvelope */
+/** @typedef {{content: string, expiresAt: number}} ReplayRecord */
+/** @typedef {import("./policy-types.js").ReplayDecision} ReplayDecision */
+
 // Internal equality of validated parsed JSON, not a signing serialization standard.
+/** @param {JsonValue} value @returns {string} */
 function orderedJson(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return "[" + value.map(orderedJson).join(",") + "]";
-  return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + orderedJson(value[key])).join(",") + "}";
+  return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + orderedJson(/** @type {JsonValue} */ (value[key]))).join(",") + "}";
 }
 
 export class ReplayWindow {
   #windowMs;
   #maxEntries;
+  /** @type {Map<string, ReplayRecord>} */
   #entries = new Map();
   #elapsed = 0;
 
+  /** @param {unknown} configuration */
   constructor(configuration = {}) {
     requireOptions(configuration, FIELDS, "invalid replay configuration");
     this.#windowMs = boundedOption(configuration, "windowMs", { default: 300000, min: 1, max: 3600000, message: "invalid replay limits" });
@@ -25,8 +33,16 @@ export class ReplayWindow {
 
   get limits() { return { windowMs: this.#windowMs, maxEntries: this.#maxEntries }; }
 
-  /** Caller supplies a validated, transport-bounded parsed JSON envelope after admission checks. */
-  accept(message, elapsedMs = performance.now()) {
+  /**
+   * Caller supplies a validated, transport-bounded envelope after admission.
+   * onAccept runs synchronously before a new acceptance is committed. A failed
+   * persistence operation must not turn the next retry into a successful duplicate.
+   * @param {ReplayEnvelope} message
+   * @param {number} elapsedMs
+   * @param {() => void} onAccept
+   * @returns {ReplayDecision}
+   */
+  accept(message, elapsedMs = performance.now(), onAccept = () => {}) {
     const now = advanceElapsed(this.#elapsed, elapsedMs, { windowMs: this.#windowMs, label: "replay" });
     const key = digestHex(JSON.stringify([message.session, message.sender, message.id]));
     const content = digestHex(orderedJson(message));
@@ -39,9 +55,10 @@ export class ReplayWindow {
     const previous = this.#entries.get(key);
     if (previous) return { status: previous.content === content ? "duplicate" : "conflict" };
     if (this.#entries.size >= this.#maxEntries) {
-      const earliest = this.#entries.values().next().value.expiresAt;
+      const earliest = /** @type {ReplayRecord} */ (this.#entries.values().next().value).expiresAt;
       return { status: "full", retryAfter: Math.max(1, Math.ceil((earliest - now) / 1000)) };
     }
+    onAccept();
     this.#entries.set(key, { content, expiresAt: now + this.#windowMs });
     return { status: "new" };
   }

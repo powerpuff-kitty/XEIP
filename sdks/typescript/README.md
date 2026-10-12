@@ -26,11 +26,24 @@ const message = makeMessage({
 await client.send(message);
 ```
 
-`events(session, entity, signal?, after?)` requires HTTP 200 and is an async iterator over validated XEIP envelopes delivered by the development SSE relay. The entity selector is required. Establish subscribers before sending messages. When the optional [local delivery profile](../../spec/local-delivery.md) is enabled, pass `after` to resume from a sequence within the relay's bounded in-memory window; there is no durable replay, and a cursor older than the window yields a gap rather than silent loss. Pass an abort signal to close a subscription, or end iteration to cancel the stream.
+`events(session, entity, signal?, after?)` requires HTTP 200 and is an async iterator over validated XEIP envelopes delivered by the development SSE relay. The entity selector is required. Establish subscribers before sending messages. When the optional [local delivery profile](../../spec/local-delivery.md) is enabled, pass `after` to resume from a sequence within the relay's bounded in-memory window; the optional durable backend also supports restart-surviving resume. A cursor older than the retained window throws `DeliveryGapError` instead of silently skipping history. Pass an abort signal to close a subscription, or end iteration to cancel the stream.
+
+`deliveryEvents(session, entity, signal?, after?)` yields `{ type: "message", message, seq? }` and `{ type: "gap", session, from }` in wire order. Use this API to reconcile gaps and checkpoint received cursors **after processing succeeds**. A sequence belongs to transport delivery, not the signed envelope. Missing sequence metadata is allowed when the relay has no delivery profile. Invalid sequence/gap metadata, unexpected message sessions and malformed UTF-8 fail iteration and cancel the stream. `events()` remains an envelope-only convenience API and throws `DeliveryGapError` on gaps.
+
+```js
+for await (const event of client.deliveryEvents(session, entity, signal, savedCursor)) {
+  if (event.type === "gap") {
+    // Reconcile authoritative application state before choosing a new cursor.
+    throw new Error(`History is incomplete; retained history starts at ${event.from}`);
+  }
+  await processMessage(event.message);
+  if (event.seq !== undefined) await saveCursor(event.seq);
+}
+```
 
 `send(message)` returns `SendAcceptance`, requiring HTTP 202 and `{ accepted: true, delivered: <nonnegative safe integer> }`. The count includes writes to individual active streams, not verified recipient consumption; zero is a valid result. If the optional [local replay profile](../../spec/local-replay.md) is selected by the relay, the SDK preserves its `duplicate` boolean; true requires zero new writes. If the optional [local delivery profile](../../spec/local-delivery.md) is selected, the SDK preserves its per-session `seq`. A malformed flag, sequence or inconsistent count is rejected. There is no automatic POST retry: an explicit retry must reuse the unchanged envelope and stay within the selected profile's current instance/window. 409/503 responses remain HTTP errors, not successful acceptances.
 
-`acknowledge(session, target, signal?)` requires the optional [local-receipts profile](../../spec/local-receipts.md) and POSTs to `/receipts`, requiring HTTP 202 and `{ acknowledged: true, session, seq, duplicate }`. The `target` MUST carry at least one selector: `seq` (a non-negative safe integer) and/or `id` (a URI); the optional `status` is only `"received"`. Unknown target keys, a missing selector, a malformed `seq`/`id`/`status`, or a malformed acceptance are rejected. `duplicate: true` means the relay already remembered an identical receipt and recorded nothing new; a receipt is advisory, in-memory and never an acknowledgment of processing or of a transport write.
+`acknowledge(session, target, signal?)` requires the optional [local-receipts profile](../../spec/local-receipts.md) and POSTs to `/receipts`, requiring HTTP 202 and `{ acknowledged: true, session, seq, duplicate }`. The `target` MUST carry at least one selector: `seq` (a non-negative safe integer) and/or `id` (a URI); the optional `status` is only `"received"`. Unknown target keys, a missing selector, a malformed `seq`/`id`/`status`, or a malformed acceptance are rejected. `duplicate: true` means the relay already remembered an identical receipt and recorded nothing new; a receipt is advisory, optionally persisted by the durable backend, and never an acknowledgment of processing or of a transport write.
 
 URI selectors are compared exactly by the relay. Session descriptors are declarations; model validation does not authorize members or deduplicate repeated IDs. Relay admission/replay are separate opt-in profiles. See [../../spec/core.md](../../spec/core.md) for correlation, timestamps and JSON interoperability limits.
 
@@ -113,3 +126,30 @@ tracker.isRevoked(entity, kid, generation);
 
 **WebCrypto caveat.** Every operation that hashes or verifies is `async` because it uses `crypto.subtle`; the Node reference is synchronous. Ed25519 and SHA-256 are required (Node.js ≥22 and current evergreen browsers). Runtimes whose WebCrypto lacks Ed25519 reject key import/sign/verify; the key-id and canonicalization helpers still work, but the keydoc test will fail.
 
+
+## Entity-bound signing (`xeip.entity-signed-envelopes/0.2`)
+
+This opt-in [profile](../../spec/entity-signed-envelopes.md) lets a currently endorsed device sign as its stable parent entity and authenticates application extensions. It uses a distinct carrier/domain; legacy APIs remain unchanged.
+
+```js
+import { signEntityEnvelope, verifyEntityEnvelope } from "./sdks/typescript/dist/index.js";
+
+const signed = await signEntityEnvelope(message, {
+  privateKey: deviceSeed32Bytes,
+  kid: deviceKeyId,
+  criticalExtensions: ["app.action"] // must be present in message.extensions
+});
+const result = await verifyEntityEnvelope(signed, {
+  keyDocuments: [genesisDocument, ...laterDocuments],
+  anchor: { genesisKid: pinnedGenesisKeyId },
+  statusDocument: freshRootSignedStatus,
+  nowSeconds: Math.floor(Date.now() / 1000),
+  maxAgeSeconds: 60,
+  knownExtensions: ["app.action"]
+});
+if (!result.valid) throw new Error(result.reason);
+```
+
+Provision anchors through a trusted channel. `maxAgeSeconds` is required (1–86400); trust-document timestamps are whole-second UTC. Mark an extension critical only when the receiver understands and enforces its meaning. Unknown noncritical extensions are still signed. Verification checks identity/signature trust; envelope schema validation, session membership and permission to execute an action remain separate checks.
+
+The verifier accepts JSON text through the strict parser or snapshots a JSON object. `entityEnvelopeSigningInput` exposes the exact signing string; `validateEntityTrust` validates the supplied chain/status separately. These APIs are stateless: applications must retain trust history to detect a formerly accepted higher generation or status serial. The local relay supplies a persistent checkpoint, with owner-driven atomic live refresh. Local entity-profile credentials must bind the same `kid` used to sign; legacy profiles do not require that field. These APIs are experimental and not a production identity certification.

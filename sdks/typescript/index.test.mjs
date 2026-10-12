@@ -326,7 +326,7 @@ for (const ending of ["\n", "\r\n", "\r"]) {
     const bytes = encode(frame);
     const client = streamingClient(Array.from(bytes, byte => Uint8Array.of(byte)));
     const received = [];
-    for await (const msg of client.events("urn:xeip:session:test", "urn:xeip:entity:test")) received.push(msg);
+    for await (const msg of client.events(message.session, "urn:xeip:entity:test")) received.push(msg);
     assert.deepEqual(received, [message]);
   });
 }
@@ -341,7 +341,7 @@ test("SSE bounds individual frames rather than entire network chunks", async () 
   const frame = "event: xeip.message\ndata: " + JSON.stringify(message) + "\n\n";
   const client = streamingClient([encode(frame.repeat(500))]);
   let count = 0;
-  for await (const msg of client.events("urn:xeip:session:test", "urn:xeip:entity:test")) count++;
+  for await (const msg of client.events(message.session, "urn:xeip:entity:test")) count++;
   assert.equal(count, 500);
 });
 test("SSE rejects a successful response with the wrong media type", async () => {
@@ -362,7 +362,7 @@ test("SSE joins multiline data into a JSON envelope", async () => {
   const message = fixture("message.valid.json");
   const frame = "event: xeip.message\n" + JSON.stringify(message, null, 2).split("\n").map(line => "data: " + line).join("\n") + "\n\n";
   const received = [];
-  for await (const msg of streamingClient([encode(frame)]).events("urn:xeip:session:test", "urn:xeip:entity:test")) received.push(msg);
+  for await (const msg of streamingClient([encode(frame)]).events(message.session, "urn:xeip:entity:test")) received.push(msg);
   assert.deepEqual(received, [message]);
 });
 
@@ -388,7 +388,7 @@ test("SSE cancels the body of a rejected HTTP response", async () => {
 test("ending SSE iteration cancels the underlying subscription", async () => {
   const frame = "event: xeip.message\ndata: " + JSON.stringify(fixture("message.valid.json")) + "\n\n";
   const stream = openStreamClient(200, frame);
-  for await (const msg of stream.client.events("urn:xeip:session:test", "urn:xeip:entity:test")) break;
+  for await (const msg of stream.client.events(fixture("message.valid.json").session, "urn:xeip:entity:test")) break;
   assert.equal(stream.wasCancelled(), true);
 });
 test("invalid SSE envelopes cancel the underlying subscription", async () => {
@@ -398,4 +398,86 @@ test("invalid SSE envelopes cancel the underlying subscription", async () => {
     for await (const msg of stream.client.events("urn:xeip:session:test", "urn:xeip:entity:test")) void msg;
   }, /version/);
   assert.equal(stream.wasCancelled(), true);
+});
+
+function deliveryClient(wire, cancel = () => {}) {
+  return new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token", fetchImpl: async () =>
+    new Response(new ReadableStream({
+      start(controller) { controller.enqueue(typeof wire === "string" ? new TextEncoder().encode(wire) : wire); },
+      cancel
+    }), { headers: { "Content-Type": "text/event-stream" } }) });
+}
+
+test("deliveryEvents preserves a gap and the received cursor in wire order", async () => {
+  const message = fixture("message.valid.json");
+  let cancelled = false;
+  const client = deliveryClient('event: xeip.gap\ndata: ' + JSON.stringify({ session: message.session, from: 42 }) +
+    '\n\nid: 42\nevent: xeip.message\ndata: ' + JSON.stringify(message) + '\n\n', () => { cancelled = true; });
+  const iterator = client.deliveryEvents(message.session, message.recipient, undefined, 0);
+  assert.deepEqual((await iterator.next()).value, { type: "gap", session: message.session, from: 42 });
+  assert.deepEqual((await iterator.next()).value, { type: "message", message, seq: 42 });
+  await iterator.return();
+  assert.equal(cancelled, true);
+});
+
+test("events fails visibly on a delivery gap and cancels its stream", async () => {
+  const message = fixture("message.valid.json");
+  let cancelled = false;
+  const client = deliveryClient('event: xeip.gap\ndata: ' + JSON.stringify({ session: message.session, from: 42 }) + '\n\n',
+    () => { cancelled = true; });
+  const iterator = client.events(message.session, message.recipient, undefined, 0);
+  // The stream stays open after the gap. Timeout keeps a dropped gap from hanging this regression.
+  let timer;
+  try {
+    await assert.rejects(Promise.race([iterator.next(), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("gap was silently discarded")), 1000);
+    })]), error => error instanceof sdk.DeliveryGapError && error.from === 42 && error.session === message.session);
+  } finally { clearTimeout(timer); }
+  assert.equal(cancelled, true);
+});
+
+for (const id of ["-1", "1.5", "9007199254740992", "", "abc", " 42"]) {
+  test("deliveryEvents rejects malformed sequence " + JSON.stringify(id), async () => {
+    const message = fixture("message.valid.json");
+    let cancelled = false;
+    const client = deliveryClient('id: ' + id + '\nevent: xeip.message\ndata: ' + JSON.stringify(message) + '\n\n',
+      () => { cancelled = true; });
+    await assert.rejects(client.deliveryEvents(message.session, message.recipient).next(), /sequence/);
+    assert.equal(cancelled, true);
+  });
+}
+for (const patch of [{ from: -1 }, { from: 1.5 }, { from: 9007199254740992 }, { session: "urn:wrong:session" }, { from: "42" }]) {
+  test("deliveryEvents rejects malformed gap " + JSON.stringify(patch), async () => {
+    const message = fixture("message.valid.json");
+    const client = deliveryClient('event: xeip.gap\ndata: ' + JSON.stringify({ session: message.session, from: 42, ...patch }) + '\n\n');
+    await assert.rejects(client.deliveryEvents(message.session, message.recipient).next(), /gap/);
+  });
+}
+
+test("deliveryEvents rejects a message from a different session", async () => {
+  const message = fixture("message.valid.json");
+  const client = deliveryClient('event: xeip.message\ndata: ' + JSON.stringify({ ...message, session: "urn:wrong:session" }) + '\n\n');
+  await assert.rejects(client.deliveryEvents(message.session, message.recipient).next(), /session/);
+});
+
+test("deliveryEvents rejects malformed UTF-8 instead of altering message content", async () => {
+  const message = fixture("message.valid.json");
+  message.body.data = "PLACEHOLDER";
+  const wire = 'event: xeip.message\ndata: ' + JSON.stringify(message) + '\n\n';
+  const [before, after] = wire.split("PLACEHOLDER");
+  const bytes = new Uint8Array([...new TextEncoder().encode(before), 0xff, ...new TextEncoder().encode(after)]);
+  const client = deliveryClient(bytes);
+  await assert.rejects(client.deliveryEvents(message.session, message.recipient).next(), TypeError);
+});
+
+test("deliveryEvents rejects an incomplete UTF-8 character at EOF and releases the reader", async () => {
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(new Uint8Array([0xe2, 0x82]));
+    controller.close();
+  } });
+  const client = new XeipHttpSseClient({ baseUrl: "http://localhost", token: "demo-token",
+    fetchImpl: async () => new Response(stream, { headers: { "Content-Type": "text/event-stream" } }) });
+  const message = fixture("message.valid.json");
+  await assert.rejects(client.deliveryEvents(message.session, message.recipient).next(), TypeError);
+  assert.equal(stream.locked, false);
 });

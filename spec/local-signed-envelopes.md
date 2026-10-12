@@ -284,7 +284,7 @@ createRelay({
   signatures: {},
   keyDocuments: [{ document: genesis, anchor: { genesisKid, genesisDigest } }],
   statusDocuments: [
-    { document: status } // { document, now?, maxAgeSeconds? }
+    { document: status, maxAgeSeconds: 3600 } // choose an operational freshness bound
   ]
 });
 ```
@@ -294,21 +294,27 @@ against the trusted key document that supplies the entity's roots, so without it
 construction fails. Each entry is `{ document, now?, maxAgeSeconds? }`, where
 `document` is a signed `xeip.status/0.1` document (parsed object or JSON text) and
 the optional `now`/`maxAgeSeconds` are the reference instant and maximum accepted
-age passed to the tracker's staleness rule.
+age passed to the tracker's staleness rule. `now` applies only to provisioning
+validation; it does not freeze the runtime clock. The age bound is also checked
+on every send against the current wall clock, retaining the latest observed time
+within the process so a clock rollback cannot revive a status already expired.
+Omitting `maxAgeSeconds` preserves the legacy local profile's unbounded age
+behavior; that configuration is unsuitable for a production trust policy.
 
 At **construction** every status document is verified against the trusted key
 document of its `entity` (which must be a trusted key-document entity) with
 `verifyStatusDocument`, then run through a `StatusTracker` for that entity:
 single-document verification, serial-rollback rejection and optional staleness
 rejection. Any malformed, non-root-signed, rollback or stale document **throws**,
-so a relay is never constructed around a revoked-key list that fails closed.
+so a relay is never constructed around an invalid revoked-key list. Verified
+provisioning objects are snapshotted; later caller mutation does not change policy.
 
 When enabled, an envelope whose resolved trusted `kid` is revoked is denied, even
 though its signature and key-document resolution are valid:
 
 | Condition | HTTP | WebSocket `type:"error"` |
 | --- | --- | --- |
-| resolved trusted `kid` is revoked by the entity's accepted status | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
+| resolved trusted `kid` is revoked, its entity has no accepted status, or its status is future-dated or exceeds the configured age | 403 `{"error":"forbidden"}` | `{"status":403,"error":"forbidden"}` |
 
 For this slice an entry `{ kid, generation }` is treated as revoking that `kid`
 regardless of its recorded `generation`: the relay does not yet model which
@@ -321,7 +327,9 @@ either authentication mode. When configured, `/health` advertises
 `statusDocuments: { entities }` count; no key ids or revocation entries are
 exposed. When it is not configured, behavior is unchanged.
 
-Status documents are verified only at construction. **Runtime status updates and
+Status signatures and serials are verified at construction; presence, issuance,
+configured age and revocation are enforced on every send before replay acceptance.
+**Runtime status updates and
 refresh are not supported**, and a learned revocation does not terminate an
 already-open stream; that live-stream effect remains deferred
 ([identity-keys.md](identity-keys.md) §9.2, `spec/plans/identity-status.md`).

@@ -9,3 +9,9 @@ coverage/
 *.log
 .idea/
 .vscode/
+.agenttrail/
+test-results/
+playwright-report/
+.wrangler/
+.dev.vars
+.dev.vars.*

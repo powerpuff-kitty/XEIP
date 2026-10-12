@@ -24,12 +24,62 @@
     "demo:signatures": "node examples/local-relay/signed-demo.mjs",
     "demo:keydoc": "node examples/local-relay/keydoc-demo.mjs",
     "bench": "node tools/bench.mjs",
-    "check:js": "node tools/check-js.mjs"
+    "check:js": "node tools/check-js.mjs",
+    "typecheck:relay": "tsc -p services/relay/tsconfig.json",
+    "typecheck:identity": "tsc -p packages/identity/tsconfig.json",
+    "test:organization": "node --test services/organization/*.test.mjs services/organization/console/*.test.mjs conformance/fixture-cleanup.test.mjs conformance/postgres-fixture-cleanup.test.mjs",
+    "coverage:organization": "node --test --experimental-test-coverage --test-coverage-include=services/organization/*.mjs --test-coverage-exclude=**/*.test.mjs --test-coverage-lines=90 --test-coverage-branches=82 --test-coverage-functions=88 services/organization/*.test.mjs conformance/postgres.mjs",
+    "typecheck:organization": "tsc -p services/organization/tsconfig.json",
+    "test:keycloak": "node conformance/keycloak.mjs",
+    "test:postgres": "node conformance/postgres.mjs",
+    "test:postgres:control": "node conformance/organization-control.mjs",
+    "test:postgres:trust": "node conformance/organization-postgres-trust.mjs",
+    "test:postgres:fence": "node conformance/organization-control-fence.mjs",
+    "test:postgres:lease": "node conformance/organization-control-lease.mjs",
+    "test:postgres:owner": "node conformance/organization-control-maintenance.mjs",
+    "test:postgres:replication": "node conformance/organization-replication.mjs",
+    "test:postgres:archive-recovery": "node conformance/organization-archive-recovery.mjs",
+    "test:organization:integration": "node conformance/organization.mjs",
+    "test:organization:load": "node conformance/organization-capacity.mjs",
+    "organization:serve": "node services/organization/main.mjs serve",
+    "organization:check": "node services/organization/main.mjs check",
+    "organization:migrate": "node services/organization/maintenance.mjs",
+    "organization:control": "node services/organization/control-maintenance.mjs",
+    "typecheck:console": "tsc -p services/organization/console/tsconfig.json",
+    "build:console": "npm run build:ts && node services/organization/console/build.mjs",
+    "test:console:keycloak": "npm run build:console && node conformance/organization-console.mjs",
+    "test:console:browser": "playwright test -c services/organization/console/browser.config.mjs",
+    "typecheck:cloudflare": "tsc -p services/organization/cloudflare/tsconfig.json",
+    "test:cloudflare": "npm run build:ts && node --test --test-concurrency=1 conformance/organization-cloudflare.mjs conformance/organization-cloudflare-trust.mjs conformance/organization-cloudflare-authority.mjs conformance/organization-cloudflare-transport.mjs conformance/organization-cloudflare-lifecycle.mjs conformance/organization-cloudflare-profile.mjs conformance/organization-cloudflare-worker-entry.mjs conformance/organization-cloudflare-package.mjs conformance/organization-cloudflare-owner.mjs conformance/organization-cloudflare-admin.mjs conformance/organization-cloudflare-admin-record.mjs conformance/organization-cloudflare-refresh.mjs conformance/organization-cloudflare-archive.mjs conformance/organization-cloudflare-action-archive.mjs conformance/organization-cloudflare-organization-bundle.mjs conformance/organization-cloudflare-organization-export.mjs conformance/organization-cloudflare-organization-export-command.mjs conformance/organization-cloudflare-organization-restore.mjs conformance/organization-cloudflare-recovery.mjs conformance/organization-cloudflare-action-recovery.mjs conformance/organization-cloudflare-recovery-http.mjs conformance/organization-cloudflare-recovery-archive.mjs conformance/organization-cloudflare-action-restore.mjs",
+    "test:cloudflare:keycloak": "npm run build:ts && node conformance/organization-cloudflare-keycloak.mjs",
+    "build:cloudflare": "npm run build:ts && node services/organization/cloudflare/build.mjs",
+    "cloudflare:owner": "node services/organization/cloudflare/owner.mjs",
+    "cloudflare:organization-export": "node services/organization/cloudflare/organization-export-command.mjs"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260730.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@playwright/test": "1.64.0",
+    "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "typescript": "5.9.3"
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0",
+    "typescript": "5.9.3",
+    "wrangler": "4.116.0"
   },
-  "license": "Apache-2.0"
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5",
+      "undici": "7.29.1"
+    }
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "jose": "6.2.12",
+    "keycloak-js": "26.2.4",
+    "pg": "8.23.1"
+  }
 }

@@ -324,8 +324,19 @@ class StrictJsonParser {
   private parseString(): string {
     this.expect('"');
     let out = "";
+    // Consume ordinary runs together: large wire payloads must not allocate
+    // one intermediate string per character. Escapes and controls still take
+    // the explicit validation path below; Unicode is checked on the result.
+    const plain = /[^"\\\u0000-\u001f]+/y;
     for (;;) {
       if (this.atEnd()) throw this.error("unterminated string");
+      plain.lastIndex = this.index;
+      const run = plain.exec(this.text);
+      if (run) {
+        out += run[0];
+        this.index = plain.lastIndex;
+        continue;
+      }
       const char = this.text.charAt(this.index);
       this.index++;
       if (char === '"') break;

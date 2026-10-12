@@ -1,0 +1,11 @@
+{
+  "name": "xeip-operator",
+  "compatibility_date": "2026-07-30",
+  "services": [{
+    "binding": "OWNER",
+    "service": "xeip-staging",
+    "entrypoint": "OwnerEntrypoint",
+    "remote": true,
+    "props": { "operator": "operations:replace-with-assigned-operator" }
+  }]
+}
