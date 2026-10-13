@@ -43,10 +43,17 @@ function readInput() {
   return readFileSync(0, "utf8");
 }
 
+// Node's test reporter prefixes lines with `ℹ` (spec reporter) or `#` (TAP
+// reporter). CI runs without a TTY, so it defaults to TAP; local runs may use
+// spec. Strip either marker so the same parser works on both.
+function stripMarker(line) {
+  return line.startsWith("ℹ") || line.startsWith("#") ? line.slice(1) : line;
+}
+
 // Use the LAST summary of each counter: a test or fixture printing a line that
-// merely looks like `ℹ fail 0` must not shadow the real summary.
+// merely looks like `fail 0` must not shadow the real summary.
 function lastCount(text, name) {
-  const matches = [...text.matchAll(new RegExp(`^ℹ\\s+${name}\\s+(\\d+)`, "gm"))];
+  const matches = [...text.matchAll(new RegExp(`^[ℹ#]?\\s*${name}\\s+(\\d+)`, "gm"))];
   return matches.length === 0 ? null : Number(matches[matches.length - 1][1]);
 }
 
@@ -74,7 +81,7 @@ function parseCoverage(text) {
       continue;
     }
     if (!inReport) continue;
-    const match = line.match(/^ℹ(\s*)(.*)$/);
+    const match = stripMarker(line).match(/^(\s*)(.*)$/);
     if (!match) continue;
     const indent = match[1].length;
     const cells = match[2].split("|").map((cell) => cell.trim());
