@@ -149,6 +149,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit
+      - run: docker pull quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741
       - run: npm run test:cloudflare:keycloak
   rust-lint:
     runs-on: ubuntu-latest
