@@ -141,6 +141,7 @@ test("every committed vector yields its documented result", () => {
     "unsupported version",
     "unknown field",
     "unknown signer",
+    "genesis not self-signed",
     "malformed document",
   ]) {
     assert.ok(
@@ -244,6 +245,77 @@ test("a device kid is accepted structurally but devices do not sign", () => {
     valid: false,
     reason: "unknown signer",
   });
+});
+
+test("a genesis signed only by a non-genesis root is rejected as not self-signed", () => {
+  // The victim's entity ID commits to the victim key, but the document claims
+  // only the attacker as a root and is signed by the attacker key.
+  const forged = signKeyDocument(
+    {
+      xeip: KEYDOC_VERSION,
+      entity: entityUrn(kidA),
+      genesis: kidA,
+      generation: 1,
+      issuedAt: "2026-10-10T00:00:00Z",
+      roots: [kidB],
+      devices: [],
+    },
+    { privateKey: hexBytes(SEED_B), kid: kidB },
+  );
+  assert.deepEqual(verifyKeyDocument(forged), {
+    valid: false,
+    reason: KEYDOC_REASONS.GENESIS_NOT_SELF_SIGNED,
+  });
+  // Even pinned by the victim's genesis key-id, the forgery is not trusted.
+  const trust = new KeyDocumentTrust({
+    entity: entityUrn(kidA),
+    anchor: { genesisKid: kidA },
+  });
+  assert.deepEqual(trust.ingest(forged), {
+    valid: false,
+    reason: KEYDOC_REASONS.GENESIS_NOT_SELF_SIGNED,
+  });
+
+  // A genesis that lists the genesis key as a root but is signed only by
+  // another root is also rejected: the genesis key did not sign.
+  const coRoot = signKeyDocument(
+    {
+      xeip: KEYDOC_VERSION,
+      entity: entityUrn(kidA),
+      genesis: kidA,
+      generation: 1,
+      issuedAt: "2026-10-10T00:00:00Z",
+      roots: [kidA, kidB],
+      devices: [],
+    },
+    { privateKey: hexBytes(SEED_B), kid: kidB },
+  );
+  assert.deepEqual(verifyKeyDocument(coRoot), {
+    valid: false,
+    reason: KEYDOC_REASONS.GENESIS_NOT_SELF_SIGNED,
+  });
+
+  // The genuine, self-signed genesis still verifies and pins.
+  const genuine = signKeyDocument(
+    {
+      xeip: KEYDOC_VERSION,
+      entity: entityUrn(kidA),
+      genesis: kidA,
+      generation: 1,
+      issuedAt: "2026-10-10T00:00:00Z",
+      roots: [kidA],
+      devices: [],
+    },
+    { privateKey: hexBytes(SEED_A), kid: kidA },
+  );
+  assert.deepEqual(verifyKeyDocument(genuine), { valid: true });
+  assert.deepEqual(
+    new KeyDocumentTrust({
+      entity: entityUrn(kidA),
+      anchor: { genesisKid: kidA },
+    }).ingest(genuine),
+    { valid: true, trust: "pinned" },
+  );
 });
 
 test("entity binding ties the document to the genesis key", () => {

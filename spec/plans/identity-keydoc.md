@@ -84,13 +84,22 @@ stable reasons (JS `{ valid: true }` / `{ valid: false, reason }`; Rust
 | Any kid (genesis, root, device or signer) is a small-order/weak Ed25519 point | `weak key` |
 | No signature at all, or none by a key listed in `roots` | `unknown signer` |
 | A listed root signed but the canonical bytes do not verify | `signature mismatch` |
+| A genesis document (`generation == 1`, no `previous`) signed by a listed root other than the genesis key — i.e. another root signed while the genesis key itself did not | `genesis not self-signed` |
 
-"At least one valid signature by a key listed in `roots`" is the whole
-acceptance rule. Weak keys are rejected before any curve backend can diverge;
-extra non-root signatures are ignored (acceptance still requires a valid root
-signature), so an unsigned or only-device-signed document fails closed. The
-parser builds objects with a null prototype / checked duplicate detection, and
-Ed25519 verification uses `verify_strict`, matching the signed-envelope slice.
+The base acceptance rule is "at least one valid signature by a key listed in
+`roots`", with one self-certification exception. A **genesis** document
+(`generation == 1`, no `previous`) is self-certifying (`spec/identity-keys.md`
+§5.1): its `entity` commits to the genesis key, so the genesis key MUST be listed
+in `roots` **and** MUST have signed the document. A genesis signed only by a
+non-genesis root — the shape of a forgery that claims a victim's `entity`/
+`genesis` with an attacker-chosen root — is rejected as `genesis not
+self-signed`. A successor keeps the base rule (any valid root signature), and
+its retiry/successor authorization is enforced by `KeyDocumentChain` below. Weak
+keys are rejected before any curve backend can diverge; extra non-root
+signatures are ignored, so an unsigned or only-device-signed document fails
+closed. The parser builds objects with a null prototype / checked duplicate
+detection, and Ed25519 verification uses `verify_strict`, matching the
+signed-envelope slice.
 
 ## Chain verification
 
@@ -126,10 +135,12 @@ from — while trust-store anchor resolution is layered on top by
 
 ## Root-rotation signature rules (`spec/identity-keys.md` §5.2)
 
-A genesis document is self-certifying and its single-root signature rule is
-unchanged. For a successor `D` at generation `g`, accepted against the
-predecessor `P` at generation `g - 1`, the chain derives the required signer set
-from `P`, never from `D`:
+A genesis document is self-certifying: single-document verification requires its
+own genesis key to be listed in `roots` and to have signed (rejecting a genesis
+signed only by a non-genesis root as `genesis not self-signed`), so the chain's
+single-root rule is unchanged. For a successor `D` at generation `g`, accepted
+against the predecessor `P` at generation `g - 1`, the chain derives the
+required signer set from `P`, never from `D`:
 
 - Let `oldRoots = P.roots` and `newRoots = D.roots`.
 - **Retiry authorization.** `D` MUST carry a valid signature by at least one key
@@ -198,7 +209,12 @@ is never the default.
 This makes the previously anchor-less chain usable as a trust store: the genesis
 key-id pins the entity, the digest pins the exact genesis document (defeating a
 tampered-but-self-certifying genesis), and `maxGeneration` bounds how far a chain
-may advance.
+may advance. Self-certification (above) proves a genesis matches its own `entity`/
+`genesis` key, so `genesisKid` alone now rejects a genesis signed by a
+non-genesis root; callers SHOULD additionally pin `genesisDigest` as
+defense-in-depth, since it also fixes the exact accepted genesis bytes (for
+example `issuedAt` and `devices`). Pinning the digest stays **optional** and
+`genesisKid` alone remains sufficient for a valid chain.
 
 ## Cross-language vectors
 
@@ -213,7 +229,9 @@ plus two further fixed seeds for a successor root and a device. Each entry is
   `rotation.dual-signed` (generation 2, both roots sign, `previous` set);
 - negative: `doc.bad-signature`, `doc.entity-mismatch`, `doc.weak-signer`,
   `doc.unsupported-version`, `doc.unknown-field`, `doc.invalid-base64url`,
-  `doc.unknown-signer`, `doc.missing-signature` and a strict-parse
+  `doc.unknown-signer`, `doc.missing-signature`,
+  `doc.genesis-not-self-signed` (a forged genesis claiming the victim's
+  `entity`/`genesis` with an attacker root) and a strict-parse
   `doc.malformed-text`.
 
 `tools/validate-fixtures.mjs` consumes the vectors with the JS verifier, and
@@ -313,9 +331,10 @@ its own positive and negative cases.
 
 ## Verification (all passing)
 
-- `node --test tools/key-document.test.mjs` — 28 tests (11 single-document, 6
+- `node --test tools/key-document.test.mjs` — 29 tests (12 single-document, 6
   chain, 3 root-rotation, 8 trust).
-- `npm run validate:fixtures` — key-document vectors included.
+- `npm run validate:fixtures` — key-document vectors included (12 vectors).
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
-  `cargo test --workspace --all-targets --locked` — 9 `keydoc_vectors` tests.
+  `cargo test --workspace --all-targets --locked` — 10 `keydoc_vectors` tests,
+  including `forged_genesis_signed_by_a_non_genesis_root_is_rejected`.
 - `npm run check:js`.

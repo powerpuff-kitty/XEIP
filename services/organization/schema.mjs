@@ -3,7 +3,12 @@ import { createHash } from "node:crypto";
 
 // Shared immutable migration manifest: startup verifies without executing owner DDL.
 export const migrations = Object.freeze(
-  ["001-actions.sql", "002-results.sql", "003-control.sql"].map((file) => {
+  [
+    "001-actions.sql",
+    "002-results.sql",
+    "003-control.sql",
+    "004-control-retained.sql",
+  ].map((file) => {
     const sql = readFileSync(
       new URL("./migrations/" + file, import.meta.url),
       "utf8",

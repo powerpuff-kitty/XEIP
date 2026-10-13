@@ -339,9 +339,14 @@ function seal(state) {
 }
 
 /** Verify a historical snapshot, not its provenance, chain or current freshness.
- * @param {unknown} canonical @returns {Prepared}
+ * When `previousCanonical` is supplied, a bounded two-event transition is also
+ * verified so retained records are checked for every entity, including those the
+ * current signed provisioning no longer describes: an inactive record may only
+ * equal the record accepted by its predecessor, and no inactive identity may be
+ * invented. This still does not verify the whole chain.
+ * @param {unknown} canonical @param {unknown} [previousCanonical] @returns {Prepared}
  */
-export function verifyControlState(canonical) {
+export function verifyControlState(canonical, previousCanonical) {
   try {
     if (
       typeof canonical !== "string" ||
@@ -374,6 +379,17 @@ export function verifyControlState(canonical) {
         canonicalize(retained[entity]) !== canonicalize(checkpoint)
       )
         throw Error();
+    }
+    if (previousCanonical !== undefined) {
+      const prior = verifyControlState(previousCanonical);
+      for (const [entity, record_] of Object.entries(retained)) {
+        if (prepared.bundles.has(entity)) continue;
+        if (
+          !Object.hasOwn(prior.state.records, entity) ||
+          canonicalize(record_) !== canonicalize(prior.state.records[entity])
+        )
+          throw Error();
+      }
     }
     for (const target of authority.value.targets) {
       const previous = history.find(

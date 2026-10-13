@@ -4,11 +4,9 @@
 all-features = true
 
 [advisories]
-version = 2
 yanked = "deny"
 
 [licenses]
-version = 2
 # Permissive licenses compatible with the Apache-2.0 codebase.
 allow = [
   "Apache-2.0",
@@ -23,7 +21,6 @@ allow = [
 ]
 
 [bans]
-version = 2
 multiple-versions = "warn"
 wildcards = "deny"
 # Crypto must come from audited libraries, never a hand-rolled or renamed crate.

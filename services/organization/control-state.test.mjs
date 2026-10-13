@@ -149,6 +149,28 @@ test("removed entities retain counters and require an explicit owner re-addition
   assert.equal(restored.state.records[entity].serial, 1);
 });
 
+test("bounded transition verification checks retained records for removed entities", () => {
+  const original = enroll();
+  const removed = next(original, { keyDocuments: [], statusDocuments: [] });
+  // A legitimate removal transition verifies against its predecessor.
+  assert.deepEqual(
+    verifyControlState(removed.canonical, original.canonical),
+    removed,
+  );
+  // Forged retained metadata is refused even though only inactive verification
+  // (not the active checkpoint loop) can see it.
+  const forged = structuredClone(removed.state);
+  forged.records[entity].serial += 1;
+  forged.records[entity].statusDigest = "a".repeat(64);
+  denied(() => verifyControlState(canonicalize(forged), original.canonical));
+  // An invented inactive identity is refused because no predecessor carries it.
+  const invented = structuredClone(removed.state);
+  invented.records["urn:xeip:entity:" + "A".repeat(43)] = structuredClone(
+    removed.state.records[entity],
+  );
+  denied(() => verifyControlState(canonicalize(invented), original.canonical));
+});
+
 test("trust-only publication cannot change authority; owner change cannot change organization", () => {
   const previous = enroll(),
     changed = configuration();

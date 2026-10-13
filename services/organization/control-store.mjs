@@ -154,9 +154,26 @@ async function readCurrent(client, lock, signal) {
     event.digest !== head.rows[0].digest
   )
     throw new StoreUnavailable();
+  // Verify the head and its immediate predecessor transition together so retained
+  // records are checked for inactive entities too. This is bounded (two events);
+  // full ordered history verification remains the separate recovery task.
+  let previous;
+  if (currentRevision === 1) {
+    if (event.previous_digest !== zero) throw new StoreUnavailable();
+  } else {
+    const prior = await client.query(
+      "SELECT digest,state_canonical FROM xeip_org.control_events WHERE revision=$1",
+      [currentRevision - 1],
+    );
+    if (prior.rows.length !== 1 || prior.rows[0].digest !== event.previous_digest)
+      throw new StoreUnavailable();
+    previous = prior.rows[0].state_canonical;
+  }
   const prepared = await prepareControlInWorker(
     "verify",
-    event.state_canonical,
+    previous === undefined
+      ? { canonical: event.state_canonical }
+      : { canonical: event.state_canonical, previous },
     signal,
   );
   if (
@@ -169,19 +186,9 @@ async function readCurrent(client, lock, signal) {
   )
     throw new StoreUnavailable();
   if (currentRevision === 1) {
-    if (event.previous_digest !== zero || prepared.state.operation !== "enroll")
-      throw new StoreUnavailable();
-  } else {
-    const prior = await client.query(
-      "SELECT digest FROM xeip_org.control_events WHERE revision=$1",
-      [currentRevision - 1],
-    );
-    if (
-      prior.rows.length !== 1 ||
-      prior.rows[0].digest !== event.previous_digest ||
-      prepared.state.operation === "enroll"
-    )
-      throw new StoreUnavailable();
+    if (prepared.state.operation !== "enroll") throw new StoreUnavailable();
+  } else if (prepared.state.operation === "enroll") {
+    throw new StoreUnavailable();
   }
   const future = await client.query(
     "SELECT 1 FROM xeip_org.control_events WHERE revision>$1 LIMIT 1",

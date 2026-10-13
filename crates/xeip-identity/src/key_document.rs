@@ -41,7 +41,7 @@ const KEYDOC_FIELDS: [&str; 9] = [
 /// Reasons a signed key document can be rejected by [`verify_key_document`],
 /// [`KeyDocumentChain::ingest`] or [`KeyDocumentTrust::ingest`].
 ///
-/// The first seven variants are the single-document reasons. `Rollback`,
+/// The first eight variants are the single-document reasons. `Rollback`,
 /// `Fork` and `ChainGap` are produced only by chain verification;
 /// `NoAnchor`, `UntrustedAnchor` and `GenerationExceedsMaximum` are produced
 /// only by trust-store resolution. Every document must first pass
@@ -70,6 +70,10 @@ pub enum KeyDocumentError {
     WeakKey,
     /// The canonical bytes do not verify under any listed root key.
     SignatureMismatch,
+    /// A genesis document (`generation == 1`, no `previous`) is not
+    /// self-certified: the genesis key is not listed in `roots`, or the genesis
+    /// key did not sign, even though another root did.
+    GenesisNotSelfSigned,
     /// Chain only: the candidate generation is less than or equal to the
     /// highest generation already accepted for the entity.
     Rollback,
@@ -105,6 +109,7 @@ impl fmt::Display for KeyDocumentError {
             Self::UnknownSigner => "unknown signer",
             Self::WeakKey => "weak key",
             Self::SignatureMismatch => "signature mismatch",
+            Self::GenesisNotSelfSigned => "genesis not self-signed",
             Self::Rollback => "rollback",
             Self::Fork => "fork",
             Self::ChainGap => "chain gap",
@@ -249,7 +254,16 @@ pub fn sign_key_document(
 /// Order (with stable reasons): unknown member → `xeip` → field types and
 /// `generation`/`issuedAt`/`previous` shape → genesis decode → `entity ==
 /// entity_urn(genesis)` → every root/device `kid` decodes non-weak → at least
-/// one valid signature by a key listed in `roots`.
+/// one valid signature by a key listed in `roots` → for a genesis document, the
+/// genesis key is a root and signed it ([`KeyDocumentError::GenesisNotSelfSigned`]).
+///
+/// A genesis document (`generation == 1`, no `previous`) is **self-certifying**
+/// (`spec/identity-keys.md` §5.1): the entity ID commits to the genesis key, so
+/// a valid genesis MUST be signed by that genesis key and MUST list it in
+/// `roots`. This stops a third party who only knows the victim's entity ID from
+/// publishing `{ entity: victim, genesis: victim, roots: [attacker] }` signed by
+/// the attacker key. A successor keeps the generic root-signature rule; its
+/// retiry/successor authorization is enforced by [`KeyDocumentChain`].
 ///
 /// `previous` is shape-checked but never chased: chain/rollback verification is
 /// out of scope. Weak or unknown signers never satisfy the root-signature
@@ -348,8 +362,17 @@ pub fn verify_key_document(document: &Value) -> Result<(), KeyDocumentError> {
         return Err(KeyDocumentError::UnknownSigner);
     }
 
+    // A genesis document is self-certifying: its entity ID commits to the
+    // genesis key, so it MUST be signed by that genesis key and MUST list it in
+    // `roots`. The generic "any root signed" rule below would otherwise accept a
+    // forgery that claims the victim's entity/genesis with an attacker root.
+    let is_genesis = generation == 1.0 && object.get("previous").is_none();
+    let genesis_is_root = roots.iter().any(|value| value.as_str() == Some(genesis));
+
     let message = keydoc_signing_input(document);
     let mut saw_root_signer = false;
+    let mut valid_root_signer = false;
+    let mut valid_genesis_signer = false;
     for entry in signatures {
         let entry = entry.as_object().expect("validated shape above");
         let kid = entry["kid"].as_str().expect("validated shape above");
@@ -360,10 +383,14 @@ pub fn verify_key_document(document: &Value) -> Result<(), KeyDocumentError> {
         if signature_bytes.len() != ED25519_SIGNATURE_LENGTH {
             return Err(KeyDocumentError::MalformedDocument);
         }
-        if !roots.iter().any(|value| value.as_str() == Some(kid)) {
+        let is_root_entry = roots.iter().any(|value| value.as_str() == Some(kid));
+        let is_genesis_entry = is_genesis && kid == genesis;
+        if !is_root_entry && !is_genesis_entry {
             continue;
         }
-        saw_root_signer = true;
+        if is_root_entry {
+            saw_root_signer = true;
+        }
         let verifying_key = VerifyingKey::from_bytes(&public_key)
             .map_err(|_| KeyDocumentError::MalformedDocument)?;
         let signature = Signature::from_slice(&signature_bytes)
@@ -372,11 +399,34 @@ pub fn verify_key_document(document: &Value) -> Result<(), KeyDocumentError> {
         // matching the JavaScript small-order gate.
         if verifying_key
             .verify_strict(message.as_bytes(), &signature)
-            .is_ok()
+            .is_err()
         {
-            return Ok(());
+            continue;
+        }
+        if is_root_entry {
+            valid_root_signer = true;
+            // Successors keep the original rule: any valid root signature
+            // accepts.
+            if !is_genesis {
+                return Ok(());
+            }
+        }
+        if is_genesis_entry {
+            valid_genesis_signer = true;
         }
     }
+
+    if is_genesis {
+        if valid_root_signer && genesis_is_root && valid_genesis_signer {
+            return Ok(());
+        }
+        // A genesis document that would otherwise pass the generic root rule is
+        // not self-certified: reject it with the stable genesis reason.
+        if valid_root_signer {
+            return Err(KeyDocumentError::GenesisNotSelfSigned);
+        }
+    }
+
     if !saw_root_signer {
         return Err(KeyDocumentError::UnknownSigner);
     }

@@ -59,6 +59,10 @@ links: [models, relay, sdk]
       tech: tools/signed-envelope.mjs, crates/xeip-identity/src/lib.rs
 - [x] Verify signed key documents with chain, rollback, fork and fail-closed anchors {#identity-keydoc}
       tech: tools/key-document.mjs, crates/xeip-identity/tests/keydoc_vectors.rs
+- [x] Reject a forged genesis that is not self-signed {#identity-genesis-self-cert}
+      by: coordinator
+      from: agent
+      tech: verifyKeyDocument/Rust/TS now require a genesis document to list its own genesis key in roots AND be signed by it; new stable reason "genesis not self-signed" with negative vectors in JS/TS/Rust and a demonstration that a victim-entity/attacker-root forgery is refused.
 - [x] Verify signed status/revocation documents with monotonic serial and staleness {#identity-status}
       tech: tools/identity-status.mjs, crates/xeip-identity/tests/status_vectors.rs
 - [x] Verify bounded device-rotation and root-rotation statements {#identity-rotation}
@@ -193,7 +197,7 @@ links: [relay, conformance]
 - [~] Persist control history with PostgreSQL durability and restricted grants {#org-postgres-control-store}
       by: codex
       from: agent
-      tech: Implemented shared transaction extraction, immutable events/atomic head, owner-only enrollment/authority changes, runtime trust updates and expected-head locks. Actual SQL, cancelled synchronous commits, historical upgrade, native249 organization/385 root, strict types and Node22/Linux52 focused checks pass. Null-counter and signed alternate-chain SQL regressions fixed RED→GREEN. Scoped review identified a P2 retained-history integrity gap: raw SQL can forge records that inactive snapshots accept and later owner re-addition trusts. Model reproduction confirmed; actual-PG regression and comprehensive correction remain pending. See spec/plans/postgres-control-recovery.md.
+      tech: Implemented shared transaction extraction, immutable events/atomic head, owner-only enrollment/authority changes, runtime trust updates and expected-head locks. Actual SQL, cancelled synchronous commits, historical upgrade, native249 organization/385 root, strict types and Node22/Linux52 focused checks pass. Null-counter and signed alternate-chain SQL regressions fixed RED→GREEN. Scoped review identified a P2 retained-history integrity gap: raw SQL could forge records that inactive snapshots accept and later owner re-addition trusts. Forward migration004 now binds retained metadata to accepted signed provisioning (inactive records frozen, invented identities refused, active counters bound to documents) and the bounded read path verifies the head/predecessor transition; actual-PG removal/counter/invented-identity regressions fixed RED→GREEN. See spec/plans/postgres-control-recovery.md.
 - [x] Activate runtime trust only from committed PostgreSQL control state {#org-postgres-trust}
       by: codex
       from: agent
@@ -487,6 +491,10 @@ links: [identity, relay, sdk, organization]
       by: codex
       from: agent
       tech: current 527-case Linux job exceeded ten minutes without failures; increase only workflow wall-clock budget to 25 minutes, preserving all runtime and test deadlines
+- [x] Gate per-file coverage of the trust crypto modules and repair the supply-chain gate {#conf-coverage-gate}
+      by: coordinator
+      from: agent
+      tech: new tools/check-coverage.mjs enforces a per-file floor on 14 trust/crypto modules and fails closed on failing/cancelled/non-numeric reports; wired as npm run coverage:files and a CI step. deny.toml drops the deprecated version=2 keys that broke the pinned cargo-deny action so the supply-chain job (npm audit) can run.
 
 ## Show it working {#demos}
 
@@ -504,6 +512,12 @@ needs: [relay, sdk]
       tech: examples/local-relay/console.html, examples/local-relay/console.js, examples/local-relay/console.css
 
 ## decisions
+
+- 2026-10-14 — Enforce key-document genesis self-certification to match spec/identity-keys.md §5.1. A genesis document (generation1, no previous) must list its own genesis key in roots and be signed by it; a genesis signed only by a non-genesis root is refused with the new stable reason "genesis not self-signed" in JS, Rust and TS alike. Successor documents keep the generic root rule and the chain retiry rule unchanged. Pinning genesisDigest remains recommended defence-in-depth but optional.
+
+- 2026-10-14 — Add a per-file coverage gate for the trust/crypto modules (tools/check-coverage.mjs, npm run coverage:files, CI step) and repair the supply-chain gate by removing the deprecated version=2 keys from deny.toml that broke the pinned cargo-deny action. Thresholds sit just below observed values; the cloudflare surface and TypeScript SDK remain ungated and are recorded as follow-ups.
+
+- 2026-10-14 — Correct the P2 retained-history integrity gap with a forward migration004 that replaces protect_control_event without rewriting applied migration bytes. An entity absent from the accepted key documents may only preserve its exact prior record and cannot be invented; every active record's generation/serial must equal its accepted signed key/status document. Add a bounded two-event transition check to the control worker so inactive records are verified against the predecessor, not only prepared.checkpoints. SQL guards remain structural, not cryptographic: signatures stay in the shared identity worker, and full ordered history verification, laundering behind an injected unsigned provisioning document plus an intervening post-removal event, combined physical control/action recovery and external old-writer fencing remain open.
 
 - 2026-10-12 — Persist control snapshots in migration003 as append-only events plus a singleton head. Database triggers serialize publication, enforce predecessor/head continuity and advance the head atomically after event insertion. Runtime may insert trust events only; owner-only enrollment must observe empty action/audit tables under a conflicting table lock. All transitions retain high-water entries and target revision mappings, with immutable organization identity. The storage library shares the existing action synchronous-COMMIT/WAL-marker behavior; no normal startup migration or enrollment is introduced. Runtime wiring/fencing remains subsequent work.
 

@@ -238,6 +238,28 @@
     }
   },
   {
+    "name": "doc.genesis-not-self-signed",
+    "valid": false,
+    "reason": "genesis not self-signed",
+    "document": {
+      "xeip": "xeip.keydoc/0.1",
+      "entity": "urn:xeip:entity:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "genesis": "z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "generation": 1,
+      "issuedAt": "2026-10-10T00:00:00Z",
+      "roots": [
+        "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2"
+      ],
+      "devices": [],
+      "signatures": [
+        {
+          "kid": "z6MkhFwXNFWosLeugvSf4wcL9t3uuRXueGSFTRgSvHhWj5G2",
+          "sig": "gD03QLe3f0hmhxDOb_fJsKrZXlyI8GPdaCqYiuD7ufIApXqXRUWPQBx1Iniwf50U9YSw7d2Wt1p4hCK-93pgCw"
+        }
+      ]
+    }
+  },
+  {
     "name": "doc.malformed-text",
     "valid": false,
     "reason": "malformed document",

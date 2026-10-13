@@ -154,3 +154,24 @@ Model acceptance is reproduced; actual-PG exploit reproduction and correction ar
 pending. Invalid active metadata followed by removal and invented inactive keys
 also require regressions. Full details are in the control-recovery plan. A12 remains
 open for this finding, combined physical recovery and external acceptance.
+
+### P2 retained-history correction — 2026-10-14
+
+Forward migration004 binds retained trust metadata to the accepted signed
+provisioning without rewriting earlier migration bytes. An entity absent from the
+accepted key documents may only preserve its exact prior record and cannot be
+invented, and every active record must match the generation/serial of its accepted
+signed key and status documents. The bounded read path now verifies the head and its
+immediate predecessor transition together, so inactive records are no longer accepted
+on the sole basis of `prepared.checkpoints`. Actual-PostgreSQL regressions reproduce
+the removal-forgery, removed-counter-forgery, invented-identity and active-counter
+attacks failing before the change and passing after. SQL guards remain structural
+rather than cryptographic: signature verification stays in the shared identity worker,
+and full ordered history verification is still the separate recovery task.
+
+A12 itself is unchanged by this slice. Combined physical control/action recovery,
+external old-writer fencing, full ordered history verification and acceptance against
+real provider/secret restoration remain open. The residual is that a raw writer who
+also injects an unsigned provisioning document can still record an internally
+consistent intermediate event; the immediate removal transition is refused, but an
+intervening post-removal event places it beyond the bounded two-event check.

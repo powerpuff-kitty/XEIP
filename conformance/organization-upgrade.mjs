@@ -55,7 +55,7 @@ export async function verifyUpgrade(pool) {
           "SELECT version FROM xeip_org.migrations ORDER BY version",
         )
       ).rows,
-      [{ version: 1 }, { version: 2 }, { version: 3 }],
+      [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }],
     );
     await assert.rejects(
       new ControlStore(historical).enroll({
@@ -98,7 +98,7 @@ export async function verifyUpgrade(pool) {
       "1",
     );
     console.log(
-      "PASS PostgreSQL: v1-to-v3 migration preserves historical actions, audit and checksum; refuses implicit control enrollment",
+      "PASS PostgreSQL: v1-to-v4 migration preserves historical actions, audit and checksum; refuses implicit control enrollment",
     );
   } catch (error) {
     failure = error;

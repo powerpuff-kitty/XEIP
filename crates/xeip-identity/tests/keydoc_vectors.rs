@@ -19,11 +19,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use xeip_identity::{
-    key_document_chain_digest, sign_key_document, verify_key_document, verify_key_document_text,
-    KeyDocumentChain, KeyDocumentError, KeyDocumentTrust, TrustAnchor, TrustLevel,
-    ED25519_SEED_LENGTH,
+    entity_urn, key_document_chain_digest, sign_key_document, verify_key_document,
+    verify_key_document_text, KeyDocumentChain, KeyDocumentError, KeyDocumentTrust, TrustAnchor,
+    TrustLevel, ED25519_SEED_LENGTH,
 };
 
 /// Deterministic RFC 8032 seeds shared with the JavaScript reference and the
@@ -165,6 +165,7 @@ fn every_vector_yields_its_documented_result() {
         "unsupported version",
         "unknown field",
         "unknown signer",
+        "genesis not self-signed",
         "malformed document",
     ] {
         assert!(reasons.contains(reason), "missing reason: {reason}");
@@ -214,6 +215,112 @@ fn sign_reproduces_the_committed_genesis_and_rotation() {
         "dual-signing must reproduce the committed rotation document"
     );
     assert_eq!(verify_key_document(&re_signed_rotation), Ok(()));
+}
+
+/// A genesis document is self-certifying: it MUST be signed by its own genesis
+/// key and MUST list that key in `roots`. A forged genesis that claims the
+/// victim's `entity`/`genesis` with an attacker root must be rejected.
+#[test]
+fn forged_genesis_signed_by_a_non_genesis_root_is_rejected() {
+    let vectors = load_vectors();
+    let genesis = vectors
+        .iter()
+        .find(|vector| vector.name == "genesis.valid")
+        .and_then(|vector| vector.document.as_ref())
+        .expect("the genesis.valid vector carries a document");
+    let rotation = vectors
+        .iter()
+        .find(|vector| vector.name == "rotation.dual-signed")
+        .and_then(|vector| vector.document.as_ref())
+        .expect("the rotation.dual-signed vector carries a document");
+
+    let kid_a = genesis["genesis"].as_str().expect("genesis kid");
+    let kid_b = rotation["roots"][1].as_str().expect("successor root kid");
+
+    // The victim's entity ID commits to the victim key, but the document claims
+    // only the attacker as a root and is signed by the attacker key.
+    let forged = sign_key_document(
+        &json!({
+            "xeip": "xeip.keydoc/0.1",
+            "entity": entity_urn(kid_a),
+            "genesis": kid_a,
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [kid_b],
+            "devices": [],
+        }),
+        &seed(SEED_B_HEX),
+        kid_b,
+    )
+    .expect("sign forged genesis");
+    assert_eq!(
+        verify_key_document(&forged),
+        Err(KeyDocumentError::GenesisNotSelfSigned)
+    );
+
+    // Even pinned by the victim's genesis key-id, the forgery is not trusted.
+    let mut trust = KeyDocumentTrust::new(
+        entity_urn(kid_a),
+        Some(TrustAnchor {
+            genesis_kid: Some(kid_a.to_string()),
+            genesis_digest: None,
+        }),
+        None,
+        false,
+    );
+    assert_eq!(
+        trust.ingest(&forged),
+        Err(KeyDocumentError::GenesisNotSelfSigned)
+    );
+
+    // A genesis listing the genesis key as a root but signed only by another
+    // root is also rejected: the genesis key did not sign.
+    let co_root = sign_key_document(
+        &json!({
+            "xeip": "xeip.keydoc/0.1",
+            "entity": entity_urn(kid_a),
+            "genesis": kid_a,
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [kid_a, kid_b],
+            "devices": [],
+        }),
+        &seed(SEED_B_HEX),
+        kid_b,
+    )
+    .expect("sign co-root genesis");
+    assert_eq!(
+        verify_key_document(&co_root),
+        Err(KeyDocumentError::GenesisNotSelfSigned)
+    );
+
+    // The genuine, self-signed genesis still verifies and pins.
+    let genuine = sign_key_document(
+        &json!({
+            "xeip": "xeip.keydoc/0.1",
+            "entity": entity_urn(kid_a),
+            "genesis": kid_a,
+            "generation": 1,
+            "issuedAt": "2026-10-10T00:00:00Z",
+            "roots": [kid_a],
+            "devices": [],
+        }),
+        &seed(SEED_A_HEX),
+        kid_a,
+    )
+    .expect("sign genuine genesis");
+    assert_eq!(verify_key_document(&genuine), Ok(()));
+
+    let mut genuine_trust = KeyDocumentTrust::new(
+        entity_urn(kid_a),
+        Some(TrustAnchor {
+            genesis_kid: Some(kid_a.to_string()),
+            genesis_digest: None,
+        }),
+        None,
+        false,
+    );
+    assert_eq!(genuine_trust.ingest(&genuine), Ok(TrustLevel::Pinned));
 }
 
 /// A chain-vector file: a shared registry of documents plus ordered chains whose

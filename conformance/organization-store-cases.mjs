@@ -128,7 +128,7 @@ export async function verifyStore({ pool, restart, backupRestore }) {
   assert.equal(
     (await pool.query("SELECT count(*) FROM xeip_org.migrations")).rows[0]
       .count,
-    "3",
+    "4",
   );
   const first = await store.propose(agent, request("one"));
   assert.equal(first.state, "pending");

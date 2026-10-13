@@ -574,3 +574,19 @@ rolled-back database cannot identify its own newer missing history unaided.
   multi-event laundering and invented-key regressions. Preserve applied migration
   checksums. Task2 SQL acceptance remains open; task5 workflow evidence does not close
   this finding, A12, task6 physical recovery or external production acceptance.
+
+- P2 retained-history correction implemented locally (2026-10-14). Forward migration004
+  replaces protect_control_event without rewriting migration001–003 bytes: an entity
+  absent from the accepted key documents may only preserve its exact prior record and
+  cannot be invented, and every active entity's record must equal its accepted signed
+  document's generation/serial. Signatures remain the shared JavaScript worker's
+  responsibility; SQL is structural. The bounded read path now verifies the head and
+  its immediate predecessor transition in one worker call, so inactive records are
+  checked against signed history instead of only prepared.checkpoints. Actual-PG
+  regressions re-run RED→GREEN for removal forgery, removed-record counter forgery,
+  invented inactive identity and active generation/serial forgery beyond the accepted
+  documents. Native organization 323/323 pass, strict organization types,
+  actual-PG control/trust/fence/lease/owner/replication and the v1→v4 upgrade pass. Full ordered history verification, laundering behind an injected
+  unsigned provisioning document with an intervening post-removal event, combined
+  physical control/action recovery and external old-writer fencing remain open; A12 is
+  not closed by this slice.

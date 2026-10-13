@@ -25,8 +25,11 @@
 //
 // Signing input = the document with `signatures` removed, RFC 8785 (JCS),
 // signed with Ed25519. Verification is single-document only: strict structural
-// validation, then at least one valid signature by a key listed in `roots`.
-// `previous` is recorded but never chased.
+// validation, then at least one valid signature by a key listed in `roots`. A
+// genesis document (`generation == 1`, no `previous`) is additionally
+// self-certifying: the genesis key itself MUST be listed in `roots` and MUST
+// have signed (`genesis not self-signed`). `previous` is recorded but never
+// chased.
 //
 // Ed25519, JCS and base64url come from the existing audited/reference modules
 // (`./signed-envelope.mjs`); this file only adds the document grammar and its
@@ -82,7 +85,7 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
  * Structural reasons a key document can be rejected. The `reason` strings are
  * the stable cross-language contract shared with `crates/xeip-identity`.
  *
- * The first seven reasons are single-document reasons. `ROLLBACK`, `FORK`,
+ * The first eight reasons are single-document reasons. `ROLLBACK`, `FORK`,
  * `CHAIN_GAP` and `ROOT_ROTATION_NOT_DUAL_SIGNED` are produced only by chain
  * verification ({@link KeyDocumentChain}); `NO_ANCHOR`, `UNTRUSTED_ANCHOR` and
  * `GENERATION_EXCEEDS_MAX` are produced only by trust-store resolution
@@ -98,6 +101,7 @@ export const KEYDOC_REASONS = Object.freeze({
   UNKNOWN_SIGNER: "unknown signer",
   WEAK_KEY: "weak key",
   SIGNATURE_MISMATCH: "signature mismatch",
+  GENESIS_NOT_SELF_SIGNED: "genesis not self-signed",
   ROLLBACK: "rollback",
   FORK: "fork",
   CHAIN_GAP: "chain gap",
@@ -251,7 +255,17 @@ function signsWithAnyKid(document, kids) {
  * (`malformed document`) → genesis decode (`malformed document` / `weak key`)
  * → `entity == entityUrn(genesis)` (`entity binding`) → every root/device kid
  * decodes non-weak (`malformed document` / `weak key`) → at least one valid
- * signature by a key in `roots` (`unknown signer` / `signature mismatch`).
+ * signature by a key in `roots` (`unknown signer` / `signature mismatch`) →
+ * for a genesis document, the genesis key is a root and signed it
+ * (`genesis not self-signed`).
+ *
+ * A genesis document (`generation == 1`, no `previous`) is **self-certifying**
+ * (`spec/identity-keys.md` §5.1): because the entity ID commits to the genesis
+ * key, a valid genesis MUST be signed by that genesis key and MUST list it in
+ * `roots`. This stops a third party who only knows the victim's entity ID from
+ * publishing `{ entity: victim, genesis: victim, roots: [attacker] }` signed by
+ * the attacker key. A successor document keeps the generic root-signature rule;
+ * its retiry/successor authorization is enforced by {@link KeyDocumentChain}.
  *
  * `previous` is shape-checked but never chased: chain/rollback verification is
  * out of scope. Weak or unknown signers never satisfy the root-signature
@@ -330,17 +344,43 @@ export function verifyKeyDocument(document) {
     return { valid: false, reason: KEYDOC_REASONS.UNKNOWN_SIGNER };
   }
 
+  // A genesis document is self-certifying: its entity ID commits to the genesis
+  // key, so it MUST be signed by that genesis key and MUST list it in `roots`.
+  // The generic "any root signed" rule below would otherwise accept a forgery
+  // that claims the victim's entity/genesis with an attacker-chosen root.
+  const isGenesis = value.generation === 1 && value.previous === undefined;
+  const genesisIsRoot = rootKids.has(value.genesis);
+
   const input = Buffer.from(keyDocumentSigningInput(value), "utf8");
   let sawRootSigner = false;
+  let validRootSigner = false;
+  let validGenesisSigner = false;
   for (const entry of value.signatures) {
     const decoded = decodeKidOrReason(entry.kid);
     if (decoded.reason) return { valid: false, reason: decoded.reason };
     const signature = base64UrlToBytes(entry.sig);
     if (signature === null || signature.length !== ED25519_SIGNATURE_LENGTH) return malformed();
-    if (!rootKids.has(entry.kid)) continue;
-    sawRootSigner = true;
+    const isRootEntry = rootKids.has(entry.kid);
+    const isGenesisEntry = isGenesis && entry.kid === value.genesis;
+    if (!isRootEntry && !isGenesisEntry) continue;
+    if (isRootEntry) sawRootSigner = true;
     const publicKey = ed25519PublicKeyFromRaw(decoded.raw);
-    if (verify(null, input, publicKey, signature)) return { valid: true };
+    if (!verify(null, input, publicKey, signature)) continue;
+    if (isRootEntry) {
+      validRootSigner = true;
+      // Successors keep the original rule: any valid root signature accepts.
+      if (!isGenesis) return { valid: true };
+    }
+    if (isGenesisEntry) validGenesisSigner = true;
+  }
+
+  if (isGenesis) {
+    if (validRootSigner && genesisIsRoot && validGenesisSigner) return { valid: true };
+    // A genesis document that would otherwise pass the generic root rule is not
+    // self-certified: reject it with the stable genesis reason.
+    if (validRootSigner) {
+      return { valid: false, reason: KEYDOC_REASONS.GENESIS_NOT_SELF_SIGNED };
+    }
   }
 
   if (!sawRootSigner) return { valid: false, reason: KEYDOC_REASONS.UNKNOWN_SIGNER };

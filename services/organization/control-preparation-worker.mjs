@@ -7,7 +7,10 @@ try {
     workerData.operation === "prepare"
       ? prepareControlState(workerData.input)
       : workerData.operation === "verify"
-        ? verifyControlState(workerData.input)
+        ? verifyControlState(
+            workerData.input.canonical,
+            workerData.input.previous,
+          )
         : undefined;
   if (!prepared) throw Error();
   parentPort.postMessage({ prepared });

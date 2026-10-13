@@ -122,7 +122,9 @@ await withPostgres(
       assert.equal(restored.revision, 6);
       // Bypass JS validators using actual restricted SQL credentials. Roll back even
       // unexpected success so a failing regression never contaminates later cases.
-      async function rawRefused(mutate, message) {
+      // `expected`, when given, is a RegExp the SQL error message must match, so a
+      // case asserts *why* the write was refused rather than merely that it was.
+      async function rawRefused(mutate, message, expected) {
         const state = structuredClone(restored.snapshot.state);
         state.operation = "trust";
         mutate(state);
@@ -143,6 +145,7 @@ await withPostgres(
                 controlEventDigest(7, restored.digest, stateDigest),
               ],
             ),
+            expected === undefined ? undefined : { message: expected },
             message,
           );
         } finally {
@@ -177,6 +180,35 @@ await withPostgres(
       await rawRefused((state) => {
         state.targetRevisions = [];
       }, "SQL refuses target history removal");
+      // Retained records must be justified by the signed provisioning. A runtime
+      // writer cannot freeze forged metadata at the point an entity is removed.
+      await rawRefused((state) => {
+        state.provisioning.keyDocuments = [];
+        state.provisioning.statusDocuments = [];
+        state.records[entity].generation += 1;
+        state.records[entity].keyDigest = "f".repeat(64);
+      }, "SQL binds retained records to signed provisioning on removal", /control removed record change/);
+      await rawRefused((state) => {
+        state.provisioning.keyDocuments = [];
+        state.provisioning.statusDocuments = [];
+        state.records[entity].serial += 1;
+        state.records[entity].statusDigest = "e".repeat(64);
+      }, "SQL refuses removed-record counter forgery", /control removed record change/);
+      await rawRefused((state) => {
+        state.records["urn:xeip:entity:" + "A".repeat(43)] = structuredClone(
+          state.records[entity],
+        );
+      }, "SQL refuses invented inactive identity", /control record without provisioning/);
+      // Active records must match the accepted signed documents, not just
+      // advance monotonically.
+      await rawRefused((state) => {
+        state.records[entity].generation += 1;
+        state.records[entity].keyDigest = "d".repeat(64);
+      }, "SQL binds active generation to signed key documents", /control active record mismatch/);
+      await rawRefused((state) => {
+        state.records[entity].serial += 1;
+        state.records[entity].statusDigest = "c".repeat(64);
+      }, "SQL binds active serial to the signed status document", /control active record mismatch/);
       const signing = {
         privateKey: Buffer.from(
           "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",

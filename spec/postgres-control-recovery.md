@@ -132,6 +132,16 @@ an accepted key-chain prefix simply by increasing its counters. Signature valida
 remains in the shared identity implementation; SQL guards are not cryptographic
 verification. Owner credentials can bypass protection and remain trusted.
 
+Migration004 replaces the event trigger without rewriting migration003. Retained
+records are bound to the accepted signed provisioning: an entity absent from the
+current key documents may only preserve its exact prior record and cannot be
+invented, and every active record's generation/serial must equal its accepted signed
+key/status document. The bounded startup/open read verifies the current snapshot and
+its immediate predecessor transition together, so inactive records are checked
+against signed history rather than only active checkpoints. This remains structural;
+signatures are verified in the shared identity worker, and full ordered history
+verification stays a separate recovery task.
+
 Each event digest is SHA-256 of `XEIP organization control event v1\n`, decimal
 safe-integer revision, newline, previous event digest, newline and canonical state
 digest. The first predecessor is 64 zeroes. SQL checks the domain-separated state

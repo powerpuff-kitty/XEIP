@@ -30,6 +30,8 @@ jobs:
       - run: npm test
       - name: Coverage (gated)
         run: npm run coverage
+      - name: Per-file coverage gate (trust/crypto modules)
+        run: npm run coverage:files
       - run: npm run test:ts
       - run: npm run demo:admission
       - run: npm run demo:replay
