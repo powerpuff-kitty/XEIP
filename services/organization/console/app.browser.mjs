@@ -89,18 +89,25 @@ async function fixture(page) {
       expect(url.searchParams.get("redirect_uri")).toBe(origin + "/console/");
       state.nonce = url.searchParams.get("nonce");
       state.challenge = url.searchParams.get("code_challenge");
+      // Navigate back with a script rather than an HTTP 3xx: Playwright does not
+      // re-run route handlers for the target of a `fulfill`ed redirect, so a 302
+      // here bypasses the origin mock and hits the network. A page that performs
+      // `location.replace` produces a normal (interceptable) navigation.
       await route.fulfill({
-        status: 302,
-        headers: {
-          location:
+        status: 200,
+        contentType: "text/html",
+        body:
+          "<!doctype html><script>location.replace(" +
+          JSON.stringify(
             origin +
-            "/console/#" +
-            new URLSearchParams({
-              code: "controlled-code",
-              state: url.searchParams.get("state"),
-              iss: issuer,
-            }),
-        },
+              "/console/#" +
+              new URLSearchParams({
+                code: "controlled-code",
+                state: url.searchParams.get("state"),
+                iss: issuer,
+              }).toString(),
+          ) +
+          ")</script>",
       });
       return;
     }
@@ -151,8 +158,12 @@ async function fixture(page) {
     }
     if (url.pathname.endsWith("/logout")) {
       await route.fulfill({
-        status: 302,
-        headers: { location: origin + "/console/" },
+        status: 200,
+        contentType: "text/html",
+        body:
+          "<!doctype html><script>location.replace(" +
+          JSON.stringify(origin + "/console/") +
+          ")</script>",
       });
       return;
     }
